@@ -696,7 +696,16 @@ window.importJSON = ev => {
 };
 
 /* ================= supabase ================= */
-function getCfg() { try { return JSON.parse(localStorage.getItem(LS_CFG) || "null"); } catch { return null; } }
+// Default connection for the LANEA project (the anon key is public by design; data
+// access is protected by sign-in + row level security). Settings tab can override.
+const DEFAULT_CFG = {
+  url: "https://kpzsslzagpryjsxstvri.supabase.co",
+  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwenNzbHphZ3ByeWpzeHN0dnJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5OTgyNzEsImV4cCI6MjEwMDU3NDI3MX0.Ol4h-JzPQ-xqwuzG87Q8gS-ezB5PC-q3LvtE5Q_7hbs"
+};
+function getCfg() {
+  try { return JSON.parse(localStorage.getItem(LS_CFG) || "null") || DEFAULT_CFG; }
+  catch { return DEFAULT_CFG; }
+}
 function loadSupabaseLib() {
   return new Promise((res, rej) => {
     if (window.supabase) return res();
