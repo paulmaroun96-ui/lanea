@@ -94,6 +94,27 @@
   .st-ok { background: #d9ecdd; color: #1e5c2a; } .st-low { background: #fdeeca; color: #8a5a06; } .st-out { background: var(--red-soft); color: var(--red); }
   #toast { position: fixed; bottom: 24px; right: 24px; background: var(--ink); color: #fff; padding: 11px 20px; border-radius: 10px; font-size: 13.5px; box-shadow: 0 8px 24px rgba(0,0,0,.3); opacity: 0; transform: translateY(10px); transition: all .25s; pointer-events: none; z-index: 99; }
   #toast.show { opacity: 1; transform: none; }
+  .cal-head { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .cal-head input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--input-bg); font-family: inherit; font-size: 12.5px; }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; max-width: 420px; }
+  .cal .dow { text-align: center; font-size: 10px; font-weight: 700; letter-spacing: .5px; color: var(--muted); padding: 4px 0; text-transform: uppercase; }
+  .cal button {
+    aspect-ratio: 1; border: 1.5px solid transparent; background: none; border-radius: 9px; cursor: pointer;
+    font-family: "JetBrains Mono", Consolas, monospace; font-size: 12px; color: var(--ink);
+    display: flex; align-items: center; justify-content: center; transition: background .12s;
+  }
+  .cal button:hover { background: var(--input-bg); }
+  .cal button.other { color: #c4ced1; }
+  .cal button.done { background: #e2e7e9; color: #3d4a4e; font-weight: 600; }
+  .cal button.done.other { background: #eef1f2; color: #b6c0c3; }
+  .cal button.today { border-color: var(--gold); }
+  .cal button.sel { background: var(--gold); color: #fff; font-weight: 700; }
+  .cal-key { display: inline-block; width: 12px; height: 12px; border-radius: 4px; vertical-align: -2px; }
+  .cal-key.done { background: #e2e7e9; } .cal-key.sel { background: var(--gold); }
+  .pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(235px, 1fr)); gap: 12px; }
+  .pos-tile { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: #fbfdfd; }
+  .pos-tile .pos-name { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 6px; color: var(--gold-dark); font-size: 14.5px; }
+  .pos-tile .pos-stats { font-size: 11.5px; color: var(--muted); line-height: 1.7; margin-bottom: 10px; font-family: "JetBrains Mono", Consolas, monospace; }
 
   /* ---------- dashboard ---------- */
   .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
@@ -183,13 +204,38 @@
 
 <!-- ================= DAILY ENTRY ================= -->
 <div class="tab" id="tab-day" style="display:none">
-  <div class="pagehead"><h1>Daily entry</h1><p>Your daily routine — log the day's sales, gifts and expenses here. Stock, costs and the dashboard update by themselves.</p></div>
+  <div class="pagehead"><h1>Daily entry</h1><p>Pick a day and log what happened. Grey days already have entries — the selected day is teal.</p></div>
+  <section class="card">
+    <div class="grid2" style="align-items:start">
+      <div>
+        <div class="cal-head no-print">
+          <button class="btn ghost small" type="button" onclick="shiftMonth(-1)">&lsaquo;</button>
+          <b id="calTitle" style="min-width:130px;text-align:center"></b>
+          <button class="btn ghost small" type="button" onclick="shiftMonth(1)">&rsaquo;</button>
+          <button class="btn ghost small" type="button" onclick="setDay(todayISO())">Today</button>
+          <input type="date" id="day_pick" onchange="setDay(this.value)" style="margin-left:auto">
+        </div>
+        <div id="calGrid" class="cal"></div>
+        <p class="hint" style="margin-top:10px"><span class="cal-key done"></span> already inputted&nbsp;&nbsp;&nbsp;<span class="cal-key sel"></span> selected day</p>
+      </div>
+      <div>
+        <h2 id="dayTitle">Logged today</h2>
+        <div id="daySummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+        <div class="scrollbox" style="max-height:280px" id="dayList"></div>
+      </div>
+    </div>
+  </section>
   <section class="card no-print">
     <h2>Log a sale</h2>
     <form class="rowform" id="saleForm">
       <input type="hidden" id="s_id">
       <label>Date<input id="s_date" type="date" required></label>
-      <label>Point of sale<select id="s_pos" required></select></label>
+      <label>Point of sale
+        <span style="display:flex;gap:6px">
+          <select id="s_pos" required></select>
+          <button class="btn ghost small" type="button" onclick="quickAddPos()" title="Create a new point of sale" style="padding:4px 12px;font-size:15px">+</button>
+        </span>
+      </label>
       <label>Product<select id="s_product" required></select></label>
       <label>Qty<input id="s_qty" type="number" min="1" step="1" required style="width:90px"></label>
       <label>Price / unit (€)<input id="s_price" type="number" min="0" step="0.01" required style="width:120px"></label>
@@ -224,17 +270,7 @@
       <button class="btn ghost" type="button" id="e_cancel" style="display:none">Cancel</button>
     </form>
   </section>
-  <section class="card">
-    <div class="rowform no-print" style="margin-bottom:12px">
-      <button class="btn ghost small" type="button" onclick="shiftDay(-1)">&lsaquo; Previous day</button>
-      <label>Day<input type="date" id="day_pick" onchange="setDay(this.value)"></label>
-      <button class="btn ghost small" type="button" onclick="shiftDay(1)">Next day &rsaquo;</button>
-      <button class="btn ghost small" type="button" onclick="setDay(todayISO())">Today</button>
-    </div>
-    <div id="daySummary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
-    <h2 id="dayTitle">Logged today</h2>
-    <div id="dayList"></div>
-  </section>
+
 </div>
 
 <!-- ================= INVENTORY ================= -->
@@ -389,6 +425,7 @@ const KINDS = ["products", "purchases", "pos", "pos_prices", "sales", "gifts", "
 const LS_DATA = "lanea-books-data";
 const LS_CFG = "lanea-books-supabase";
 const LOW_STOCK = 5;   // "low stock" threshold in units — dashboard + inventory badges
+const LS_LASTPOS = "lanea-last-pos";
 
 let state = { products: [], purchases: [], pos: [], pos_prices: [], sales: [], gifts: [], expenses: [] };
 let client = null, remote = false;
@@ -721,15 +758,41 @@ function renderPurchases() {
 /* ================= rendering: sales & POS ================= */
 function renderPos() {
   const el = document.getElementById("posList");
-  el.innerHTML = state.pos.length
-    ? "<table>" + state.pos.map(p => {
-        const n = state.sales.filter(s => s.pos_id === p.id).length;
-        return `<tr><td><b>${esc(p.name)}</b></td><td style="color:var(--muted)">${n} sales</td>
-        <td class="no-print"><button class="btn small ghost" onclick="renamePos('${p.id}')">Rename</button>
-        <button class="btn small danger" onclick="delPos('${p.id}')">Del</button></td></tr>`;
-      }).join("") + "</table>"
-    : '<p class="empty">No points of sale yet — add your first one (e.g. Beirut Boutique, Shopify, Paris Exhibition…).</p>';
+  if (!state.pos.length) {
+    el.innerHTML = '<p class="empty">No points of sale yet — add your first one (e.g. Beirut Boutique, Shopify, Paris Exhibition…).</p>';
+    return;
+  }
+  el.innerHTML = '<div class="pos-grid">' + state.pos.map(p => {
+    const sales = state.sales.filter(s => s.pos_id === p.id);
+    const rev = sales.reduce((a, s) => a + Number(s.qty) * Number(s.price_per_unit), 0);
+    const units = sales.reduce((a, s) => a + Number(s.qty), 0);
+    const priced = state.pos_prices.filter(r => r.pos_id === p.id).length;
+    return `<div class="pos-tile">
+      <div class="pos-name"><span class="ms">storefront</span>${esc(p.name)}</div>
+      <div class="pos-stats">${fmtE(rev)} · ${fmtN(units)} units · ${sales.length} sales<br>${priced} product price${priced === 1 ? "" : "s"} set</div>
+      <div class="no-print" style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn small ghost" onclick="openPriceList('${p.id}')">Price list</button>
+        <button class="btn small ghost" onclick="renamePos('${p.id}')">Rename</button>
+        <button class="btn small danger" onclick="delPos('${p.id}')">Del</button>
+      </div></div>`;
+  }).join("") + "</div>";
 }
+window.openPriceList = id => {
+  document.getElementById("pl_pos").value = id;
+  renderPriceList();
+  document.getElementById("priceList").scrollIntoView({ behavior: "smooth", block: "center" });
+};
+window.quickAddPos = async () => {
+  const name = prompt("Name of the new point of sale (e.g. Beirut Boutique, Shopify, Paris Exhibition):");
+  if (!name || !name.trim()) return;
+  const row = await addRow("pos", { name: name.trim() });
+  if (row) {
+    toast("Point of sale added ✓");
+    render();
+    document.getElementById("s_pos").value = row.id;
+    salePriceAutofill(true);
+  }
+};
 window.addPos = async () => {
   const name = document.getElementById("pos_name").value.trim();
   if (!name) return;
@@ -893,6 +956,12 @@ function refreshSelects() {
     const sel = document.getElementById(id); const cur = sel.value;
     sel.innerHTML = posOpts; if (cur) sel.value = cur;
   }
+  // default the sale form to the last-used point of sale
+  const sPos = document.getElementById("s_pos");
+  if (!sPos.value || !state.pos.some(p => p.id === sPos.value)) {
+    const last = localStorage.getItem(LS_LASTPOS);
+    if (last && state.pos.some(p => p.id === last)) sPos.value = last;
+  }
   for (const [id, opts] of [["f_pos", posOpts], ["sl_pos", posOpts], ["f_prod", prodOpts]]) {
     const sel = document.getElementById(id); const cur = sel.value;
     sel.innerHTML = '<option value="">All</option>' + opts; sel.value = cur;
@@ -907,20 +976,53 @@ function render() {
   renderDash(); renderDay(); renderProducts(); renderInitInv(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
 }
 
-/* ================= daily log ================= */
+/* ================= daily log & calendar ================= */
 let selectedDay = todayISO();
+let calMonth = selectedDay.slice(0, 7);
 window.setDay = d => {
   if (!d) return;
   selectedDay = d;
+  calMonth = d.slice(0, 7);
   for (const id of ["s_date", "g_date", "e_date"]) document.getElementById(id).value = d;
   renderDay();
 };
-window.shiftDay = n => {
-  const dt = new Date(selectedDay + "T00:00:00");
-  dt.setDate(dt.getDate() + n);
-  setDay(dt.toISOString().slice(0, 10));
+window.shiftMonth = n => {
+  const [y, m] = calMonth.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  calMonth = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  renderCalendar();
 };
+function daysWithEntries() {
+  const s = new Set();
+  for (const r of state.sales) if (r.date) s.add(r.date);
+  for (const r of state.gifts) if (r.date) s.add(r.date);
+  for (const r of state.expenses) if (r.date) s.add(r.date);
+  return s;
+}
+function renderCalendar() {
+  const [y, m] = calMonth.split("-").map(Number);
+  document.getElementById("calTitle").textContent =
+    new Date(y, m - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const done = daysWithEntries();
+  const today = todayISO();
+  const startOffset = (new Date(y, m - 1, 1).getDay() + 6) % 7; // Monday-first grid
+  const start = new Date(y, m - 1, 1 - startOffset);
+  let h = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map(d => `<div class="dow">${d}</div>`).join("");
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    const iso = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    const cls = [
+      d.getMonth() !== m - 1 ? "other" : "",
+      done.has(iso) ? "done" : "",
+      iso === today ? "today" : "",
+      iso === selectedDay ? "sel" : "",
+    ].filter(Boolean).join(" ");
+    h += `<button type="button" class="${cls}" onclick="setDay('${iso}')" title="${fmtD(iso)}">${d.getDate()}</button>`;
+  }
+  document.getElementById("calGrid").innerHTML = h;
+}
 function renderDay() {
+  renderCalendar();
   document.getElementById("day_pick").value = selectedDay;
   document.getElementById("dayTitle").textContent = selectedDay === todayISO() ? "Logged today" : "Logged on " + fmtD(selectedDay);
   const daySales = state.sales.filter(s => s.date === selectedDay);
@@ -1053,10 +1155,14 @@ document.getElementById("saleForm").addEventListener("submit", async ev => {
   const ok = id ? await updateRow("sales", id, fields) : await addRow("sales", fields);
   if (ok) {
     await upsertPosPrice(pos_id, product_id, price);
+    localStorage.setItem(LS_LASTPOS, pos_id);
     resetForm("s", "saleForm", "Add sale");
     document.getElementById("s_date").value = selectedDay;
     toast(id ? "Sale updated ✓" : "Sale logged ✓");
     render();
+    // keep the POS and focus the product select so consecutive sales are fast
+    document.getElementById("s_pos").value = pos_id;
+    document.getElementById("s_product").focus();
   }
 });
 window.editSale = id => {
