@@ -176,9 +176,9 @@
     <button data-tab="dash" class="active"><span class="ms">dashboard</span>Dashboard</button>
     <button data-tab="day"><span class="ms">edit_square</span>Daily entry</button>
     <button data-tab="inv"><span class="ms">inventory_2</span>Inventory</button>
-    <button data-tab="cat"><span class="ms">category</span>Catalog</button>
     <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
     <button data-tab="exp"><span class="ms">account_balance_wallet</span>Expenses</button>
+    <button data-tab="cat"><span class="ms">category</span>Catalog</button>
     <button data-tab="set"><span class="ms">settings</span>Settings</button>
   </nav>
   <div class="side-foot"><span id="connBadge" class="conn">Local data</span></div>
@@ -276,6 +276,26 @@
       <button class="btn ghost" onclick="exportProductsCSV()">Export CSV</button>
     </div>
     <div class="scrollbox" id="productsTable"></div>
+  </section>
+  <section class="card">
+    <h2>Stock by point of sale</h2>
+    <p class="hint">Your purchases sit in the <b>warehouse</b>. Send stock to a point of sale when you supply it — sales at that POS then consume its stock, and you can return leftovers. Negative POS stock means sales were logged there without sending stock first.</p>
+    <form class="rowform no-print" id="transferForm">
+      <label>Date<input id="t_date" type="date" required></label>
+      <label>Product<select id="t_product" required onchange="transferHint()"></select></label>
+      <label>Point of sale<select id="t_pos" required onchange="transferHint()"></select></label>
+      <label>Qty<input id="t_qty" type="number" min="1" step="1" required style="width:90px"></label>
+      <button class="btn gold" type="submit">Send to POS</button>
+      <button class="btn ghost" type="button" onclick="returnTransfer()">Return to warehouse</button>
+    </form>
+    <p class="hint" id="t_hint"></p>
+    <div class="rowform no-print" style="margin-top:6px">
+      <label>View<select id="sp_pos" onchange="renderPosStock()"></select></label>
+      <label>Search<input id="sp_search" oninput="renderPosStock()" placeholder="product…" style="min-width:200px"></label>
+    </div>
+    <div class="scrollbox" id="posStockTable"></div>
+    <details class="inv" style="margin-top:12px"><summary><span class="ref">Transfer history</span><span class="meta" id="transferCount"></span></summary>
+      <div class="lines" id="transfersLog"></div></details>
   </section>
   <div class="pagehead" style="margin-top:10px"><h1 style="font-size:17px">Purchases — stock in</h1><p>Supplier invoices — every line adds stock and feeds the average cost per product.</p></div>
   <section class="card no-print" id="importCard">
@@ -405,7 +425,7 @@ const CAT_CHIPS = {
   // legacy categories from v1 keep a chip
   "Monthly Operating": "#dbeafe", "Exhibition / Event": "#ede9fe", "Shipping": "#d1fae5"
 };
-const KINDS = ["products", "purchases", "pos", "pos_prices", "sales", "gifts", "expenses"];
+const KINDS = ["products", "purchases", "pos", "pos_prices", "transfers", "sales", "gifts", "expenses"];
 const LS_DATA = "lanea-books-data";
 const LS_CFG = "lanea-books-supabase";
 const LOW_STOCK = 5;   // "low stock" threshold in units — dashboard + inventory badges
@@ -450,7 +470,7 @@ function catOf(p) {
   return "Other";
 }
 
-let state = { products: [], purchases: [], pos: [], pos_prices: [], sales: [], gifts: [], expenses: [] };
+let state = { products: [], purchases: [], pos: [], pos_prices: [], transfers: [], sales: [], gifts: [], expenses: [] };
 let client = null, remote = false;
 let filters = { from: "", to: "", pos: "", prod: "" };
 
@@ -493,6 +513,19 @@ const prodById = id => state.products.find(p => p.id === id);
 const posById = id => state.pos.find(p => p.id === id);
 const avgCostOf = id => { const p = prodById(id); return p ? productCalc(p).avgCost : 0; };
 
+/* per-POS stock: warehouse holds initial+purchases (minus gifts and what was
+   sent out); each POS holds what was transferred to it minus what it sold */
+const transferredTo = (pid, posId) => state.transfers.filter(t => t.product_id === pid && t.pos_id === posId)
+  .reduce((a, t) => a + Number(t.qty), 0);
+const soldAtPos = (pid, posId) => state.sales.filter(s => s.product_id === pid && s.pos_id === posId)
+  .reduce((a, s) => a + Number(s.qty), 0);
+const posStockOf = (pid, posId) => transferredTo(pid, posId) - soldAtPos(pid, posId);
+function warehouseOf(p) {
+  const c = productCalc(p);
+  const out = state.transfers.filter(t => t.product_id === p.id).reduce((a, t) => a + Number(t.qty), 0);
+  return c.iq + c.purQty - c.gifted - out;
+}
+
 function inPeriod(date) {
   if (!date) return false;
   const ym = date.slice(0, 7);
@@ -531,10 +564,11 @@ async function deleteRow(kind, id) {
   }
   state[kind] = state[kind].filter(r => r.id !== id);
   if (kind === "products") {
-    for (const k of ["purchases", "sales", "gifts", "pos_prices"]) state[k] = state[k].filter(r => r.product_id !== id);
+    for (const k of ["purchases", "sales", "gifts", "pos_prices", "transfers"]) state[k] = state[k].filter(r => r.product_id !== id);
   }
   if (kind === "pos") {
     state.pos_prices = state.pos_prices.filter(r => r.pos_id !== id);
+    state.transfers = state.transfers.filter(r => r.pos_id !== id);
     for (const s of state.sales) if (s.pos_id === id) s.pos_id = null;
   }
   if (!remote) saveLocal();
@@ -791,9 +825,10 @@ function renderPos() {
     const rev = sales.reduce((a, s) => a + Number(s.qty) * Number(s.price_per_unit), 0);
     const units = sales.reduce((a, s) => a + Number(s.qty), 0);
     const priced = state.pos_prices.filter(r => r.pos_id === p.id).length;
+    const held = state.products.reduce((a, pr) => a + posStockOf(pr.id, p.id), 0);
     return `<div class="pos-tile">
       <div class="pos-name"><span class="ms">storefront</span>${esc(p.name)}</div>
-      <div class="pos-stats">${fmtE(rev)} · ${fmtN(units)} units · ${sales.length} sales<br>${priced} product price${priced === 1 ? "" : "s"} set</div>
+      <div class="pos-stats">${fmtE(rev)} · ${fmtN(units)} units · ${sales.length} sales<br>${priced} price${priced === 1 ? "" : "s"} set · <b>${fmtN(held)} units at POS</b></div>
       <div class="no-print" style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn small ghost" onclick="openPriceList('${p.id}')">Price list</button>
         <button class="btn small ghost" onclick="renamePos('${p.id}')">Rename</button>
@@ -944,14 +979,19 @@ function renderExpenses() {
 function refreshSelects() {
   const prods = [...state.products].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const prodOpts = prods.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-  {
-    const sel = document.getElementById("pu_product"); const cur = sel.value;
+  for (const id of ["pu_product", "t_product"]) {
+    const sel = document.getElementById(id); const cur = sel.value;
     sel.innerHTML = prodOpts; if (cur) sel.value = cur;
   }
   const posOpts = state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-  {
-    const sel = document.getElementById("pl_pos"); const cur = sel.value;
+  for (const id of ["pl_pos", "t_pos"]) {
+    const sel = document.getElementById(id); const cur = sel.value;
     sel.innerHTML = posOpts; if (cur) sel.value = cur;
+  }
+  {
+    const sel = document.getElementById("sp_pos"); const cur = sel.value;
+    sel.innerHTML = '<option value="wh">Overview (warehouse + all POS)</option>' + posOpts;
+    if (cur) sel.value = cur;
   }
   for (const [id, opts] of [["f_pos", posOpts], ["sl_pos", posOpts], ["f_prod", prodOpts]]) {
     const sel = document.getElementById(id); const cur = sel.value;
@@ -963,7 +1003,7 @@ function refreshSelects() {
 }
 function render() {
   refreshSelects();
-  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
+  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderPosStock(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
 }
 
 /* ================= daily log & calendar ================= */
@@ -1248,6 +1288,89 @@ window.clearDraft = () => {
   draft = { sales: [], gifts: [], expenses: [] }; saveDraft(); renderDay();
 };
 window.removeDraft = (kind, i) => { draft[kind].splice(i, 1); saveDraft(); renderDay(); };
+
+/* ================= stock by point of sale ================= */
+window.transferHint = () => {
+  const pid = gv("t_product"), posId = gv("t_pos");
+  const hint = document.getElementById("t_hint");
+  if (!pid) { hint.textContent = ""; return; }
+  const p = prodById(pid);
+  const parts = [`Warehouse: ${fmtN(warehouseOf(p))}`];
+  if (posId) parts.push(`At ${posById(posId)?.name || ""}: ${fmtN(posStockOf(pid, posId))}`);
+  hint.textContent = parts.join("   ·   ");
+};
+document.getElementById("transferForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  if (!state.pos.length) { alert("Create a point of sale first (Sales & prices tab)."); return; }
+  const product_id = gv("t_product"), pos_id = gv("t_pos");
+  const qty = Number(gv("t_qty"));
+  if (!(qty > 0)) return;
+  const wh = warehouseOf(prodById(product_id));
+  if (qty > wh && !confirm(`Warehouse only has ${fmtN(wh)} of this product — send anyway?`)) return;
+  const ok = await addRow("transfers", { date: gv("t_date"), product_id, pos_id, qty });
+  if (ok) { document.getElementById("t_qty").value = ""; toast(`Sent ${fmtN(qty)} to ${posById(pos_id)?.name || ""} ✓`); render(); }
+});
+window.returnTransfer = async () => {
+  if (!state.pos.length) { alert("Create a point of sale first (Sales & prices tab)."); return; }
+  const product_id = gv("t_product"), pos_id = gv("t_pos");
+  const qty = Number(gv("t_qty"));
+  if (!(qty > 0)) { alert("Enter the quantity to return."); return; }
+  const atPos = posStockOf(product_id, pos_id);
+  if (qty > atPos && !confirm(`${posById(pos_id)?.name || "This POS"} only holds ${fmtN(atPos)} of this product — return anyway?`)) return;
+  const ok = await addRow("transfers", { date: gv("t_date"), product_id, pos_id, qty: -qty });
+  if (ok) { document.getElementById("t_qty").value = ""; toast(`Returned ${fmtN(qty)} to the warehouse ✓`); render(); }
+};
+window.renderPosStock = () => {
+  const view = gv("sp_pos");
+  const q = (gv("sp_search") || "").toLowerCase();
+  const el = document.getElementById("posStockTable");
+  const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (!list.length) { el.innerHTML = '<p class="empty">No products.</p>'; return; }
+  if (view === "" || view === "wh") {
+    // warehouse overview: warehouse + each POS side by side
+    let h = `<table><tr><th>Product</th><th class="num">Warehouse</th>`
+      + state.pos.map(p => `<th class="num">${esc(p.name)}</th>`).join("")
+      + `<th class="num">Global stock</th></tr>`;
+    let any = false;
+    for (const p of list) {
+      const c = productCalc(p);
+      if ((c.iq + c.purQty) <= 0) continue;
+      any = true;
+      const wh = warehouseOf(p);
+      h += `<tr><td>${esc(p.name)}</td><td class="num calc ${wh < 0 ? "stock-neg" : ""}">${fmtN(wh)}</td>`
+        + state.pos.map(pos => { const v = posStockOf(p.id, pos.id);
+            return `<td class="num calc ${v < 0 ? "stock-neg" : ""}">${v === 0 ? "·" : fmtN(v)}</td>`; }).join("")
+        + `<td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td></tr>`;
+    }
+    el.innerHTML = any ? h + "</table>" : '<p class="empty">No stocked products yet — import your invoices first.</p>';
+  } else {
+    const pos = posById(view); if (!pos) { el.innerHTML = ""; return; }
+    let h = `<table><tr><th>Product</th><th class="num">Sent to POS</th><th class="num">Sold there</th><th class="num">At POS now</th><th class="num">Warehouse</th></tr>`;
+    let tAlloc = 0, tSold = 0, tNow = 0, any = false;
+    for (const p of list) {
+      const alloc = transferredTo(p.id, view), sold = soldAtPos(p.id, view);
+      if (!alloc && !sold) continue;
+      any = true;
+      const now = alloc - sold;
+      tAlloc += alloc; tSold += sold; tNow += now;
+      h += `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtN(alloc)}</td><td class="num calc">${fmtN(sold)}</td>
+        <td class="num calc ${now < 0 ? "stock-neg" : ""}">${fmtN(now)}</td>
+        <td class="num calc">${fmtN(warehouseOf(p))}</td></tr>`;
+    }
+    h += `<tr class="total"><td>TOTAL</td><td class="num">${fmtN(tAlloc)}</td><td class="num">${fmtN(tSold)}</td><td class="num ${tNow < 0 ? "neg" : ""}">${fmtN(tNow)}</td><td></td></tr></table>`;
+    el.innerHTML = any ? h : `<p class="empty">Nothing sent to or sold at ${esc(pos.name)} yet — use the form above to send stock.</p>`;
+  }
+  // transfer history
+  const log = [...state.transfers].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 40);
+  document.getElementById("transferCount").textContent = `${state.transfers.length} transfer${state.transfers.length === 1 ? "" : "s"}`;
+  document.getElementById("transfersLog").innerHTML = log.length
+    ? "<table>" + log.map(t => `<tr><td>${fmtD(t.date)}</td><td>${esc(prodById(t.product_id)?.name || "(deleted)")}</td>
+        <td>${esc(posById(t.pos_id)?.name || "(deleted)")}</td>
+        <td class="num calc ${Number(t.qty) < 0 ? "neg" : ""}">${Number(t.qty) > 0 ? "→ POS " : "→ warehouse "}${fmtN(Math.abs(Number(t.qty)))}</td>
+        <td class="no-print"><button class="btn small danger" onclick="delRow('transfers','${t.id}')">Del</button></td></tr>`).join("") + "</table>"
+    : '<p class="empty">No transfers yet.</p>';
+};
 
 /* ================= catalog by category ================= */
 window.renderCatalog = () => {
@@ -1594,6 +1717,7 @@ window.pushLocalToCloud = async () => {
 
 /* ================= boot ================= */
 document.getElementById("pu_date").value = todayISO();
+document.getElementById("t_date").value = todayISO();
 document.getElementById("p_cat_sel").innerHTML = PRODUCT_CATS.map(c => `<option>${c}</option>`).join("");
 loadLocal(); setBadge(); render(); initSupabase();
 </script>

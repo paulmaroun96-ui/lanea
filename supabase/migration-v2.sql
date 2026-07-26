@@ -52,6 +52,17 @@ create table if not exists public.purchases (
   created_at timestamptz not null default now()
 );
 
+-- stock transfers: warehouse -> point of sale (negative qty = returned to warehouse)
+create table if not exists public.transfers (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  date date not null,
+  product_id uuid not null references public.products (id) on delete cascade,
+  pos_id uuid not null references public.pos (id) on delete cascade,
+  qty numeric not null,
+  created_at timestamptz not null default now()
+);
+
 -- sales gain a point of sale
 alter table public.sales add column if not exists pos_id uuid references public.pos (id) on delete set null;
 
@@ -59,14 +70,18 @@ alter table public.sales add column if not exists pos_id uuid references public.
 alter table public.pos enable row level security;
 alter table public.pos_prices enable row level security;
 alter table public.purchases enable row level security;
+alter table public.transfers enable row level security;
 
 drop policy if exists "own rows" on public.pos;
 drop policy if exists "own rows" on public.pos_prices;
 drop policy if exists "own rows" on public.purchases;
+drop policy if exists "own rows" on public.transfers;
 
 create policy "own rows" on public.pos for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "own rows" on public.pos_prices for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "own rows" on public.purchases for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on public.transfers for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
