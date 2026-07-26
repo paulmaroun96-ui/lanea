@@ -175,7 +175,8 @@
   <nav id="nav">
     <button data-tab="dash" class="active"><span class="ms">dashboard</span>Dashboard</button>
     <button data-tab="day"><span class="ms">edit_square</span>Daily entry</button>
-    <button data-tab="inv"><span class="ms">inventory_2</span>Inventory</button>
+    <button data-tab="inv"><span class="ms">fact_check</span>Inventory</button>
+    <button data-tab="pur"><span class="ms">receipt_long</span>Purchases</button>
     <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
     <button data-tab="exp"><span class="ms">account_balance_wallet</span>Expenses</button>
     <button data-tab="cat"><span class="ms">category</span>Catalog</button>
@@ -246,37 +247,30 @@
 
 <!-- ================= INVENTORY ================= -->
 <div class="tab" id="tab-inv" style="display:none">
-  <div class="pagehead"><h1>Inventory</h1><p>Catalog, initial inventory, average cost and live stock — plus the supplier invoices that feed it.</p></div>
-  <section class="card">
-    <h2 id="prodFormTitle">Add product</h2>
-    <form class="rowform" id="productForm">
-      <input type="hidden" id="p_id">
-      <label>Product name<input id="p_name" required style="min-width:260px"></label>
-      <label>Reference<input id="p_ref" placeholder="optional" style="width:130px"></label>
-      <label>Supplier<input id="p_supplier" placeholder="Au pays des Ânes"></label>
-      <label>Category<select id="p_cat_sel"></select></label>
-      <label>Initial stock (qty)<input id="p_iqty" type="number" min="0" step="1" value="0" style="width:110px"></label>
-      <label>Initial cost / unit (€)<input id="p_icost" type="number" min="0" step="0.0001" value="0" style="width:130px"></label>
-      <button class="btn gold" type="submit" id="p_submit">Save product</button>
-      <button class="btn ghost" type="button" id="p_cancel" style="display:none">Cancel</button>
-    </form>
-    <p class="hint">Initial stock = what you already had before tracking here. Purchases from invoices add on top; average cost blends both.</p>
-  </section>
-  <section class="card">
-    <h2>Initial inventory — bulk entry</h2>
-    <p class="hint">Type the stock you already had before tracking (and its cost per unit). Each change saves instantly; average cost blends it with the invoice purchases.</p>
-    <div class="rowform no-print" style="margin-bottom:8px">
-      <label>Search<input id="ii_search" oninput="renderInitInv()" placeholder="product…" style="min-width:220px"></label>
+  <div class="pagehead"><h1>Inventory</h1><p>Physical inventory counts (fiches d'inventaire) — theoretical vs actual — and your stock by location.</p></div>
+  <section class="card no-print" id="invStart">
+    <h2>Fiche d'inventaire — start a count</h2>
+    <p class="hint">Open a sheet for the warehouse or a point of sale, count the real stock (leave blank what you don't count), then submit — stock adjusts to the counted quantities and every difference is kept in the history below.</p>
+    <div class="rowform">
+      <label>Date<input id="inv_date" type="date"></label>
+      <label>Location<select id="inv_scope"></select></label>
+      <button class="btn gold" type="button" onclick="startInventory()">Open inventory sheet</button>
     </div>
-    <div class="scrollbox" id="initInvTable"></div>
   </section>
-  <section class="card">
-    <div class="rowform no-print" style="margin-bottom:10px">
-      <label>Search<input id="p_search" placeholder="name or ref…" oninput="renderProducts()" style="min-width:220px"></label>
-      <button class="btn ghost" onclick="exportProductsCSV()">Export CSV</button>
+  <section class="card" id="invSheet" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+      <h2 style="margin:0" id="invTitle"></h2>
     </div>
-    <div class="scrollbox" id="productsTable"></div>
+    <p class="hint">Type the <b>actual counted quantity</b> for each product. Blank = not counted (no change). The sheet stays a draft — even if you close the browser — until you submit it.</p>
+    <div class="rowform no-print"><label>Search<input id="inv_search" oninput="renderInventory()" placeholder="product…" style="min-width:220px"></label></div>
+    <div class="scrollbox" style="max-height:420px" id="invTable"></div>
+    <div class="rep-tot" id="invTotals"></div>
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap" class="no-print">
+      <button class="btn gold" style="padding:12px 26px;font-size:14.5px" onclick="submitInventory()">Submit inventory</button>
+      <button class="btn ghost" onclick="discardInventory()">Discard sheet</button>
+    </div>
   </section>
+  <section class="card"><h2>Inventory history</h2><div id="invHistory"></div></section>
   <section class="card">
     <h2>Stock by point of sale</h2>
     <p class="hint">Your purchases sit in the <b>warehouse</b>. Send stock to a point of sale when you supply it — sales at that POS then consume its stock, and you can return leftovers. Negative POS stock means sales were logged there without sending stock first.</p>
@@ -297,7 +291,11 @@
     <details class="inv" style="margin-top:12px"><summary><span class="ref">Transfer history</span><span class="meta" id="transferCount"></span></summary>
       <div class="lines" id="transfersLog"></div></details>
   </section>
-  <div class="pagehead" style="margin-top:10px"><h1 style="font-size:17px">Purchases — stock in</h1><p>Supplier invoices — every line adds stock and feeds the average cost per product.</p></div>
+</div>
+
+<!-- ================= PURCHASES ================= -->
+<div class="tab" id="tab-pur" style="display:none">
+  <div class="pagehead"><h1>Purchases</h1><p>Supplier invoices and purchasing details — every line adds stock to the warehouse and feeds the average cost per product.</p></div>
   <section class="card no-print" id="importCard">
     <h2>Au pays des Ânes invoices</h2>
     <p class="hint" id="importHint"></p>
@@ -320,8 +318,40 @@
 
 <!-- ================= CATALOG ================= -->
 <div class="tab" id="tab-cat" style="display:none">
-  <div class="pagehead"><h1>Catalog</h1><p>All products grouped by category — with stock, sales and value per product family. Categories are assigned automatically from the supplier references; change one via Edit on the product (Inventory tab).</p></div>
+  <div class="pagehead"><h1>Catalog</h1><p>Your product master — add and edit products, set initial stock, and browse everything by category.</p></div>
   <section class="card">
+    <h2 id="prodFormTitle">Add product</h2>
+    <form class="rowform" id="productForm">
+      <input type="hidden" id="p_id">
+      <label>Product name<input id="p_name" required style="min-width:260px"></label>
+      <label>Reference<input id="p_ref" placeholder="optional" style="width:130px"></label>
+      <label>Supplier<input id="p_supplier" placeholder="Au pays des Ânes"></label>
+      <label>Category<select id="p_cat_sel"></select></label>
+      <label>Initial stock (qty)<input id="p_iqty" type="number" min="0" step="1" value="0" style="width:110px"></label>
+      <label>Initial cost / unit (€)<input id="p_icost" type="number" min="0" step="0.0001" value="0" style="width:130px"></label>
+      <button class="btn gold" type="submit" id="p_submit">Save product</button>
+      <button class="btn ghost" type="button" id="p_cancel" style="display:none">Cancel</button>
+    </form>
+    <p class="hint">Initial stock = what you already had before tracking here. Purchases from invoices add on top; average cost blends both.</p>
+  </section>
+  <section class="card">
+    <h2>All products</h2>
+    <div class="rowform no-print" style="margin-bottom:10px">
+      <label>Search<input id="p_search" placeholder="name or ref…" oninput="renderProducts()" style="min-width:220px"></label>
+      <button class="btn ghost" onclick="exportProductsCSV()">Export CSV</button>
+    </div>
+    <div class="scrollbox" id="productsTable"></div>
+  </section>
+  <section class="card">
+    <h2>Initial inventory — bulk entry</h2>
+    <p class="hint">Type the stock you already had before tracking (and its cost per unit). Each change saves instantly; average cost blends it with the invoice purchases.</p>
+    <div class="rowform no-print" style="margin-bottom:8px">
+      <label>Search<input id="ii_search" oninput="renderInitInv()" placeholder="product…" style="min-width:220px"></label>
+    </div>
+    <div class="scrollbox" id="initInvTable"></div>
+  </section>
+  <section class="card">
+    <h2>By category</h2>
     <div class="rowform no-print" style="margin-bottom:10px">
       <label>Search<input id="cat_search" oninput="renderCatalog()" placeholder="product or category…" style="min-width:240px"></label>
     </div>
@@ -425,7 +455,7 @@ const CAT_CHIPS = {
   // legacy categories from v1 keep a chip
   "Monthly Operating": "#dbeafe", "Exhibition / Event": "#ede9fe", "Shipping": "#d1fae5"
 };
-const KINDS = ["products", "purchases", "pos", "pos_prices", "transfers", "sales", "gifts", "expenses"];
+const KINDS = ["products", "purchases", "pos", "pos_prices", "transfers", "inventories", "inventory_lines", "sales", "gifts", "expenses"];
 const LS_DATA = "lanea-books-data";
 const LS_CFG = "lanea-books-supabase";
 const LOW_STOCK = 5;   // "low stock" threshold in units — dashboard + inventory badges
@@ -470,7 +500,7 @@ function catOf(p) {
   return "Other";
 }
 
-let state = { products: [], purchases: [], pos: [], pos_prices: [], transfers: [], sales: [], gifts: [], expenses: [] };
+let state = { products: [], purchases: [], pos: [], pos_prices: [], transfers: [], inventories: [], inventory_lines: [], sales: [], gifts: [], expenses: [] };
 let client = null, remote = false;
 let filters = { from: "", to: "", pos: "", prod: "" };
 
@@ -506,7 +536,7 @@ function productCalc(p) {
   let sold = 0, revenue = 0, gifted = 0;
   for (const s of state.sales) if (s.product_id === p.id) { sold += Number(s.qty); revenue += Number(s.qty) * Number(s.price_per_unit); }
   for (const g of state.gifts) if (g.product_id === p.id) gifted += Number(g.qty);
-  const stock = totQty - sold - gifted;
+  const stock = totQty - sold - gifted + invDelta(p.id, "all");
   return { iq, purQty, avgCost, sold, revenue, gifted, stock, cogs: sold * avgCost, stockValue: stock * avgCost, totCost };
 }
 const prodById = id => state.products.find(p => p.id === id);
@@ -519,11 +549,25 @@ const transferredTo = (pid, posId) => state.transfers.filter(t => t.product_id =
   .reduce((a, t) => a + Number(t.qty), 0);
 const soldAtPos = (pid, posId) => state.sales.filter(s => s.product_id === pid && s.pos_id === posId)
   .reduce((a, s) => a + Number(s.qty), 0);
-const posStockOf = (pid, posId) => transferredTo(pid, posId) - soldAtPos(pid, posId);
+const posStockOf = (pid, posId) => transferredTo(pid, posId) - soldAtPos(pid, posId) + invDelta(pid, posId);
 function warehouseOf(p) {
   const c = productCalc(p);
   const out = state.transfers.filter(t => t.product_id === p.id).reduce((a, t) => a + Number(t.qty), 0);
-  return c.iq + c.purQty - c.gifted - out;
+  return c.iq + c.purQty - c.gifted - out + invDelta(p.id, null);
+}
+/* stock corrections from submitted inventory counts: delta = counted - theoretical
+   scope: "all" (any location) | null (warehouse) | a POS id */
+function invDelta(pid, scope) {
+  let d = 0;
+  for (const l of state.inventory_lines) {
+    if (l.product_id !== pid) continue;
+    if (scope !== "all") {
+      const inv = state.inventories.find(i => i.id === l.inventory_id);
+      if (!inv || (inv.pos_id || null) !== scope) continue;
+    }
+    d += Number(l.counted) - Number(l.theoretical);
+  }
+  return d;
 }
 
 function inPeriod(date) {
@@ -564,12 +608,18 @@ async function deleteRow(kind, id) {
   }
   state[kind] = state[kind].filter(r => r.id !== id);
   if (kind === "products") {
-    for (const k of ["purchases", "sales", "gifts", "pos_prices", "transfers"]) state[k] = state[k].filter(r => r.product_id !== id);
+    for (const k of ["purchases", "sales", "gifts", "pos_prices", "transfers", "inventory_lines"]) state[k] = state[k].filter(r => r.product_id !== id);
   }
   if (kind === "pos") {
     state.pos_prices = state.pos_prices.filter(r => r.pos_id !== id);
     state.transfers = state.transfers.filter(r => r.pos_id !== id);
+    const deadInv = state.inventories.filter(i => i.pos_id === id).map(i => i.id);
+    state.inventories = state.inventories.filter(i => i.pos_id !== id);
+    state.inventory_lines = state.inventory_lines.filter(l => !deadInv.includes(l.inventory_id));
     for (const s of state.sales) if (s.pos_id === id) s.pos_id = null;
+  }
+  if (kind === "inventories") {
+    state.inventory_lines = state.inventory_lines.filter(l => l.inventory_id !== id);
   }
   if (!remote) saveLocal();
   return true;
@@ -764,7 +814,7 @@ function renderProducts() {
     .filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const el = document.getElementById("productsTable");
-  if (!list.length) { el.innerHTML = '<p class="empty">No products yet — add one above or import your invoices in the Purchases tab.</p>'; return; }
+  if (!list.length) { el.innerHTML = '<p class="empty">No products yet — add one above or import your invoices from the Purchases tab.</p>'; return; }
   let h = `<table><tr><th>Product</th><th>Ref</th><th class="num">Initial</th><th class="num">Purchased</th>
     <th class="num">Avg cost</th><th class="num">Sold</th><th class="num">Gifted</th><th class="num">Stock</th>
     <th>Status</th><th class="num">Stock value</th><th class="no-print"></th></tr>`;
@@ -1003,7 +1053,7 @@ function refreshSelects() {
 }
 function render() {
   refreshSelects();
-  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderPosStock(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
+  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderPosStock(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
 }
 
 /* ================= daily log & calendar ================= */
@@ -1289,6 +1339,121 @@ window.clearDraft = () => {
 };
 window.removeDraft = (kind, i) => { draft[kind].splice(i, 1); saveDraft(); renderDay(); };
 
+/* ================= fiche d'inventaire (physical counts) ================= */
+const LS_INVDRAFT = "lanea-inv-draft";
+let invDraft = null;
+try { invDraft = JSON.parse(localStorage.getItem(LS_INVDRAFT) || "null"); } catch {}
+function saveInvDraft() { localStorage.setItem(LS_INVDRAFT, JSON.stringify(invDraft)); }
+const invScopeName = posId => posId ? (posById(posId)?.name || "(deleted POS)") : "Warehouse";
+
+window.startInventory = () => {
+  if (invDraft && !confirm("A draft inventory sheet is already open — replace it?")) return;
+  invDraft = { date: gv("inv_date") || todayISO(), pos_id: gv("inv_scope") || null, counts: {} };
+  saveInvDraft(); renderInventory();
+};
+window.invCount = (pid, val) => {
+  if (!invDraft) return;
+  if (val === "") delete invDraft.counts[pid];
+  else invDraft.counts[pid] = val;
+  saveInvDraft(); renderInvTotals();
+};
+function renderInvTotals() {
+  const el = document.getElementById("invTotals");
+  if (!invDraft) { el.innerHTML = ""; return; }
+  const theoOf = pid => invDraft.pos_id ? posStockOf(pid, invDraft.pos_id) : warehouseOf(prodById(pid));
+  let n = 0, dUnits = 0, dValue = 0;
+  for (const [pid, v] of Object.entries(invDraft.counts)) {
+    if (v === "" || !isFinite(Number(v))) continue;
+    n++;
+    const diff = Number(v) - theoOf(pid);
+    dUnits += diff; dValue += diff * avgCostOf(pid);
+  }
+  el.innerHTML = `
+    <span class="chip" style="background:#d9eaee">${fmtN(n)} product${n === 1 ? "" : "s"} counted</span>
+    <span class="chip" style="background:${dUnits === 0 ? "#d9ecdd" : "#fdeeca"}">Difference ${dUnits > 0 ? "+" : ""}${fmtN(dUnits)} units</span>
+    <span class="chip" style="background:${dValue >= 0 ? "#d9ecdd" : "#ffdad6"}">Value impact ${fmtE(dValue)}</span>`;
+}
+function renderInventory() {
+  const sel = document.getElementById("inv_scope");
+  { const cur = sel.value;
+    sel.innerHTML = '<option value="">Warehouse</option>' + state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+    sel.value = cur; }
+  const startEl = document.getElementById("invStart"), sheetEl = document.getElementById("invSheet");
+  if (!invDraft) { startEl.style.display = ""; sheetEl.style.display = "none"; renderInvHistory(); return; }
+  startEl.style.display = "none"; sheetEl.style.display = "";
+  document.getElementById("invTitle").innerHTML =
+    `Fiche d'inventaire — ${esc(invScopeName(invDraft.pos_id))} — ${fmtD(invDraft.date)} <span class="chip" style="background:#fdeeca">DRAFT</span>`;
+  const q = (gv("inv_search") || "").toLowerCase();
+  const theoOf = p => invDraft.pos_id ? posStockOf(p.id, invDraft.pos_id) : warehouseOf(p);
+  const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  let h = `<table><tr><th>Product</th><th class="num">Theoretical</th><th class="num" style="width:130px">Counted (actual)</th><th class="num">Difference</th></tr>`;
+  for (const p of list) {
+    const theo = theoOf(p);
+    const v = invDraft.counts[p.id] ?? "";
+    const diff = v === "" ? null : Number(v) - theo;
+    h += `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtN(theo)}</td>
+      <td class="num"><input class="rin" type="number" min="0" step="1" value="${v}" placeholder="—" style="width:90px"
+        onchange="invCount('${p.id}',this.value)"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"></td>
+      <td class="num calc ${diff != null && diff !== 0 ? "neg" : ""}">${diff == null ? "—" : (diff > 0 ? "+" : "") + fmtN(diff)}</td></tr>`;
+  }
+  document.getElementById("invTable").innerHTML = h + "</table>";
+  renderInvTotals();
+  renderInvHistory();
+}
+window.submitInventory = async () => {
+  if (!invDraft) return;
+  const entries = Object.entries(invDraft.counts).filter(([, v]) => v !== "" && isFinite(Number(v)));
+  if (!entries.length) { alert("Count at least one product first (type its actual quantity)."); return; }
+  if (!confirm(`Submit this inventory for ${invScopeName(invDraft.pos_id)}? ${entries.length} product${entries.length === 1 ? "" : "s"} counted — stock will be adjusted to the counted quantities.`)) return;
+  const invRow = { id: uid(), date: invDraft.date, pos_id: invDraft.pos_id };
+  const lines = entries.map(([pid, v]) => ({
+    id: uid(), inventory_id: invRow.id, product_id: pid,
+    theoretical: invDraft.pos_id ? posStockOf(pid, invDraft.pos_id) : warehouseOf(prodById(pid)),
+    counted: Number(v),
+  }));
+  if (remote) {
+    let { data, error } = await client.from("inventories").insert(invRow).select().single();
+    if (error) { alert("Cloud error: " + error.message); return; }
+    state.inventories.push(data);
+    ({ data, error } = await client.from("inventory_lines").insert(lines).select());
+    if (error) { alert("Cloud error: " + error.message); return; }
+    state.inventory_lines.push(...data);
+  } else {
+    state.inventories.push(invRow); state.inventory_lines.push(...lines); saveLocal();
+  }
+  invDraft = null; saveInvDraft();
+  toast(`Inventory submitted ✓ — stock adjusted for ${lines.length} product${lines.length === 1 ? "" : "s"}`);
+  render();
+};
+window.discardInventory = () => {
+  if (!confirm("Discard this inventory sheet? The counts were never saved.")) return;
+  invDraft = null; saveInvDraft(); renderInventory();
+};
+function renderInvHistory() {
+  const el = document.getElementById("invHistory");
+  if (!state.inventories.length) { el.innerHTML = '<p class="empty">No inventory submitted yet.</p>'; return; }
+  const list = [...state.inventories].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  el.innerHTML = list.map(inv => {
+    const lines = state.inventory_lines.filter(l => l.inventory_id === inv.id);
+    let dU = 0, dV = 0;
+    const rows = lines.map(l => {
+      const diff = Number(l.counted) - Number(l.theoretical);
+      dU += diff; dV += diff * avgCostOf(l.product_id);
+      return `<tr><td>${esc(prodById(l.product_id)?.name || "(deleted)")}</td>
+        <td class="num calc">${fmtN(Number(l.theoretical))}</td><td class="num calc">${fmtN(Number(l.counted))}</td>
+        <td class="num calc ${diff !== 0 ? "neg" : ""}">${diff > 0 ? "+" : ""}${fmtN(diff)}</td></tr>`;
+    }).join("");
+    return `<details class="inv"><summary><span class="ref">${esc(invScopeName(inv.pos_id))}</span>
+      <span class="meta">${fmtD(inv.date)}</span><span class="meta">${lines.length} counted</span>
+      <span class="meta ${dU !== 0 ? "neg" : ""}">Δ ${dU > 0 ? "+" : ""}${fmtN(dU)} units</span>
+      <span style="margin-left:auto;font-weight:700" class="${dV < 0 ? "neg" : ""}">${fmtE(dV)}</span>
+      <button class="btn small danger no-print" style="margin-left:10px" onclick="event.preventDefault();delRow('inventories','${inv.id}')">Del</button></summary>
+      <div class="lines"><table><tr><th>Product</th><th class="num">Theoretical</th><th class="num">Counted</th><th class="num">Difference</th></tr>${rows}</table></div></details>`;
+  }).join("");
+}
+
 /* ================= stock by point of sale ================= */
 window.transferHint = () => {
   const pid = gv("t_product"), posId = gv("t_pos");
@@ -1460,7 +1625,7 @@ document.getElementById("productForm").addEventListener("submit", async ev => {
 });
 window.editProduct = id => {
   const p = prodById(id); if (!p) return;
-  showTab("inv");
+  showTab("cat");
   document.getElementById("p_id").value = p.id;
   document.getElementById("p_name").value = p.name || "";
   document.getElementById("p_ref").value = p.ref || "";
@@ -1718,6 +1883,7 @@ window.pushLocalToCloud = async () => {
 /* ================= boot ================= */
 document.getElementById("pu_date").value = todayISO();
 document.getElementById("t_date").value = todayISO();
+document.getElementById("inv_date").value = todayISO();
 document.getElementById("p_cat_sel").innerHTML = PRODUCT_CATS.map(c => `<option>${c}</option>`).join("");
 loadLocal(); setBadge(); render(); initSupabase();
 </script>

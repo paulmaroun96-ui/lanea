@@ -63,6 +63,25 @@ create table if not exists public.transfers (
   created_at timestamptz not null default now()
 );
 
+-- physical inventory counts (fiches d'inventaire): submitted sheets adjust stock
+-- by (counted - theoretical) per line; pos_id null = warehouse count
+create table if not exists public.inventories (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  date date not null,
+  pos_id uuid references public.pos (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create table if not exists public.inventory_lines (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  inventory_id uuid not null references public.inventories (id) on delete cascade,
+  product_id uuid not null references public.products (id) on delete cascade,
+  theoretical numeric not null,
+  counted numeric not null,
+  created_at timestamptz not null default now()
+);
+
 -- sales gain a point of sale
 alter table public.sales add column if not exists pos_id uuid references public.pos (id) on delete set null;
 
@@ -71,11 +90,15 @@ alter table public.pos enable row level security;
 alter table public.pos_prices enable row level security;
 alter table public.purchases enable row level security;
 alter table public.transfers enable row level security;
+alter table public.inventories enable row level security;
+alter table public.inventory_lines enable row level security;
 
 drop policy if exists "own rows" on public.pos;
 drop policy if exists "own rows" on public.pos_prices;
 drop policy if exists "own rows" on public.purchases;
 drop policy if exists "own rows" on public.transfers;
+drop policy if exists "own rows" on public.inventories;
+drop policy if exists "own rows" on public.inventory_lines;
 
 create policy "own rows" on public.pos for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
@@ -84,4 +107,8 @@ create policy "own rows" on public.pos_prices for all
 create policy "own rows" on public.purchases for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "own rows" on public.transfers for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on public.inventories for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own rows" on public.inventory_lines for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
