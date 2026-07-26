@@ -108,7 +108,9 @@
   .cal button.done { background: #e2e7e9; color: #3d4a4e; font-weight: 600; }
   .cal button.done.other { background: #eef1f2; color: #b6c0c3; }
   .cal button.today { border-color: var(--gold); }
+  .cal button.pend { border-style: dashed; border-color: #d8a53f; }
   .cal button.sel { background: var(--gold); color: #fff; font-weight: 700; }
+  .draft { border: 1.5px dashed #d8a53f; background: #fffbeb; border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
   .cal-key { display: inline-block; width: 12px; height: 12px; border-radius: 4px; vertical-align: -2px; }
   .cal-key.done { background: #e2e7e9; } .cal-key.sel { background: var(--gold); }
   .pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(235px, 1fr)); gap: 12px; }
@@ -168,6 +170,7 @@
     <button data-tab="dash" class="active"><span class="ms">dashboard</span>Dashboard</button>
     <button data-tab="day"><span class="ms">edit_square</span>Daily entry</button>
     <button data-tab="inv"><span class="ms">inventory_2</span>Inventory</button>
+    <button data-tab="cat"><span class="ms">category</span>Catalog</button>
     <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
     <button data-tab="exp"><span class="ms">account_balance_wallet</span>Expenses</button>
     <button data-tab="set"><span class="ms">settings</span>Settings</button>
@@ -204,7 +207,7 @@
 
 <!-- ================= DAILY ENTRY ================= -->
 <div class="tab" id="tab-day" style="display:none">
-  <div class="pagehead"><h1>Daily entry</h1><p>Pick a day and log what happened. Grey days already have entries — the selected day is teal.</p></div>
+  <div class="pagehead"><h1>Daily entry</h1><p>Pick a day, add all the day's lines (sales, gifts, expenses), then press <b>Save day</b> once. Grey days are saved — amber dashed days have pending lines.</p></div>
   <section class="card">
     <div class="grid2" style="align-items:start">
       <div>
@@ -219,6 +222,7 @@
         <p class="hint" style="margin-top:10px"><span class="cal-key done"></span> already inputted&nbsp;&nbsp;&nbsp;<span class="cal-key sel"></span> selected day</p>
       </div>
       <div>
+        <div id="draftBox"></div>
         <h2 id="dayTitle">Logged today</h2>
         <div id="daySummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
         <div class="scrollbox" style="max-height:280px" id="dayList"></div>
@@ -239,7 +243,7 @@
       <label>Product<select id="s_product" required></select></label>
       <label>Qty<input id="s_qty" type="number" min="1" step="1" required style="width:90px"></label>
       <label>Price / unit (€)<input id="s_price" type="number" min="0" step="0.01" required style="width:120px"></label>
-      <button class="btn gold" type="submit" id="s_submit">Save sale</button>
+      <button class="btn gold" type="submit" id="s_submit">Add sale to day</button>
       <button class="btn ghost" type="button" id="s_cancel" style="display:none">Cancel</button>
     </form>
     <p class="hint" id="s_pricehint"></p>
@@ -252,7 +256,7 @@
       <label>Product<select id="g_product" required></select></label>
       <label>Qty<input id="g_qty" type="number" min="1" step="1" required style="width:90px"></label>
       <label>Note<input id="g_note" placeholder="e.g. PR gift — influencer" style="min-width:220px"></label>
-      <button class="btn gold" type="submit" id="g_submit">Save gift</button>
+      <button class="btn gold" type="submit" id="g_submit">Add gift to day</button>
       <button class="btn ghost" type="button" id="g_cancel" style="display:none">Cancel</button>
     </form>
     <p class="hint" id="g_stockhint"></p>
@@ -266,7 +270,7 @@
       <label>Description<input id="e_desc" required style="min-width:260px"></label>
       <label>Category<select id="e_cat" required></select></label>
       <label>Amount (€)<input id="e_amount" type="number" min="0" step="0.01" required style="width:110px"></label>
-      <button class="btn gold" type="submit" id="e_submit">Save expense</button>
+      <button class="btn gold" type="submit" id="e_submit">Add expense to day</button>
       <button class="btn ghost" type="button" id="e_cancel" style="display:none">Cancel</button>
     </form>
   </section>
@@ -283,6 +287,7 @@
       <label>Product name<input id="p_name" required style="min-width:260px"></label>
       <label>Reference<input id="p_ref" placeholder="optional" style="width:130px"></label>
       <label>Supplier<input id="p_supplier" placeholder="Au pays des Ânes"></label>
+      <label>Category<select id="p_cat_sel"></select></label>
       <label>Initial stock (qty)<input id="p_iqty" type="number" min="0" step="1" value="0" style="width:110px"></label>
       <label>Initial cost / unit (€)<input id="p_icost" type="number" min="0" step="0.0001" value="0" style="width:130px"></label>
       <button class="btn gold" type="submit" id="p_submit">Save product</button>
@@ -324,6 +329,17 @@
     </form>
   </section>
   <section class="card"><h2>Invoices &amp; purchase lines</h2><div id="purchasesList"></div></section>
+</div>
+
+<!-- ================= CATALOG ================= -->
+<div class="tab" id="tab-cat" style="display:none">
+  <div class="pagehead"><h1>Catalog</h1><p>All products grouped by category — with stock, sales and value per product family. Categories are assigned automatically from the supplier references; change one via Edit on the product (Inventory tab).</p></div>
+  <section class="card">
+    <div class="rowform no-print" style="margin-bottom:10px">
+      <label>Search<input id="cat_search" oninput="renderCatalog()" placeholder="product or category…" style="min-width:240px"></label>
+    </div>
+    <div id="catalogList"></div>
+  </section>
 </div>
 
 <!-- ================= SALES ================= -->
@@ -427,6 +443,45 @@ const LS_DATA = "lanea-books-data";
 const LS_CFG = "lanea-books-supabase";
 const LOW_STOCK = 5;   // "low stock" threshold in units — dashboard + inventory badges
 const LS_LASTPOS = "lanea-last-pos";
+const LS_DRAFT = "lanea-books-draft";
+
+/* pending (not yet saved) day lines — survive refreshes via localStorage */
+let draft = { sales: [], gifts: [], expenses: [] };
+try {
+  const d = JSON.parse(localStorage.getItem(LS_DRAFT) || "null");
+  if (d) draft = { sales: d.sales || [], gifts: d.gifts || [], expenses: d.expenses || [] };
+} catch {}
+function saveDraft() { localStorage.setItem(LS_DRAFT, JSON.stringify(draft)); }
+const draftCount = () => draft.sales.length + draft.gifts.length + draft.expenses.length;
+const pendingOut = pid =>
+  draft.sales.filter(d => d.product_id === pid).reduce((a, d) => a + Number(d.qty), 0) +
+  draft.gifts.filter(d => d.product_id === pid).reduce((a, d) => a + Number(d.qty), 0);
+
+/* product categories (same rules as the Excel catalog) */
+const PRODUCT_CATS = ["Soaps (solid)", "Liquid soap & refills", "Shower & bath", "Lemonade shower gels",
+  "Body care", "Face & lip care", "Sheet masks (single use)", "Hair care", "Hand & foot care",
+  "Deodorant", "Gift boxes & coffrets", "Display & packaging", "Testers & samples", "Other"];
+const CAT_RULES = [
+  ["Testers & samples", /^(TESTEUR|ECH|KDOBF)/],
+  ["Gift boxes & coffrets", /^(COF|BOITE)/],
+  ["Display & packaging", /^(SACPETIT|PRESMASQUES)/],
+  ["Sheet masks (single use)", /^MASQ(A-A|AF|CE|HY|REL)/],
+  ["Hair care", /^(SHAMP|ECOSHN|MASQUECH)/],
+  ["Soaps (solid)", /^(SAVON|SAVAYRUVEDANE|SMONOIH|SAVRI)/],
+  ["Liquid soap & refills", /^(LIQ500|ECOSL)/],
+  ["Lemonade shower gels", /^(GDLIMO|GELLIM)/],
+  ["Shower & bath", /^(GD|ECOGD|BAINMOUSSANT)/],
+  ["Hand & foot care", /^(CREMAI|CMAINSALOE|CREPIE)/],
+  ["Face & lip care", /^(CREJOU|CRENUI|SERUM|LAIDEM|EAUMICELLAIRE|GOMVIS|MASQUEBEAU|CREMARA|BAUMLEVRES)/],
+  ["Body care", /^(LAIT|LC|CR|CCORPS|CREM|ECOLC|GOMMCORPS|GELJAMBES|SAVONANE)/],
+  ["Deodorant", /^SPRAYALUN/],
+];
+function catOf(p) {
+  if (p.category) return p.category;
+  const ref = p.ref || "";
+  for (const [c, re] of CAT_RULES) if (re.test(ref)) return c;
+  return "Other";
+}
 
 let state = { products: [], purchases: [], pos: [], pos_prices: [], sales: [], gifts: [], expenses: [] };
 let client = null, remote = false;
@@ -559,6 +614,7 @@ async function importInvoices() {
     for (const inv of pending) for (const l of inv.lines) {
       if (!byRef[l.key]) {
         const row = { id: uid(), ref: l.key, name: l.name, supplier: "Au pays des Ânes", initial_qty: 0, initial_cost: 0 };
+        row.category = catOf(row);
         byRef[l.key] = row; newProducts.push(row);
       }
     }
@@ -976,7 +1032,7 @@ function refreshSelects() {
 }
 function render() {
   refreshSelects();
-  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
+  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
 }
 
 /* ================= daily log & calendar ================= */
@@ -1007,6 +1063,7 @@ function renderCalendar() {
   document.getElementById("calTitle").textContent =
     new Date(y, m - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   const done = daysWithEntries();
+  const pend = new Set([...draft.sales, ...draft.gifts, ...draft.expenses].map(d => d.date));
   const today = todayISO();
   const startOffset = (new Date(y, m - 1, 1).getDay() + 6) % 7; // Monday-first grid
   const start = new Date(y, m - 1, 1 - startOffset);
@@ -1018,6 +1075,7 @@ function renderCalendar() {
       d.getMonth() !== m - 1 ? "other" : "",
       done.has(iso) ? "done" : "",
       iso === today ? "today" : "",
+      pend.has(iso) ? "pend" : "",
       iso === selectedDay ? "sel" : "",
     ].filter(Boolean).join(" ");
     h += `<button type="button" class="${cls}" onclick="setDay('${iso}')" title="${fmtD(iso)}">${d.getDate()}</button>`;
@@ -1026,6 +1084,7 @@ function renderCalendar() {
 }
 function renderDay() {
   renderCalendar();
+  renderDraft();
   document.getElementById("day_pick").value = selectedDay;
   document.getElementById("dayTitle").textContent = selectedDay === todayISO() ? "Logged today" : "Logged on " + fmtD(selectedDay);
   const daySales = state.sales.filter(s => s.date === selectedDay);
@@ -1059,6 +1118,125 @@ function renderDay() {
          <button class="btn small danger" onclick="delRow('${r.kind}','${r.id}')">Del</button></td></tr>`).join("") + "</table>"
     : '<p class="empty">Nothing logged on this day yet — use the forms above.</p>';
 }
+
+/* ================= pending day draft ================= */
+function draftDesc(kind, d) {
+  if (kind === "sales") return `${prodById(d.product_id)?.name || ""} × ${d.qty} @ ${eurF.format(Number(d.price_per_unit))} — ${posById(d.pos_id)?.name || ""}`;
+  if (kind === "gifts") return `${prodById(d.product_id)?.name || ""} × ${d.qty}${d.note ? " — " + d.note : ""}`;
+  return `${d.description} (${d.category})`;
+}
+function renderDraft() {
+  const el = document.getElementById("draftBox");
+  const n = draftCount();
+  if (!n) { el.innerHTML = ""; return; }
+  const TYPE = { sales: ["Sale", "#d9ecdd"], gifts: ["Gift", "#fdeeca"], expenses: ["Expense", "#ffdad6"] };
+  let rows = "";
+  for (const kind of ["sales", "gifts", "expenses"]) draft[kind].forEach((d, i) => {
+    const amt = kind === "sales" ? Number(d.qty) * Number(d.price_per_unit) : kind === "expenses" ? -Number(d.amount) : null;
+    rows += `<tr><td><span class="chip" style="background:${TYPE[kind][1]}">${TYPE[kind][0]}</span></td>
+      <td>${d.date !== selectedDay ? fmtD(d.date) + " · " : ""}${esc(draftDesc(kind, d))}</td>
+      <td class="num calc ${amt != null && amt < 0 ? "neg" : ""}">${amt == null ? "—" : fmtE(amt)}</td>
+      <td class="no-print"><button class="btn small ghost" onclick="editDraft('${kind}',${i})">Edit</button>
+      <button class="btn small danger" onclick="removeDraft('${kind}',${i})">Del</button></td></tr>`;
+  });
+  el.innerHTML = `<div class="draft">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <b>Pending — not saved yet (${n})</b>
+      <button class="btn gold small" onclick="saveDay()" id="saveDayBtn">Save day (${n} line${n === 1 ? "" : "s"})</button>
+      <button class="btn ghost small" onclick="clearDraft()">Discard all</button>
+    </div><div style="overflow-x:auto"><table>${rows}</table></div></div>`;
+}
+window.saveDay = async () => {
+  if (!draftCount()) return;
+  const btn = document.getElementById("saveDayBtn");
+  if (btn) btn.disabled = true;
+  let saved = 0;
+  for (const kind of ["sales", "gifts", "expenses"]) {
+    if (!draft[kind].length) continue;
+    const rows = draft[kind].map(d => ({ id: uid(), ...d }));
+    if (remote) {
+      const { data, error } = await client.from(kind).insert(rows).select();
+      if (error) {
+        alert(`Cloud error while saving ${kind}: ${error.message}\nAlready-saved lines were kept; the rest is still pending.`);
+        if (btn) btn.disabled = false;
+        renderDay(); return;
+      }
+      state[kind].push(...data);
+    } else state[kind].push(...rows);
+    saved += rows.length;
+    if (kind === "sales") for (const s of rows) {
+      await upsertPosPrice(s.pos_id, s.product_id, Number(s.price_per_unit));
+      localStorage.setItem(LS_LASTPOS, s.pos_id);
+    }
+    draft[kind] = []; saveDraft();
+  }
+  if (!remote) saveLocal();
+  toast(`Day saved ✓ — ${saved} entr${saved === 1 ? "y" : "ies"}`);
+  render();
+};
+window.clearDraft = () => {
+  if (!confirm("Discard ALL pending lines? They were never saved.")) return;
+  draft = { sales: [], gifts: [], expenses: [] }; saveDraft(); renderDay();
+};
+window.removeDraft = (kind, i) => { draft[kind].splice(i, 1); saveDraft(); renderDay(); };
+window.editDraft = (kind, i) => {
+  const d = draft[kind][i]; if (!d) return;
+  draft[kind].splice(i, 1); saveDraft();
+  if (kind === "sales") {
+    document.getElementById("s_date").value = d.date;
+    document.getElementById("s_pos").value = d.pos_id;
+    document.getElementById("s_product").value = d.product_id;
+    document.getElementById("s_qty").value = d.qty;
+    document.getElementById("s_price").value = d.price_per_unit;
+    salePriceAutofill(false);
+  } else if (kind === "gifts") {
+    document.getElementById("g_date").value = d.date;
+    document.getElementById("g_product").value = d.product_id;
+    document.getElementById("g_qty").value = d.qty;
+    document.getElementById("g_note").value = d.note || "";
+    giftStockHint();
+  } else {
+    document.getElementById("e_date").value = d.date;
+    document.getElementById("e_desc").value = d.description;
+    document.getElementById("e_cat").value = d.category;
+    document.getElementById("e_amount").value = d.amount;
+  }
+  renderDay();
+};
+
+/* ================= catalog by category ================= */
+window.renderCatalog = () => {
+  const q = (document.getElementById("cat_search").value || "").toLowerCase();
+  const el = document.getElementById("catalogList");
+  if (!state.products.length) { el.innerHTML = '<p class="empty">No products yet — add them in the Inventory tab or import your invoices.</p>'; return; }
+  const groups = {};
+  for (const p of state.products) {
+    const c = catOf(p);
+    if (q && !(p.name || "").toLowerCase().includes(q) && !c.toLowerCase().includes(q)) continue;
+    (groups[c] ??= []).push(p);
+  }
+  const order = PRODUCT_CATS.filter(c => groups[c]).concat(Object.keys(groups).filter(c => !PRODUCT_CATS.includes(c)).sort());
+  if (!order.length) { el.innerHTML = '<p class="empty">No product matches this search.</p>'; return; }
+  el.innerHTML = order.map(cat => {
+    const items = groups[cat].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    let units = 0, val = 0, sold = 0;
+    const rows = items.map(p => {
+      const c = productCalc(p);
+      units += Math.max(c.stock, 0); val += c.stockValue; sold += c.sold;
+      const st = (c.iq + c.purQty) <= 0 ? "—" : c.stock <= 0 ? '<span class="st st-out">OUT</span>'
+        : c.stock <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
+      return `<tr><td>${esc(p.name)}</td><td style="color:var(--muted)">${esc(p.ref || "")}</td>
+        <td class="num calc">${fmtE(c.avgCost)}</td><td class="num calc">${fmtN(c.sold)}</td>
+        <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td><td>${st}</td>
+        <td class="num calc">${fmtE(c.stockValue)}</td></tr>`;
+    }).join("");
+    return `<details class="inv" open><summary><span class="ref">${esc(cat)}</span>
+      <span class="meta">${items.length} product${items.length === 1 ? "" : "s"}</span>
+      <span class="meta">${fmtN(sold)} sold</span><span class="meta">${fmtN(units)} in stock</span>
+      <span style="margin-left:auto;font-weight:700">${fmtE(val)}</span></summary>
+      <div class="lines"><table><tr><th>Product</th><th>Ref</th><th class="num">Avg cost</th><th class="num">Sold</th><th class="num">Stock</th><th>Status</th><th class="num">Stock value</th></tr>${rows}</table></div></details>`;
+  }).join("");
+};
 
 /* ================= initial inventory bulk editor ================= */
 window.renderInitInv = () => {
@@ -1104,6 +1282,7 @@ document.getElementById("productForm").addEventListener("submit", async ev => {
     name: document.getElementById("p_name").value.trim(),
     ref: document.getElementById("p_ref").value.trim() || null,
     supplier: document.getElementById("p_supplier").value.trim(),
+    category: document.getElementById("p_cat_sel").value,
     initial_qty: Number(document.getElementById("p_iqty").value || 0),
     initial_cost: Number(document.getElementById("p_icost").value || 0),
   };
@@ -1118,6 +1297,7 @@ window.editProduct = id => {
   document.getElementById("p_name").value = p.name || "";
   document.getElementById("p_ref").value = p.ref || "";
   document.getElementById("p_supplier").value = p.supplier || "";
+  document.getElementById("p_cat_sel").value = catOf(p);
   document.getElementById("p_iqty").value = p.initial_qty || 0;
   document.getElementById("p_icost").value = p.initial_cost || 0;
   document.getElementById("p_submit").textContent = "Save changes";
@@ -1155,20 +1335,30 @@ document.getElementById("saleForm").addEventListener("submit", async ev => {
   const fields = { date: document.getElementById("s_date").value, pos_id, product_id, qty: Number(document.getElementById("s_qty").value), price_per_unit: price };
   const id = document.getElementById("s_id").value;
   const prevQty = id ? Number(state.sales.find(x => x.id === id)?.qty || 0) : 0;
-  const available = productCalc(prodById(product_id)).stock + prevQty;
-  if (fields.qty > available && !confirm(`Only ${fmtN(available)} in stock for this product — log this sale anyway?`)) return;
-  const ok = id ? await updateRow("sales", id, fields) : await addRow("sales", fields);
-  if (ok) {
-    await upsertPosPrice(pos_id, product_id, price);
-    localStorage.setItem(LS_LASTPOS, pos_id);
-    resetForm("s", "saleForm", "Save sale");
-    document.getElementById("s_date").value = selectedDay;
-    toast(id ? "Sale updated ✓" : "Sale logged ✓");
-    render();
-    // keep the POS and focus the product select so consecutive sales are fast
-    document.getElementById("s_pos").value = pos_id;
-    document.getElementById("s_product").focus();
+  const available = productCalc(prodById(product_id)).stock - pendingOut(product_id) + prevQty;
+  if (fields.qty > available && !confirm(`Only ${fmtN(available)} in stock (counting pending lines) — add this sale anyway?`)) return;
+  if (id) {
+    // editing an already-saved sale: update it directly
+    if (await updateRow("sales", id, fields)) {
+      await upsertPosPrice(pos_id, product_id, price);
+      localStorage.setItem(LS_LASTPOS, pos_id);
+      resetForm("s", "saleForm", "Add sale to day");
+      document.getElementById("s_date").value = selectedDay;
+      toast("Sale updated ✓");
+      render();
+      document.getElementById("s_pos").value = pos_id;
+    }
+    return;
   }
+  // new line: goes to the pending day draft, saved with the Save day button
+  draft.sales.push(fields); saveDraft();
+  localStorage.setItem(LS_LASTPOS, pos_id);
+  resetForm("s", "saleForm", "Add sale to day");
+  document.getElementById("s_date").value = selectedDay;
+  document.getElementById("s_pos").value = pos_id;
+  document.getElementById("s_product").focus();
+  toast("Line added — press Save day when the day is complete");
+  renderDay();
 });
 window.editSale = id => {
   const s = state.sales.find(s => s.id === id); if (!s) return;
@@ -1183,7 +1373,7 @@ window.editSale = id => {
   document.getElementById("s_cancel").style.display = "";
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
-document.getElementById("s_cancel").addEventListener("click", () => resetForm("s", "saleForm", "Save sale"));
+document.getElementById("s_cancel").addEventListener("click", () => resetForm("s", "saleForm", "Add sale to day"));
 document.getElementById("s_pos").addEventListener("change", () => salePriceAutofill(true));
 document.getElementById("s_product").addEventListener("change", () => salePriceAutofill(true));
 document.getElementById("s_qty").addEventListener("input", () => salePriceAutofill(false));
@@ -1202,10 +1392,21 @@ document.getElementById("giftForm").addEventListener("submit", async ev => {
   };
   const id = document.getElementById("g_id").value;
   const prevQty = id ? Number(state.gifts.find(x => x.id === id)?.qty || 0) : 0;
-  const available = productCalc(prodById(fields.product_id)).stock + prevQty;
-  if (fields.qty > available && !confirm(`Only ${fmtN(available)} in stock for this product — log this gift anyway?`)) return;
-  const ok = id ? await updateRow("gifts", id, fields) : await addRow("gifts", fields);
-  if (ok) { resetForm("g", "giftForm", "Save gift"); document.getElementById("g_date").value = selectedDay; toast(id ? "Gift updated ✓" : "Gift logged ✓"); render(); }
+  const available = productCalc(prodById(fields.product_id)).stock - pendingOut(fields.product_id) + prevQty;
+  if (fields.qty > available && !confirm(`Only ${fmtN(available)} in stock (counting pending lines) — add this gift anyway?`)) return;
+  if (id) {
+    if (await updateRow("gifts", id, fields)) {
+      resetForm("g", "giftForm", "Add gift to day");
+      document.getElementById("g_date").value = selectedDay;
+      toast("Gift updated ✓"); render();
+    }
+    return;
+  }
+  draft.gifts.push(fields); saveDraft();
+  resetForm("g", "giftForm", "Add gift to day");
+  document.getElementById("g_date").value = selectedDay;
+  toast("Line added — press Save day when the day is complete");
+  renderDay();
 });
 window.editGift = id => {
   const g = state.gifts.find(g => g.id === id); if (!g) return;
@@ -1218,7 +1419,7 @@ window.editGift = id => {
   document.getElementById("g_submit").textContent = "Save changes";
   document.getElementById("g_cancel").style.display = "";
 };
-document.getElementById("g_cancel").addEventListener("click", () => resetForm("g", "giftForm", "Save gift"));
+document.getElementById("g_cancel").addEventListener("click", () => resetForm("g", "giftForm", "Add gift to day"));
 
 document.getElementById("expenseForm").addEventListener("submit", async ev => {
   ev.preventDefault();
@@ -1229,8 +1430,19 @@ document.getElementById("expenseForm").addEventListener("submit", async ev => {
     amount: Number(document.getElementById("e_amount").value),
   };
   const id = document.getElementById("e_id").value;
-  const ok = id ? await updateRow("expenses", id, fields) : await addRow("expenses", fields);
-  if (ok) { resetForm("e", "expenseForm", "Save expense"); document.getElementById("e_date").value = selectedDay; toast(id ? "Expense updated ✓" : "Expense logged ✓"); render(); }
+  if (id) {
+    if (await updateRow("expenses", id, fields)) {
+      resetForm("e", "expenseForm", "Add expense to day");
+      document.getElementById("e_date").value = selectedDay;
+      toast("Expense updated ✓"); render();
+    }
+    return;
+  }
+  draft.expenses.push(fields); saveDraft();
+  resetForm("e", "expenseForm", "Add expense to day");
+  document.getElementById("e_date").value = selectedDay;
+  toast("Line added — press Save day when the day is complete");
+  renderDay();
 });
 window.editExpense = id => {
   const e = state.expenses.find(e => e.id === id); if (!e) return;
@@ -1243,7 +1455,7 @@ window.editExpense = id => {
   document.getElementById("e_submit").textContent = "Save changes";
   document.getElementById("e_cancel").style.display = "";
 };
-document.getElementById("e_cancel").addEventListener("click", () => resetForm("e", "expenseForm", "Save expense"));
+document.getElementById("e_cancel").addEventListener("click", () => resetForm("e", "expenseForm", "Add expense to day"));
 
 window.delRow = async (kind, id) => {
   if (!confirm("Delete this entry? This cannot be undone.")) return;
@@ -1440,6 +1652,7 @@ window.pushLocalToCloud = async () => {
 
 /* ================= boot ================= */
 for (const id of ["s_date", "g_date", "e_date", "pu_date"]) document.getElementById(id).value = todayISO();
+document.getElementById("p_cat_sel").innerHTML = PRODUCT_CATS.map(c => `<option>${c}</option>`).join("");
 loadLocal(); setBadge(); render(); initSupabase();
 </script>
 </body>

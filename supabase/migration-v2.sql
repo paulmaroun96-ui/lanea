@@ -4,6 +4,7 @@
 
 -- products: initial inventory replaces the old qty_purchased/cost_per_unit columns
 alter table public.products add column if not exists ref text;
+alter table public.products add column if not exists category text;
 alter table public.products add column if not exists initial_qty numeric not null default 0;
 alter table public.products add column if not exists initial_cost numeric not null default 0;
 
