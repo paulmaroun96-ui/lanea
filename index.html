@@ -5,39 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LÂNEA Books — Accounting &amp; Inventory</title>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" fill="none" stroke="%231c2026" stroke-width="3"/><text x="32" y="44" font-family="Georgia,serif" font-size="34" text-anchor="middle" fill="%235C9FA3">L</text></svg>'>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,0&display=block" rel="stylesheet">
 <style>
   :root {
-    --bg: #f4f1ea; --panel: #ffffff; --ink: #1c2026; --muted: #6b7280;
-    --line: #e7e2d6; --gold: #5C9FA3; --gold-dark: #47827f; --gold-light: #e3efee;
-    --side: #171a21; --side-ink: #9ca3af; --side-active: #ffffff;
-    --green: #1e7c45; --red: #b91c1c; --red-soft: #fee2e2; --input-bg: #fffdf5;
-    --shadow: 0 1px 3px rgba(23,26,33,.07), 0 4px 14px rgba(23,26,33,.05);
+    --bg: #f4f7f8; --panel: #ffffff; --ink: #191c1e; --muted: #5f6b6e;
+    --line: #dde4e6; --gold: #36656e; --gold-dark: #244a52; --gold-light: #d3e7eb;
+    --side: #ffffff; --side-ink: #516166; --side-active: #0d3239;
+    --green: #1e7c45; --red: #ba1a1a; --red-soft: #ffdad6; --input-bg: #eef2f3;
+    --shadow: 0 1px 2px rgba(25,28,30,.05), 0 4px 16px rgba(25,28,30,.06);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
-  body { background: var(--bg); color: var(--ink); font-family: "Segoe UI", Arial, sans-serif; font-size: 14px; display: flex; }
+  body { background: var(--bg); color: var(--ink); font-family: "Hanken Grotesk", "Segoe UI", Arial, sans-serif; font-size: 14px; display: flex; }
+  .ms {
+    font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal;
+    font-size: 20px; line-height: 1; letter-spacing: normal; text-transform: none;
+    display: inline-block; white-space: nowrap; word-wrap: normal; direction: ltr;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
 
   /* ---------- sidebar ---------- */
   aside {
-    width: 218px; min-height: 100vh; background: var(--side); color: var(--side-ink);
+    width: 232px; min-height: 100vh; background: var(--side); color: var(--side-ink);
     display: flex; flex-direction: column; flex-shrink: 0; position: sticky; top: 0; height: 100vh;
+    border-right: 1px solid var(--line);
   }
-  .brand { padding: 22px 20px 16px; border-bottom: 1px solid #262a33; text-align: center; }
-  .brand img { width: 92px; height: 92px; object-fit: contain; margin-bottom: 6px; background: #fff; border-radius: 50%; padding: 6px; }
-  .brand .logo { font-family: Georgia, "Times New Roman", serif; font-size: 21px; letter-spacing: 6px; color: var(--gold); font-weight: 600; }
-  .brand .sub { font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase; color: #6b7280; margin-top: 4px; }
-  nav { padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; flex: 1; }
+  .brand { padding: 24px 20px 18px; border-bottom: 1px solid var(--line); text-align: center; }
+  .brand img { width: 96px; height: 96px; object-fit: contain; margin-bottom: 8px; }
+  .brand .logo { font-size: 24px; letter-spacing: 5px; color: var(--gold); font-weight: 800; }
+  .brand .sub { font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted); margin-top: 4px; font-weight: 600; }
+  nav { padding: 14px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
   nav button {
-    display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
-    background: none; border: none; color: var(--side-ink); padding: 10px 12px;
-    border-radius: 8px; cursor: pointer; font-size: 13.5px; font-family: inherit;
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    background: none; border: none; color: var(--side-ink); padding: 11px 14px;
+    border-radius: 10px; cursor: pointer; font-size: 14px; font-family: inherit; font-weight: 500;
+    transition: background .15s, color .15s;
   }
-  nav button:hover { background: #20242e; color: #e5e7eb; }
-  nav button.active { background: #262b36; color: var(--side-active); box-shadow: inset 3px 0 0 var(--gold); }
-  nav button .ic { width: 20px; text-align: center; }
-  .side-foot { padding: 14px 20px; border-top: 1px solid #262a33; font-size: 11.5px; }
-  .conn { display: inline-block; padding: 3px 10px; border-radius: 999px; background: #262a33; color: #9ca3af; }
-  .conn.remote { background: #113322; color: #6ee7a0; }
+  nav button:hover { background: var(--input-bg); color: var(--gold-dark); }
+  nav button.active { background: var(--gold-light); color: var(--side-active); font-weight: 700; box-shadow: inset 4px 0 0 var(--gold); }
+  nav button .ms { width: 22px; text-align: center; color: inherit; }
+  .side-foot { padding: 14px 20px; border-top: 1px solid var(--line); font-size: 11.5px; }
+  .conn { display: inline-block; padding: 4px 12px; border-radius: 999px; background: var(--input-bg); color: var(--muted); font-weight: 600; }
+  .conn.remote { background: #d9f2e2; color: #156a3a; }
 
   /* ---------- main ---------- */
   main { flex: 1; min-width: 0; padding: 26px 30px 60px; }
@@ -70,6 +82,7 @@
   th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: #8b8578; background: #faf8f3; position: sticky; top: 0; }
   tbody tr:hover td { background: #faf8f2; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.num { font-family: "JetBrains Mono", Consolas, monospace; font-size: 12.5px; }
   td.calc { color: #40454e; }
   tr.total td { font-weight: 700; border-top: 2px solid var(--ink); background: #faf8f3; }
   .neg { color: var(--red); font-weight: 600; }
@@ -77,14 +90,21 @@
   .chip { padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
   .empty { color: var(--muted); font-style: italic; padding: 12px 2px; }
   .scrollbox { max-height: 430px; overflow-y: auto; }
+  .st { font-size: 10.5px; padding: 2px 9px; border-radius: 999px; font-weight: 700; letter-spacing: .5px; }
+  .st-ok { background: #d9ecdd; color: #1e5c2a; } .st-low { background: #fdeeca; color: #8a5a06; } .st-out { background: var(--red-soft); color: var(--red); }
+  #toast { position: fixed; bottom: 24px; right: 24px; background: var(--ink); color: #fff; padding: 11px 20px; border-radius: 10px; font-size: 13.5px; box-shadow: 0 8px 24px rgba(0,0,0,.3); opacity: 0; transform: translateY(10px); transition: all .25s; pointer-events: none; z-index: 99; }
+  #toast.show { opacity: 1; transform: none; }
 
   /* ---------- dashboard ---------- */
   .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
   .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 14px; margin-bottom: 20px; }
-  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 15px 17px; box-shadow: var(--shadow); border-top: 3px solid var(--gold); }
-  .stat .k { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
-  .stat .v { font-size: 21px; font-weight: 700; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 17px; box-shadow: var(--shadow); transition: box-shadow .15s; }
+  .stat:hover { box-shadow: 0 2px 4px rgba(25,28,30,.06), 0 8px 24px rgba(25,28,30,.09); }
+  .stat .ich { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; background: var(--gold-light); color: var(--gold-dark); }
+  .stat .ich.red { background: var(--red-soft); color: var(--red); }
+  .stat .k { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; font-weight: 700; }
+  .stat .v { font-size: 21px; font-weight: 600; margin-top: 5px; font-family: "JetBrains Mono", Consolas, monospace; font-variant-numeric: tabular-nums; }
   .stat .s { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
   @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
@@ -124,13 +144,12 @@
     <div class="sub">Business Books</div>
   </div>
   <nav id="nav">
-    <button data-tab="dash" class="active"><span class="ic">📊</span>Dashboard</button>
-    <button data-tab="prod"><span class="ic">🧴</span>Products &amp; Stock</button>
-    <button data-tab="pur"><span class="ic">🧾</span>Purchases</button>
-    <button data-tab="sal"><span class="ic">🛍️</span>Sales</button>
-    <button data-tab="gif"><span class="ic">🎁</span>Gifts</button>
-    <button data-tab="exp"><span class="ic">💳</span>Expenses</button>
-    <button data-tab="set"><span class="ic">⚙️</span>Settings</button>
+    <button data-tab="dash" class="active"><span class="ms">dashboard</span>Dashboard</button>
+    <button data-tab="day"><span class="ms">edit_square</span>Daily entry</button>
+    <button data-tab="inv"><span class="ms">inventory_2</span>Inventory</button>
+    <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
+    <button data-tab="exp"><span class="ms">account_balance_wallet</span>Expenses</button>
+    <button data-tab="set"><span class="ms">settings</span>Settings</button>
   </nav>
   <div class="side-foot"><span id="connBadge" class="conn">Local data</span></div>
 </aside>
@@ -156,12 +175,71 @@
     <section class="card"><h2>Sales by point of sale</h2><div id="dashPos"></div></section>
     <section class="card"><h2>Expenses by category</h2><div id="dashCats"></div></section>
   </div>
-  <section class="card"><h2>Top products</h2><div id="dashTop"></div></section>
+  <div class="grid2">
+    <section class="card"><h2>Top products</h2><div id="dashTop"></div></section>
+    <section class="card"><h2>Low stock</h2><div id="dashLow"></div></section>
+  </div>
 </div>
 
-<!-- ================= PRODUCTS ================= -->
-<div class="tab" id="tab-prod" style="display:none">
-  <div class="pagehead"><h1>Products &amp; Stock</h1><p>Catalog, initial inventory, average cost and live stock. Costs come from initial inventory + supplier invoices.</p></div>
+<!-- ================= DAILY ENTRY ================= -->
+<div class="tab" id="tab-day" style="display:none">
+  <div class="pagehead"><h1>Daily entry</h1><p>Your daily routine — log the day's sales, gifts and expenses here. Stock, costs and the dashboard update by themselves.</p></div>
+  <section class="card no-print">
+    <h2>Log a sale</h2>
+    <form class="rowform" id="saleForm">
+      <input type="hidden" id="s_id">
+      <label>Date<input id="s_date" type="date" required></label>
+      <label>Point of sale<select id="s_pos" required></select></label>
+      <label>Product<select id="s_product" required></select></label>
+      <label>Qty<input id="s_qty" type="number" min="1" step="1" required style="width:90px"></label>
+      <label>Price / unit (€)<input id="s_price" type="number" min="0" step="0.01" required style="width:120px"></label>
+      <button class="btn gold" type="submit" id="s_submit">Add sale</button>
+      <button class="btn ghost" type="button" id="s_cancel" style="display:none">Cancel</button>
+    </form>
+    <p class="hint" id="s_pricehint"></p>
+  </section>
+  <section class="card no-print">
+    <h2>Log a gift</h2>
+    <form class="rowform" id="giftForm">
+      <input type="hidden" id="g_id">
+      <label>Date<input id="g_date" type="date" required></label>
+      <label>Product<select id="g_product" required></select></label>
+      <label>Qty<input id="g_qty" type="number" min="1" step="1" required style="width:90px"></label>
+      <label>Note<input id="g_note" placeholder="e.g. PR gift — influencer" style="min-width:220px"></label>
+      <button class="btn gold" type="submit" id="g_submit">Add gift</button>
+      <button class="btn ghost" type="button" id="g_cancel" style="display:none">Cancel</button>
+    </form>
+    <p class="hint" id="g_stockhint"></p>
+  </section>
+  <!-- toast anchor lives at end of main -->
+  <section class="card no-print">
+    <h2>Log an expense</h2>
+    <form class="rowform" id="expenseForm">
+      <input type="hidden" id="e_id">
+      <label>Date<input id="e_date" type="date" required></label>
+      <label>Description<input id="e_desc" required style="min-width:260px"></label>
+      <label>Category<select id="e_cat" required></select></label>
+      <label>Amount (€)<input id="e_amount" type="number" min="0" step="0.01" required style="width:110px"></label>
+      <button class="btn gold" type="submit" id="e_submit">Add expense</button>
+      <button class="btn ghost" type="button" id="e_cancel" style="display:none">Cancel</button>
+    </form>
+  </section>
+  <section class="card">
+    <div class="rowform no-print" style="margin-bottom:12px">
+      <button class="btn ghost small" type="button" onclick="shiftDay(-1)">&lsaquo; Previous day</button>
+      <label>Day<input type="date" id="day_pick" onchange="setDay(this.value)"></label>
+      <button class="btn ghost small" type="button" onclick="shiftDay(1)">Next day &rsaquo;</button>
+      <button class="btn ghost small" type="button" onclick="setDay(todayISO())">Today</button>
+    </div>
+    <div id="daySummary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <h2 id="dayTitle">Logged today</h2>
+    <div id="dayList"></div>
+  </section>
+</div>
+
+<!-- ================= INVENTORY ================= -->
+<div class="tab" id="tab-inv" style="display:none">
+  <div class="pagehead"><h1>Inventory</h1><p>Catalog, initial inventory, average cost and live stock — plus the supplier invoices that feed it.</p></div>
   <section class="card">
     <h2 id="prodFormTitle">Add product</h2>
     <form class="rowform" id="productForm">
@@ -177,17 +255,21 @@
     <p class="hint">Initial stock = what you already had before tracking here. Purchases from invoices add on top; average cost blends both.</p>
   </section>
   <section class="card">
+    <h2>Initial inventory — bulk entry</h2>
+    <p class="hint">Type the stock you already had before tracking (and its cost per unit). Each change saves instantly; average cost blends it with the invoice purchases.</p>
+    <div class="rowform no-print" style="margin-bottom:8px">
+      <label>Search<input id="ii_search" oninput="renderInitInv()" placeholder="product…" style="min-width:220px"></label>
+    </div>
+    <div class="scrollbox" id="initInvTable"></div>
+  </section>
+  <section class="card">
     <div class="rowform no-print" style="margin-bottom:10px">
       <label>Search<input id="p_search" placeholder="name or ref…" oninput="renderProducts()" style="min-width:220px"></label>
       <button class="btn ghost" onclick="exportProductsCSV()">Export CSV</button>
     </div>
     <div class="scrollbox" id="productsTable"></div>
   </section>
-</div>
-
-<!-- ================= PURCHASES ================= -->
-<div class="tab" id="tab-pur" style="display:none">
-  <div class="pagehead"><h1>Purchases</h1><p>Supplier invoices — every line adds stock and feeds the average cost per product.</p></div>
+  <div class="pagehead" style="margin-top:10px"><h1 style="font-size:17px">Purchases — stock in</h1><p>Supplier invoices — every line adds stock and feeds the average cost per product.</p></div>
   <section class="card no-print" id="importCard">
     <h2>Au pays des Ânes invoices</h2>
     <p class="hint" id="importHint"></p>
@@ -210,7 +292,7 @@
 
 <!-- ================= SALES ================= -->
 <div class="tab" id="tab-sal" style="display:none">
-  <div class="pagehead"><h1>Sales</h1><p>Each point of sale has its own prices. Log a sale and the price is remembered for next time.</p></div>
+  <div class="pagehead"><h1>Sales &amp; prices</h1><p>Points of sale, their price lists, and the full sales and gift history. Daily logging happens in the Daily entry tab.</p></div>
   <section class="card no-print">
     <h2>Points of sale</h2>
     <div class="rowform">
@@ -218,20 +300,6 @@
       <button class="btn gold" onclick="addPos()">Add</button>
     </div>
     <div id="posList"></div>
-  </section>
-  <section class="card no-print">
-    <h2>Log a sale</h2>
-    <form class="rowform" id="saleForm">
-      <input type="hidden" id="s_id">
-      <label>Date<input id="s_date" type="date" required></label>
-      <label>Point of sale<select id="s_pos" required></select></label>
-      <label>Product<select id="s_product" required></select></label>
-      <label>Qty<input id="s_qty" type="number" min="1" step="1" required style="width:90px"></label>
-      <label>Price / unit (€)<input id="s_price" type="number" min="0" step="0.01" required style="width:120px"></label>
-      <button class="btn gold" type="submit" id="s_submit">Add sale</button>
-      <button class="btn ghost" type="button" id="s_cancel" style="display:none">Cancel</button>
-    </form>
-    <p class="hint" id="s_pricehint"></p>
   </section>
   <section class="card">
     <h2>Price list per point of sale</h2>
@@ -248,39 +316,12 @@
     </div>
     <div class="scrollbox" id="salesTable"></div>
   </section>
-</div>
-
-<!-- ================= GIFTS ================= -->
-<div class="tab" id="tab-gif" style="display:none">
-  <div class="pagehead"><h1>Gifts</h1><p>Products given away (PR, samples, presents). Gifts reduce stock but don't count as sales.</p></div>
-  <section class="card no-print">
-    <form class="rowform" id="giftForm">
-      <input type="hidden" id="g_id">
-      <label>Date<input id="g_date" type="date" required></label>
-      <label>Product<select id="g_product" required></select></label>
-      <label>Qty<input id="g_qty" type="number" min="1" step="1" required style="width:90px"></label>
-      <label>Note<input id="g_note" placeholder="e.g. PR gift — influencer" style="min-width:220px"></label>
-      <button class="btn gold" type="submit" id="g_submit">Add gift</button>
-      <button class="btn ghost" type="button" id="g_cancel" style="display:none">Cancel</button>
-    </form>
-  </section>
-  <section class="card"><div class="scrollbox" id="giftsTable"></div></section>
+  <section class="card"><h2>Gift log</h2><div class="scrollbox" id="giftsTable"></div></section>
 </div>
 
 <!-- ================= EXPENSES ================= -->
 <div class="tab" id="tab-exp" style="display:none">
-  <div class="pagehead"><h1>Expenses</h1><p>All business costs in EUR — marketing, logistics, shipment, exhibitions, accounting, Shopify, phone and more.</p></div>
-  <section class="card no-print">
-    <form class="rowform" id="expenseForm">
-      <input type="hidden" id="e_id">
-      <label>Date<input id="e_date" type="date" required></label>
-      <label>Description<input id="e_desc" required style="min-width:260px"></label>
-      <label>Category<select id="e_cat" required></select></label>
-      <label>Amount (€)<input id="e_amount" type="number" min="0" step="0.01" required style="width:110px"></label>
-      <button class="btn gold" type="submit" id="e_submit">Add expense</button>
-      <button class="btn ghost" type="button" id="e_cancel" style="display:none">Cancel</button>
-    </form>
-  </section>
+  <div class="pagehead"><h1>Expenses</h1><p>All business costs in EUR. Log daily expenses in the Daily entry tab — review and analyse them here.</p></div>
   <div class="grid2">
     <section class="card">
       <div class="rowform no-print" style="margin-bottom:8px">
@@ -330,6 +371,7 @@
     </div>
   </section>
 </div>
+<div id="toast"></div>
 </main>
 
 <script src="invoices-data.js"></script>
@@ -346,6 +388,7 @@ const CAT_CHIPS = {
 const KINDS = ["products", "purchases", "pos", "pos_prices", "sales", "gifts", "expenses"];
 const LS_DATA = "lanea-books-data";
 const LS_CFG = "lanea-books-supabase";
+const LOW_STOCK = 5;   // "low stock" threshold in units — dashboard + inventory badges
 
 let state = { products: [], purchases: [], pos: [], pos_prices: [], sales: [], gifts: [], expenses: [] };
 let client = null, remote = false;
@@ -521,16 +564,26 @@ function renderDash() {
   const gross = revenue - cogs, net = gross - expTotal;
   let stockValue = 0, stockUnits = 0;
   for (const p of state.products) { const c = productCalc(p); stockValue += c.stockValue; stockUnits += Math.max(c.stock, 0); }
+  const lowList = state.products.map(p => ({ p, c: productCalc(p) }))
+    .filter(x => (x.c.iq + x.c.purQty) > 0 && x.c.stock <= LOW_STOCK)
+    .sort((a, b) => a.c.stock - b.c.stock);
   const cards = [
-    ["Revenue", fmtE(revenue), `${fmtN(units)} units sold`],
-    ["COGS", fmtE(cogs), "avg cost basis"],
-    ["Gross profit", fmtE(gross), fmtP(revenue > 0 ? gross / revenue : null) + " margin"],
-    ["Expenses", fmtE(expTotal), `${expenses.length} entries`],
-    ["Net profit", fmtE(net), fmtP(revenue > 0 ? net / revenue : null) + " net margin"],
-    ["Stock on hand", fmtN(stockUnits), fmtE(stockValue) + " at cost"],
+    ["payments", "Revenue", fmtE(revenue), `${fmtN(units)} units sold`, ""],
+    ["shopping_cart", "COGS", fmtE(cogs), "avg cost basis", ""],
+    ["trending_up", "Gross profit", fmtE(gross), fmtP(revenue > 0 ? gross / revenue : null) + " margin", ""],
+    ["account_balance_wallet", "Expenses", fmtE(expTotal), `${expenses.length} entries`, ""],
+    ["savings", "Net profit", fmtE(net), fmtP(revenue > 0 ? net / revenue : null) + " net margin", ""],
+    ["inventory_2", "Stock on hand", fmtN(stockUnits), fmtE(stockValue) + " at cost", ""],
+    ["warning", "Low stock", fmtN(lowList.length), `products at ≤ ${LOW_STOCK} units`, lowList.length ? "red" : ""],
   ];
-  document.getElementById("dashCards").innerHTML = cards.map(([k, v, s]) =>
-    `<div class="stat"><div class="k">${k}</div><div class="v ${String(v).startsWith("(") ? "neg" : ""}">${v}</div><div class="s">${s}</div></div>`).join("");
+  document.getElementById("dashCards").innerHTML = cards.map(([ic, k, v, s, cls]) =>
+    `<div class="stat"><div class="ich ${cls}"><span class="ms">${ic}</span></div><div class="k">${k}</div><div class="v ${String(v).startsWith("(") ? "neg" : ""}">${v}</div><div class="s">${s}</div></div>`).join("");
+  document.getElementById("dashLow").innerHTML = lowList.length
+    ? "<table><tr><th>Product</th><th class='num'>Stock</th><th></th></tr>" + lowList.slice(0, 12).map(x =>
+        `<tr><td>${esc(x.p.name)}</td><td class="num calc">${fmtN(x.c.stock)}</td>
+         <td>${x.c.stock <= 0 ? '<span class="st st-out">OUT</span>' : '<span class="st st-low">LOW</span>'}</td></tr>`).join("") +
+      (lowList.length > 12 ? `<tr><td colspan="3" class="empty">+ ${lowList.length - 12} more in the Inventory tab…</td></tr>` : "") + "</table>"
+    : `<p class="empty">All good — no tracked product at or below ${LOW_STOCK} units.</p>`;
 
   // monthly table
   const months = {};
@@ -619,20 +672,23 @@ function renderProducts() {
   if (!list.length) { el.innerHTML = '<p class="empty">No products yet — add one above or import your invoices in the Purchases tab.</p>'; return; }
   let h = `<table><tr><th>Product</th><th>Ref</th><th class="num">Initial</th><th class="num">Purchased</th>
     <th class="num">Avg cost</th><th class="num">Sold</th><th class="num">Gifted</th><th class="num">Stock</th>
-    <th class="num">Stock value</th><th class="no-print"></th></tr>`;
+    <th>Status</th><th class="num">Stock value</th><th class="no-print"></th></tr>`;
   let tStock = 0, tVal = 0;
   for (const p of list) {
     const c = productCalc(p); tStock += c.stock; tVal += c.stockValue;
+    const tracked = (c.iq + c.purQty) > 0;
+    const st = !tracked ? "—" : c.stock <= 0 ? '<span class="st st-out">OUT</span>'
+      : c.stock <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
     h += `<tr><td><b>${esc(p.name)}</b></td><td style="color:var(--muted)">${esc(p.ref || "")}</td>
       <td class="num">${fmtN(c.iq)}</td><td class="num calc">${fmtN(c.purQty)}</td>
       <td class="num calc">${fmtE(c.avgCost)}</td><td class="num calc">${fmtN(c.sold)}</td>
       <td class="num calc">${fmtN(c.gifted)}</td><td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td>
-      <td class="num calc">${fmtE(c.stockValue)}</td>
+      <td>${st}</td><td class="num calc">${fmtE(c.stockValue)}</td>
       <td class="no-print"><button class="btn small ghost" onclick="editProduct('${p.id}')">Edit</button>
         <button class="btn small danger" onclick="delProduct('${p.id}')">Del</button></td></tr>`;
   }
   h += `<tr class="total"><td>TOTAL (${list.length})</td><td></td><td></td><td></td><td></td><td></td><td></td>
-    <td class="num">${fmtN(tStock)}</td><td class="num">${fmtE(tVal)}</td><td class="no-print"></td></tr></table>`;
+    <td class="num">${fmtN(tStock)}</td><td></td><td class="num">${fmtE(tVal)}</td><td class="no-print"></td></tr></table>`;
   el.innerHTML = h;
 }
 
@@ -679,6 +735,7 @@ window.addPos = async () => {
   if (!name) return;
   await addRow("pos", { name });
   document.getElementById("pos_name").value = "";
+  toast("Point of sale added ✓");
   render();
 };
 window.renamePos = async id => {
@@ -692,19 +749,36 @@ window.delPos = async id => {
   await deleteRow("pos", id); render();
 };
 
-function salePriceAutofill() {
+function salePriceAutofill(fillPrice = true) {
   const pos = document.getElementById("s_pos").value, prod = document.getElementById("s_product").value;
   const hint = document.getElementById("s_pricehint");
-  if (!pos || !prod) { hint.textContent = ""; return; }
-  const p = priceFor(pos, prod);
+  if (!prod) { hint.textContent = ""; return; }
+  const c = productCalc(prodById(prod));
+  const parts = [`In stock: ${fmtN(c.stock)}`, `Avg cost: ${eurF.format(c.avgCost)}`];
   const priceInput = document.getElementById("s_price");
-  if (p != null) { priceInput.value = p; hint.textContent = `Price list: ${eurF.format(p)} for this product at ${posById(pos)?.name || ""}. Change it here to update the price list.`; }
-  else {
-    const last = [...state.sales].reverse().find(s => s.product_id === prod);
-    if (last && !priceInput.value) priceInput.value = last.price_per_unit;
-    const c = avgCostOf(prod);
-    hint.textContent = `No price set yet for this POS — the price you enter will be remembered. Average cost: ${eurF.format(c)}.`;
+  if (pos) {
+    const p = priceFor(pos, prod);
+    if (p != null) {
+      if (fillPrice && !document.getElementById("s_id").value) priceInput.value = p;
+      parts.push(`Price list at ${posById(pos)?.name || ""}: ${eurF.format(p)}`);
+    } else parts.push("No price set for this POS yet — the price you enter is remembered");
   }
+  const q = Number(document.getElementById("s_qty").value), pr = Number(priceInput.value);
+  if (q > 0 && pr > 0) {
+    const total = q * pr;
+    parts.push(`Sale total: ${eurF.format(total)}  (gross profit ${eurF.format(total - q * c.avgCost)})`);
+  }
+  if (q > c.stock) parts.push("⚠ more than current stock");
+  hint.textContent = parts.join("   ·   ");
+}
+function giftStockHint() {
+  const prod = document.getElementById("g_product").value;
+  const hint = document.getElementById("g_stockhint");
+  if (!prod) { hint.textContent = ""; return; }
+  const c = productCalc(prodById(prod));
+  const q = Number(document.getElementById("g_qty").value);
+  hint.textContent = `In stock: ${fmtN(c.stock)}   ·   Cost value: ${eurF.format(c.avgCost)}/unit` +
+    (q > c.stock ? "   ·   ⚠ more than current stock" : "");
 }
 function renderSales() {
   const posFilter = document.getElementById("sl_pos").value;
@@ -830,8 +904,85 @@ function refreshSelects() {
 }
 function render() {
   refreshSelects();
-  renderDash(); renderProducts(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
+  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
 }
+
+/* ================= daily log ================= */
+let selectedDay = todayISO();
+window.setDay = d => {
+  if (!d) return;
+  selectedDay = d;
+  for (const id of ["s_date", "g_date", "e_date"]) document.getElementById(id).value = d;
+  renderDay();
+};
+window.shiftDay = n => {
+  const dt = new Date(selectedDay + "T00:00:00");
+  dt.setDate(dt.getDate() + n);
+  setDay(dt.toISOString().slice(0, 10));
+};
+function renderDay() {
+  document.getElementById("day_pick").value = selectedDay;
+  document.getElementById("dayTitle").textContent = selectedDay === todayISO() ? "Logged today" : "Logged on " + fmtD(selectedDay);
+  const daySales = state.sales.filter(s => s.date === selectedDay);
+  const dayGifts = state.gifts.filter(g => g.date === selectedDay);
+  const dayExp = state.expenses.filter(e => e.date === selectedDay);
+  const rev = daySales.reduce((a, s) => a + Number(s.qty) * Number(s.price_per_unit), 0);
+  const units = daySales.reduce((a, s) => a + Number(s.qty), 0);
+  const cogs = daySales.reduce((a, s) => a + Number(s.qty) * avgCostOf(s.product_id), 0);
+  const exp = dayExp.reduce((a, e) => a + Number(e.amount), 0);
+  const chip = (label, bg) => `<span class="chip" style="background:${bg};padding:6px 14px">${label}</span>`;
+  document.getElementById("daySummary").innerHTML =
+    chip(`Revenue ${fmtE(rev)} · ${fmtN(units)} units`, "#d9ecdd") +
+    chip(`Gross profit ${fmtE(rev - cogs)}`, "#d9eaee") +
+    chip(`Gifts ${fmtN(dayGifts.reduce((a, g) => a + Number(g.qty), 0))} units`, "#fdeeca") +
+    chip(`Expenses ${fmtE(exp)}`, "#ffdad6") +
+    chip(`Day net ${fmtE(rev - cogs - exp)}`, rev - cogs - exp >= 0 ? "#d9ecdd" : "#ffdad6");
+  const rows = [];
+  for (const s of daySales) rows.push({ kind: "sales", id: s.id, type: "Sale", bg: "#d9ecdd",
+    desc: `${prodById(s.product_id)?.name || "(deleted)"} × ${s.qty} @ ${eurF.format(Number(s.price_per_unit))} — ${posById(s.pos_id)?.name || "no POS"}`,
+    amt: Number(s.qty) * Number(s.price_per_unit), fn: "editSale" });
+  for (const g of dayGifts) rows.push({ kind: "gifts", id: g.id, type: "Gift", bg: "#fdeeca",
+    desc: `${prodById(g.product_id)?.name || "(deleted)"} × ${g.qty}${g.note ? " — " + g.note : ""}`, amt: null, fn: "editGift" });
+  for (const e of dayExp) rows.push({ kind: "expenses", id: e.id, type: "Expense", bg: CAT_CHIPS[e.category] || "#f3f4f6",
+    desc: `${e.description} (${e.category})`, amt: -Number(e.amount), fn: "editExpense" });
+  const el = document.getElementById("dayList");
+  el.innerHTML = rows.length
+    ? "<table>" + rows.map(r =>
+        `<tr><td><span class="chip" style="background:${r.bg}">${r.type}</span></td><td>${esc(r.desc)}</td>
+         <td class="num calc ${r.amt != null && r.amt < 0 ? "neg" : ""}">${r.amt == null ? "—" : fmtE(r.amt)}</td>
+         <td class="no-print"><button class="btn small ghost" onclick="${r.fn}('${r.id}')">Edit</button>
+         <button class="btn small danger" onclick="delRow('${r.kind}','${r.id}')">Del</button></td></tr>`).join("") + "</table>"
+    : '<p class="empty">Nothing logged on this day yet — use the forms above.</p>';
+}
+
+/* ================= initial inventory bulk editor ================= */
+window.renderInitInv = () => {
+  const q = (document.getElementById("ii_search").value || "").toLowerCase();
+  const el = document.getElementById("initInvTable");
+  const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (!list.length) { el.innerHTML = '<p class="empty">No products yet — add one above or import your invoices below.</p>'; return; }
+  const inputStyle = "padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--input-bg)";
+  el.innerHTML = `<table><tr><th>Product</th><th class="num" style="width:120px">Initial qty</th>
+    <th class="num" style="width:150px">Initial cost / unit (€)</th><th class="num">From invoices</th><th class="num">Current stock</th></tr>` +
+    list.map(p => {
+      const c = productCalc(p);
+      return `<tr><td>${esc(p.name)}</td>
+        <td class="num"><input type="number" min="0" step="1" value="${Number(p.initial_qty || 0)}" style="width:85px;${inputStyle}"
+          onchange="setInitial('${p.id}','initial_qty',this.value)"></td>
+        <td class="num"><input type="number" min="0" step="0.0001" value="${Number(p.initial_cost || 0)}" style="width:110px;${inputStyle}"
+          onchange="setInitial('${p.id}','initial_cost',this.value)"></td>
+        <td class="num calc">${fmtN(c.purQty)}</td>
+        <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td></tr>`;
+    }).join("") + "</table>";
+};
+window.setInitial = async (id, field, val) => {
+  const v = Number(val);
+  if (!isFinite(v) || v < 0) { renderInitInv(); return; }
+  await updateRow("products", id, { [field]: v });
+  toast("Initial inventory saved ✓");
+  renderDash(); renderProducts(); renderInitInv();
+};
 
 /* ================= forms ================= */
 function resetForm(prefix, formId, label) {
@@ -851,10 +1002,11 @@ document.getElementById("productForm").addEventListener("submit", async ev => {
   };
   const id = document.getElementById("p_id").value;
   const ok = id ? await updateRow("products", id, fields) : await addRow("products", fields);
-  if (ok) { resetForm("p", "productForm", "Add product"); document.getElementById("prodFormTitle").textContent = "Add product"; render(); }
+  if (ok) { resetForm("p", "productForm", "Add product"); document.getElementById("prodFormTitle").textContent = "Add product"; toast(id ? "Product updated ✓" : "Product added ✓"); render(); }
 });
 window.editProduct = id => {
   const p = prodById(id); if (!p) return;
+  showTab("inv");
   document.getElementById("p_id").value = p.id;
   document.getElementById("p_name").value = p.name || "";
   document.getElementById("p_ref").value = p.ref || "";
@@ -884,27 +1036,32 @@ document.getElementById("purchaseForm").addEventListener("submit", async ev => {
     qty: Number(document.getElementById("pu_qty").value),
     unit_cost: Number(document.getElementById("pu_cost").value),
   });
-  if (ok) { document.getElementById("purchaseForm").reset(); document.getElementById("pu_date").value = todayISO(); render(); }
+  if (ok) { document.getElementById("purchaseForm").reset(); document.getElementById("pu_date").value = todayISO(); toast("Purchase added ✓"); render(); }
 });
 
 document.getElementById("saleForm").addEventListener("submit", async ev => {
   ev.preventDefault();
-  if (!state.pos.length) { alert("Create a point of sale first (top of this page)."); return; }
-  if (!state.products.length) { alert("Add products first."); return; }
+  if (!state.pos.length) { alert("Create a point of sale first (Sales & prices tab)."); return; }
+  if (!state.products.length) { alert("Add products first (Inventory tab)."); return; }
   const pos_id = document.getElementById("s_pos").value, product_id = document.getElementById("s_product").value;
   const price = Number(document.getElementById("s_price").value);
   const fields = { date: document.getElementById("s_date").value, pos_id, product_id, qty: Number(document.getElementById("s_qty").value), price_per_unit: price };
   const id = document.getElementById("s_id").value;
+  const prevQty = id ? Number(state.sales.find(x => x.id === id)?.qty || 0) : 0;
+  const available = productCalc(prodById(product_id)).stock + prevQty;
+  if (fields.qty > available && !confirm(`Only ${fmtN(available)} in stock for this product — log this sale anyway?`)) return;
   const ok = id ? await updateRow("sales", id, fields) : await addRow("sales", fields);
   if (ok) {
     await upsertPosPrice(pos_id, product_id, price);
     resetForm("s", "saleForm", "Add sale");
-    document.getElementById("s_date").value = todayISO();
+    document.getElementById("s_date").value = selectedDay;
+    toast(id ? "Sale updated ✓" : "Sale logged ✓");
     render();
   }
 });
 window.editSale = id => {
   const s = state.sales.find(s => s.id === id); if (!s) return;
+  showTab("day");
   document.getElementById("s_id").value = s.id;
   document.getElementById("s_date").value = s.date;
   document.getElementById("s_pos").value = s.pos_id || "";
@@ -916,12 +1073,16 @@ window.editSale = id => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
 document.getElementById("s_cancel").addEventListener("click", () => resetForm("s", "saleForm", "Add sale"));
-document.getElementById("s_pos").addEventListener("change", salePriceAutofill);
-document.getElementById("s_product").addEventListener("change", salePriceAutofill);
+document.getElementById("s_pos").addEventListener("change", () => salePriceAutofill(true));
+document.getElementById("s_product").addEventListener("change", () => salePriceAutofill(true));
+document.getElementById("s_qty").addEventListener("input", () => salePriceAutofill(false));
+document.getElementById("s_price").addEventListener("input", () => salePriceAutofill(false));
+document.getElementById("g_product").addEventListener("change", giftStockHint);
+document.getElementById("g_qty").addEventListener("input", giftStockHint);
 
 document.getElementById("giftForm").addEventListener("submit", async ev => {
   ev.preventDefault();
-  if (!state.products.length) { alert("Add products first."); return; }
+  if (!state.products.length) { alert("Add products first (Inventory tab)."); return; }
   const fields = {
     date: document.getElementById("g_date").value,
     product_id: document.getElementById("g_product").value,
@@ -929,11 +1090,15 @@ document.getElementById("giftForm").addEventListener("submit", async ev => {
     note: document.getElementById("g_note").value.trim(),
   };
   const id = document.getElementById("g_id").value;
+  const prevQty = id ? Number(state.gifts.find(x => x.id === id)?.qty || 0) : 0;
+  const available = productCalc(prodById(fields.product_id)).stock + prevQty;
+  if (fields.qty > available && !confirm(`Only ${fmtN(available)} in stock for this product — log this gift anyway?`)) return;
   const ok = id ? await updateRow("gifts", id, fields) : await addRow("gifts", fields);
-  if (ok) { resetForm("g", "giftForm", "Add gift"); document.getElementById("g_date").value = todayISO(); render(); }
+  if (ok) { resetForm("g", "giftForm", "Add gift"); document.getElementById("g_date").value = selectedDay; toast(id ? "Gift updated ✓" : "Gift logged ✓"); render(); }
 });
 window.editGift = id => {
   const g = state.gifts.find(g => g.id === id); if (!g) return;
+  showTab("day");
   document.getElementById("g_id").value = g.id;
   document.getElementById("g_date").value = g.date;
   document.getElementById("g_product").value = g.product_id;
@@ -954,10 +1119,11 @@ document.getElementById("expenseForm").addEventListener("submit", async ev => {
   };
   const id = document.getElementById("e_id").value;
   const ok = id ? await updateRow("expenses", id, fields) : await addRow("expenses", fields);
-  if (ok) { resetForm("e", "expenseForm", "Add expense"); document.getElementById("e_date").value = todayISO(); render(); }
+  if (ok) { resetForm("e", "expenseForm", "Add expense"); document.getElementById("e_date").value = selectedDay; toast(id ? "Expense updated ✓" : "Expense logged ✓"); render(); }
 });
 window.editExpense = id => {
   const e = state.expenses.find(e => e.id === id); if (!e) return;
+  showTab("day");
   document.getElementById("e_id").value = e.id;
   document.getElementById("e_date").value = e.date;
   document.getElementById("e_desc").value = e.description;
@@ -980,12 +1146,20 @@ document.getElementById("f_pos").addEventListener("change", ev => { filters.pos 
 document.getElementById("f_prod").addEventListener("change", ev => { filters.prod = ev.target.value; renderDash(); });
 
 /* tabs */
-document.querySelectorAll("#nav button").forEach(b => b.addEventListener("click", () => {
-  document.querySelectorAll("#nav button").forEach(x => x.classList.remove("active"));
-  b.classList.add("active");
+function showTab(name) {
+  document.querySelectorAll("#nav button").forEach(x => x.classList.toggle("active", x.dataset.tab === name));
   document.querySelectorAll(".tab").forEach(t => t.style.display = "none");
-  document.getElementById("tab-" + b.dataset.tab).style.display = "";
-}));
+  document.getElementById("tab-" + name).style.display = "";
+}
+document.querySelectorAll("#nav button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+/* toast */
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
 
 /* ================= exports ================= */
 function downloadFile(name, mime, content) {
