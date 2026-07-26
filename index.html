@@ -176,6 +176,7 @@
     <button data-tab="dash" class="active"><span class="ms">dashboard</span>Dashboard</button>
     <button data-tab="day"><span class="ms">edit_square</span>Daily entry</button>
     <button data-tab="inv"><span class="ms">fact_check</span>Inventory</button>
+    <button data-tab="stk"><span class="ms">warehouse</span>Stocks</button>
     <button data-tab="pur"><span class="ms">receipt_long</span>Purchases</button>
     <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
     <button data-tab="exp"><span class="ms">account_balance_wallet</span>Expenses</button>
@@ -247,7 +248,7 @@
 
 <!-- ================= INVENTORY ================= -->
 <div class="tab" id="tab-inv" style="display:none">
-  <div class="pagehead"><h1>Inventory</h1><p>Physical inventory counts (fiches d'inventaire) — theoretical vs actual — and your stock by location.</p></div>
+  <div class="pagehead"><h1>Inventory</h1><p>Physical inventory counts (fiches d'inventaire). A sheet stays a <b>draft</b> until you submit it — submitting updates the stock levels of all counted products.</p></div>
   <section class="card no-print" id="invStart">
     <h2>Fiche d'inventaire — start a count</h2>
     <p class="hint">Open a sheet for the warehouse or a point of sale, count the real stock (leave blank what you don't count), then submit — stock adjusts to the counted quantities and every difference is kept in the history below.</p>
@@ -267,10 +268,27 @@
     <div class="rep-tot" id="invTotals"></div>
     <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap" class="no-print">
       <button class="btn gold" style="padding:12px 26px;font-size:14.5px" onclick="submitInventory()">Submit inventory</button>
+      <button class="btn ghost" onclick="closeInvSheet()">Close (keep as draft)</button>
       <button class="btn ghost" onclick="discardInventory()">Discard sheet</button>
     </div>
   </section>
-  <section class="card"><h2>Inventory history</h2><div id="invHistory"></div></section>
+  <section class="card"><h2>Inventory list</h2>
+    <p class="hint">Every inventory with its status — continue a draft anytime; submitted sheets show their theoretical vs actual differences.</p>
+    <div id="invHistory"></div>
+  </section>
+</div>
+
+<!-- ================= STOCKS ================= -->
+<div class="tab" id="tab-stk" style="display:none">
+  <div class="pagehead"><h1>Stocks</h1><p>Your actual stock levels — initial + purchased − sold − gifted ± inventory adjustments — globally and per location.</p></div>
+  <section class="card">
+    <h2>Stock statement</h2>
+    <div class="rowform no-print" style="margin-bottom:10px">
+      <label>Search<input id="st_search" oninput="renderStocks()" placeholder="product…" style="min-width:220px"></label>
+      <button class="btn ghost" onclick="exportStocksCSV()">Export CSV</button>
+    </div>
+    <div class="scrollbox" style="max-height:460px" id="stocksTable"></div>
+  </section>
   <section class="card">
     <h2>Stock by point of sale</h2>
     <p class="hint">Your purchases sit in the <b>warehouse</b>. Send stock to a point of sale when you supply it — sales at that POS then consume its stock, and you can return leftovers. Negative POS stock means sales were logged there without sending stock first.</p>
@@ -1088,7 +1106,7 @@ function refreshSelects() {
 }
 function render() {
   refreshSelects();
-  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderPosStock(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
+  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderStocks(); renderPosStock(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
 }
 
 /* ================= daily log & calendar ================= */
@@ -1375,25 +1393,44 @@ window.clearDraft = () => {
 window.removeDraft = (kind, i) => { draft[kind].splice(i, 1); saveDraft(); renderDay(); };
 
 /* ================= fiche d'inventaire (physical counts) ================= */
-const LS_INVDRAFT = "lanea-inv-draft";
-let invDraft = null;
-try { invDraft = JSON.parse(localStorage.getItem(LS_INVDRAFT) || "null"); } catch {}
-function saveInvDraft() { localStorage.setItem(LS_INVDRAFT, JSON.stringify(invDraft)); }
+const LS_INVDRAFT = "lanea-inv-drafts";
+let invDrafts = [];
+let activeInv = null;
+try {
+  const d = JSON.parse(localStorage.getItem(LS_INVDRAFT) || localStorage.getItem("lanea-inv-draft") || "null");
+  if (Array.isArray(d)) invDrafts = d;
+  else if (d && d.counts) { invDrafts = [{ id: uid(), ...d }]; localStorage.removeItem("lanea-inv-draft"); }
+} catch {}
+function saveInvDrafts() { localStorage.setItem(LS_INVDRAFT, JSON.stringify(invDrafts)); }
+const activeDraft = () => invDrafts.find(d => d.id === activeInv) || null;
 const invScopeName = posId => posId ? (posById(posId)?.name || "(deleted POS)") : "Warehouse";
 
 window.startInventory = () => {
-  if (invDraft && !confirm("A draft inventory sheet is already open — replace it?")) return;
-  invDraft = { date: gv("inv_date") || todayISO(), pos_id: gv("inv_scope") || null, counts: {} };
-  saveInvDraft(); renderInventory();
+  const d = { id: uid(), date: gv("inv_date") || todayISO(), pos_id: gv("inv_scope") || null, counts: {} };
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  renderInventory();
+};
+window.openInvDraft = id => {
+  activeInv = id; renderInventory();
+  document.getElementById("invSheet").scrollIntoView({ behavior: "smooth", block: "start" });
+};
+window.closeInvSheet = () => { activeInv = null; renderInventory(); };
+window.deleteInvDraft = id => {
+  if (!confirm("Delete this DRAFT inventory? Its counts were never applied to stock.")) return;
+  invDrafts = invDrafts.filter(d => d.id !== id);
+  if (activeInv === id) activeInv = null;
+  saveInvDrafts(); renderInventory();
 };
 window.invCount = (pid, val) => {
-  if (!invDraft) return;
-  if (val === "") delete invDraft.counts[pid];
-  else invDraft.counts[pid] = val;
-  saveInvDraft(); renderInvTotals();
+  const d = activeDraft(); if (!d) return;
+  if (val === "") delete d.counts[pid];
+  else d.counts[pid] = val;
+  saveInvDrafts(); renderInvTotals();
 };
 function renderInvTotals() {
   const el = document.getElementById("invTotals");
+  const invDraft = activeDraft();
   if (!invDraft) { el.innerHTML = ""; return; }
   const theoOf = pid => invDraft.pos_id ? posStockOf(pid, invDraft.pos_id) : warehouseOf(prodById(pid));
   let n = 0, dUnits = 0, dValue = 0;
@@ -1414,7 +1451,8 @@ function renderInventory() {
     sel.innerHTML = '<option value="">Warehouse</option>' + state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
     sel.value = cur; }
   const startEl = document.getElementById("invStart"), sheetEl = document.getElementById("invSheet");
-  if (!invDraft) { startEl.style.display = ""; sheetEl.style.display = "none"; renderInvHistory(); return; }
+  const invDraft = activeDraft();
+  if (!invDraft) { startEl.style.display = ""; sheetEl.style.display = "none"; renderInvList(); return; }
   startEl.style.display = "none"; sheetEl.style.display = "";
   document.getElementById("invTitle").innerHTML =
     `Fiche d'inventaire — ${esc(invScopeName(invDraft.pos_id))} — ${fmtD(invDraft.date)} <span class="chip" style="background:#fdeeca">DRAFT</span>`;
@@ -1435,9 +1473,10 @@ function renderInventory() {
   }
   document.getElementById("invTable").innerHTML = h + "</table>";
   renderInvTotals();
-  renderInvHistory();
+  renderInvList();
 }
 window.submitInventory = async () => {
+  const invDraft = activeDraft();
   if (!invDraft) return;
   const entries = Object.entries(invDraft.counts).filter(([, v]) => v !== "" && isFinite(Number(v)));
   if (!entries.length) { alert("Count at least one product first (type its actual quantity)."); return; }
@@ -1458,19 +1497,33 @@ window.submitInventory = async () => {
   } else {
     state.inventories.push(invRow); state.inventory_lines.push(...lines); saveLocal();
   }
-  invDraft = null; saveInvDraft();
+  invDrafts = invDrafts.filter(d => d.id !== activeInv);
+  activeInv = null; saveInvDrafts();
   toast(`Inventory submitted ✓ — stock adjusted for ${lines.length} product${lines.length === 1 ? "" : "s"}`);
   render();
 };
-window.discardInventory = () => {
-  if (!confirm("Discard this inventory sheet? The counts were never saved.")) return;
-  invDraft = null; saveInvDraft(); renderInventory();
-};
-function renderInvHistory() {
+window.discardInventory = () => { if (activeInv) deleteInvDraft(activeInv); };
+function renderInvList() {
   const el = document.getElementById("invHistory");
-  if (!state.inventories.length) { el.innerHTML = '<p class="empty">No inventory submitted yet.</p>'; return; }
-  const list = [...state.inventories].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  el.innerHTML = list.map(inv => {
+  const items = [
+    ...invDrafts.map(d => ({ type: "draft", date: d.date, obj: d })),
+    ...state.inventories.map(i => ({ type: "done", date: i.date, obj: i })),
+  ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  if (!items.length) { el.innerHTML = '<p class="empty">No inventory yet — open a sheet above.</p>'; return; }
+  el.innerHTML = items.map(it => {
+    if (it.type === "draft") {
+      const d = it.obj, n = Object.keys(d.counts).length;
+      return `<div style="display:flex;align-items:center;gap:14px;padding:11px 14px;border:1.5px dashed #d8a53f;border-radius:10px;margin-bottom:10px;background:#fffbeb;flex-wrap:wrap">
+        <span style="font-weight:700">${esc(invScopeName(d.pos_id))}</span>
+        <span class="meta" style="color:var(--muted)">${fmtD(d.date)}</span>
+        <span class="chip" style="background:#fdeeca">DRAFT</span>
+        <span style="color:var(--muted);font-size:12.5px">${n} product${n === 1 ? "" : "s"} counted so far</span>
+        <span style="margin-left:auto"></span>
+        <button class="btn small gold no-print" onclick="openInvDraft('${d.id}')">Continue</button>
+        <button class="btn small danger no-print" onclick="deleteInvDraft('${d.id}')">Del</button>
+      </div>`;
+    }
+    const inv = it.obj;
     const lines = state.inventory_lines.filter(l => l.inventory_id === inv.id);
     let dU = 0, dV = 0;
     const rows = lines.map(l => {
@@ -1481,13 +1534,52 @@ function renderInvHistory() {
         <td class="num calc ${diff !== 0 ? "neg" : ""}">${diff > 0 ? "+" : ""}${fmtN(diff)}</td></tr>`;
     }).join("");
     return `<details class="inv"><summary><span class="ref">${esc(invScopeName(inv.pos_id))}</span>
-      <span class="meta">${fmtD(inv.date)}</span><span class="meta">${lines.length} counted</span>
+      <span class="meta">${fmtD(inv.date)}</span>
+      <span class="chip" style="background:#d9ecdd">SUBMITTED</span>
+      <span class="meta">${lines.length} counted</span>
       <span class="meta ${dU !== 0 ? "neg" : ""}">Δ ${dU > 0 ? "+" : ""}${fmtN(dU)} units</span>
       <span style="margin-left:auto;font-weight:700" class="${dV < 0 ? "neg" : ""}">${fmtE(dV)}</span>
       <button class="btn small danger no-print" style="margin-left:10px" onclick="event.preventDefault();delRow('inventories','${inv.id}')">Del</button></summary>
       <div class="lines"><table><tr><th>Product</th><th class="num">Theoretical</th><th class="num">Counted</th><th class="num">Difference</th></tr>${rows}</table></div></details>`;
   }).join("");
 }
+
+/* ================= stock statement ================= */
+window.renderStocks = () => {
+  const q = (gv("st_search") || "").toLowerCase();
+  const el = document.getElementById("stocksTable");
+  const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (!list.length) { el.innerHTML = '<p class="empty">No products yet — import your invoices from the Purchases tab.</p>'; return; }
+  let h = `<table><tr><th>Product</th><th class="num">Initial</th><th class="num">+ Purchased</th><th class="num">− Sold</th>
+    <th class="num">− Gifted</th><th class="num">± Inventory adj.</th><th class="num">= Stock</th><th>Status</th><th class="num">Value at cost</th></tr>`;
+  let tI = 0, tP = 0, tS = 0, tG = 0, tA = 0, tSt = 0, tV = 0;
+  for (const p of list) {
+    const c = productCalc(p);
+    const adj = invDelta(p.id, "all");
+    tI += c.iq; tP += c.purQty; tS += c.sold; tG += c.gifted; tA += adj; tSt += c.stock; tV += c.stockValue;
+    const tracked = (c.iq + c.purQty) > 0;
+    const st = !tracked ? "—" : c.stock <= 0 ? '<span class="st st-out">OUT</span>'
+      : c.stock <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
+    h += `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtN(c.iq)}</td><td class="num calc">${fmtN(c.purQty)}</td>
+      <td class="num calc">${fmtN(c.sold)}</td><td class="num calc">${fmtN(c.gifted)}</td>
+      <td class="num calc ${adj !== 0 ? "neg" : ""}">${adj > 0 ? "+" : ""}${fmtN(adj)}</td>
+      <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}"><b>${fmtN(c.stock)}</b></td>
+      <td>${st}</td><td class="num calc">${fmtE(c.stockValue)}</td></tr>`;
+  }
+  h += `<tr class="total"><td>TOTAL (${list.length})</td><td class="num">${fmtN(tI)}</td><td class="num">${fmtN(tP)}</td>
+    <td class="num">${fmtN(tS)}</td><td class="num">${fmtN(tG)}</td><td class="num">${tA > 0 ? "+" : ""}${fmtN(tA)}</td>
+    <td class="num">${fmtN(tSt)}</td><td></td><td class="num">${fmtE(tV)}</td></tr></table>`;
+  el.innerHTML = h;
+};
+window.exportStocksCSV = () => {
+  const rows = [["Product", "Ref", "Initial", "Purchased", "Sold", "Gifted", "Inventory adj.", "Stock", "Avg cost", "Value at cost"]];
+  for (const p of [...state.products].sort((a, b) => (a.name || "").localeCompare(b.name || ""))) {
+    const c = productCalc(p);
+    rows.push([p.name, p.ref || "", c.iq, c.purQty, c.sold, c.gifted, invDelta(p.id, "all"), c.stock, c.avgCost.toFixed(4), c.stockValue.toFixed(2)]);
+  }
+  downloadFile("lanea-stocks.csv", "text/csv", toCSV(rows));
+};
 
 /* ================= stock by point of sale ================= */
 window.transferHint = () => {
