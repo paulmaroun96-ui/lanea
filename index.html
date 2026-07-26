@@ -110,7 +110,13 @@
   .cal button.today { border-color: var(--gold); }
   .cal button.pend { border-style: dashed; border-color: #d8a53f; }
   .cal button.sel { background: var(--gold); color: #fff; font-weight: 700; }
-  .draft { border: 1.5px dashed #d8a53f; background: #fffbeb; border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+  .rep-sec { font-size: 11px; font-weight: 800; letter-spacing: 1.2px; color: var(--gold-dark); text-transform: uppercase; margin: 18px 0 8px; display: flex; align-items: center; gap: 10px; }
+  .rep-sec::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  #reportBody .rin { padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--input-bg); font-family: inherit; font-size: 12.5px; max-width: 100%; }
+  #reportBody .rin:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
+  #reportBody tr.newrow td { background: #f4f9f9; border-bottom: 2px solid var(--gold-light); }
+  .rep-tot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .rep-tot .chip { padding: 7px 14px; font-weight: 600; }
   .cal-key { display: inline-block; width: 12px; height: 12px; border-radius: 4px; vertical-align: -2px; }
   .cal-key.done { background: #e2e7e9; } .cal-key.sel { background: var(--gold); }
   .pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(235px, 1fr)); gap: 12px; }
@@ -207,7 +213,7 @@
 
 <!-- ================= DAILY ENTRY ================= -->
 <div class="tab" id="tab-day" style="display:none">
-  <div class="pagehead"><h1>Daily entry</h1><p>Pick a day, add all the day's lines (sales, gifts, expenses), then press <b>Save day</b> once. Grey days are saved — amber dashed days have pending lines.</p></div>
+  <div class="pagehead"><h1>Daily report</h1><p>Pick a day, fill in the report line by line, then press <b>Submit daily report</b> once. Grey days are submitted — amber dashed days have an unfinished report.</p></div>
   <section class="card">
     <div class="grid2" style="align-items:start">
       <div>
@@ -222,59 +228,20 @@
         <p class="hint" style="margin-top:10px"><span class="cal-key done"></span> already inputted&nbsp;&nbsp;&nbsp;<span class="cal-key sel"></span> selected day</p>
       </div>
       <div>
-        <div id="draftBox"></div>
-        <h2 id="dayTitle">Logged today</h2>
+        <h2 id="dayTitle">Saved today</h2>
         <div id="daySummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
         <div class="scrollbox" style="max-height:280px" id="dayList"></div>
       </div>
     </div>
   </section>
-  <section class="card no-print">
-    <h2>Log a sale</h2>
-    <form class="rowform" id="saleForm">
-      <input type="hidden" id="s_id">
-      <label>Date<input id="s_date" type="date" required></label>
-      <label>Point of sale
-        <span style="display:flex;gap:6px">
-          <select id="s_pos" required></select>
-          <button class="btn ghost small" type="button" onclick="quickAddPos()" title="Create a new point of sale" style="padding:4px 12px;font-size:15px">+</button>
-        </span>
-      </label>
-      <label>Product<select id="s_product" required></select></label>
-      <label>Qty<input id="s_qty" type="number" min="1" step="1" required style="width:90px"></label>
-      <label>Price / unit (€)<input id="s_price" type="number" min="0" step="0.01" required style="width:120px"></label>
-      <button class="btn gold" type="submit" id="s_submit">Add sale to day</button>
-      <button class="btn ghost" type="button" id="s_cancel" style="display:none">Cancel</button>
-    </form>
-    <p class="hint" id="s_pricehint"></p>
+  <section class="card" id="reportCard">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:2px">
+      <h2 style="margin:0">Daily report — <span id="repDate"></span></h2>
+      <span id="repStatus"></span>
+    </div>
+    <p class="hint">Add each item below — the report builds up live. Nothing is saved until you press <b>Submit daily report</b>.</p>
+    <div id="reportBody"></div>
   </section>
-  <section class="card no-print">
-    <h2>Log a gift</h2>
-    <form class="rowform" id="giftForm">
-      <input type="hidden" id="g_id">
-      <label>Date<input id="g_date" type="date" required></label>
-      <label>Product<select id="g_product" required></select></label>
-      <label>Qty<input id="g_qty" type="number" min="1" step="1" required style="width:90px"></label>
-      <label>Note<input id="g_note" placeholder="e.g. PR gift — influencer" style="min-width:220px"></label>
-      <button class="btn gold" type="submit" id="g_submit">Add gift to day</button>
-      <button class="btn ghost" type="button" id="g_cancel" style="display:none">Cancel</button>
-    </form>
-    <p class="hint" id="g_stockhint"></p>
-  </section>
-  <!-- toast anchor lives at end of main -->
-  <section class="card no-print">
-    <h2>Log an expense</h2>
-    <form class="rowform" id="expenseForm">
-      <input type="hidden" id="e_id">
-      <label>Date<input id="e_date" type="date" required></label>
-      <label>Description<input id="e_desc" required style="min-width:260px"></label>
-      <label>Category<select id="e_cat" required></select></label>
-      <label>Amount (€)<input id="e_amount" type="number" min="0" step="0.01" required style="width:110px"></label>
-      <button class="btn gold" type="submit" id="e_submit">Add expense to day</button>
-      <button class="btn ghost" type="button" id="e_cancel" style="display:none">Cancel</button>
-    </form>
-  </section>
-
 </div>
 
 <!-- ================= INVENTORY ================= -->
@@ -845,9 +812,10 @@ window.quickAddPos = async () => {
   const row = await addRow("pos", { name: name.trim() });
   if (row) {
     toast("Point of sale added ✓");
+    localStorage.setItem(LS_LASTPOS, row.id);
     render();
-    document.getElementById("s_pos").value = row.id;
-    salePriceAutofill(true);
+    const el = document.getElementById("nr_s_pos");
+    if (el) { el.value = row.id; nrSaleSync(); }
   }
 };
 window.addPos = async () => {
@@ -869,37 +837,7 @@ window.delPos = async id => {
   await deleteRow("pos", id); render();
 };
 
-function salePriceAutofill(fillPrice = true) {
-  const pos = document.getElementById("s_pos").value, prod = document.getElementById("s_product").value;
-  const hint = document.getElementById("s_pricehint");
-  if (!prod) { hint.textContent = ""; return; }
-  const c = productCalc(prodById(prod));
-  const parts = [`In stock: ${fmtN(c.stock)}`, `Avg cost: ${eurF.format(c.avgCost)}`];
-  const priceInput = document.getElementById("s_price");
-  if (pos) {
-    const p = priceFor(pos, prod);
-    if (p != null) {
-      if (fillPrice && !document.getElementById("s_id").value) priceInput.value = p;
-      parts.push(`Price list at ${posById(pos)?.name || ""}: ${eurF.format(p)}`);
-    } else parts.push("No price set for this POS yet — the price you enter is remembered");
-  }
-  const q = Number(document.getElementById("s_qty").value), pr = Number(priceInput.value);
-  if (q > 0 && pr > 0) {
-    const total = q * pr;
-    parts.push(`Sale total: ${eurF.format(total)}  (gross profit ${eurF.format(total - q * c.avgCost)})`);
-  }
-  if (q > c.stock) parts.push("⚠ more than current stock");
-  hint.textContent = parts.join("   ·   ");
-}
-function giftStockHint() {
-  const prod = document.getElementById("g_product").value;
-  const hint = document.getElementById("g_stockhint");
-  if (!prod) { hint.textContent = ""; return; }
-  const c = productCalc(prodById(prod));
-  const q = Number(document.getElementById("g_qty").value);
-  hint.textContent = `In stock: ${fmtN(c.stock)}   ·   Cost value: ${eurF.format(c.avgCost)}/unit` +
-    (q > c.stock ? "   ·   ⚠ more than current stock" : "");
-}
+/* (sale & gift hints now live inside the daily report — see nrSaleSync / nrGiftSync) */
 function renderSales() {
   const posFilter = document.getElementById("sl_pos").value;
   const el = document.getElementById("salesTable");
@@ -1006,27 +944,20 @@ function renderExpenses() {
 function refreshSelects() {
   const prods = [...state.products].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const prodOpts = prods.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-  for (const id of ["s_product", "g_product", "pu_product"]) {
-    const sel = document.getElementById(id); const cur = sel.value;
+  {
+    const sel = document.getElementById("pu_product"); const cur = sel.value;
     sel.innerHTML = prodOpts; if (cur) sel.value = cur;
   }
   const posOpts = state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-  for (const id of ["s_pos", "pl_pos"]) {
-    const sel = document.getElementById(id); const cur = sel.value;
+  {
+    const sel = document.getElementById("pl_pos"); const cur = sel.value;
     sel.innerHTML = posOpts; if (cur) sel.value = cur;
-  }
-  // default the sale form to the last-used point of sale
-  const sPos = document.getElementById("s_pos");
-  if (!sPos.value || !state.pos.some(p => p.id === sPos.value)) {
-    const last = localStorage.getItem(LS_LASTPOS);
-    if (last && state.pos.some(p => p.id === last)) sPos.value = last;
   }
   for (const [id, opts] of [["f_pos", posOpts], ["sl_pos", posOpts], ["f_prod", prodOpts]]) {
     const sel = document.getElementById(id); const cur = sel.value;
     sel.innerHTML = '<option value="">All</option>' + opts; sel.value = cur;
   }
   const catOpts = CATEGORIES.map(c => `<option>${c}</option>`).join("");
-  document.getElementById("e_cat").innerHTML = catOpts;
   const elc = document.getElementById("el_cat"); const curc = elc.value;
   elc.innerHTML = '<option value="">All</option>' + catOpts; elc.value = curc;
 }
@@ -1042,7 +973,6 @@ window.setDay = d => {
   if (!d) return;
   selectedDay = d;
   calMonth = d.slice(0, 7);
-  for (const id of ["s_date", "g_date", "e_date"]) document.getElementById(id).value = d;
   renderDay();
 };
 window.shiftMonth = n => {
@@ -1084,9 +1014,9 @@ function renderCalendar() {
 }
 function renderDay() {
   renderCalendar();
-  renderDraft();
+  renderReport();
   document.getElementById("day_pick").value = selectedDay;
-  document.getElementById("dayTitle").textContent = selectedDay === todayISO() ? "Logged today" : "Logged on " + fmtD(selectedDay);
+  document.getElementById("dayTitle").textContent = selectedDay === todayISO() ? "Saved today" : "Saved on " + fmtD(selectedDay);
   const daySales = state.sales.filter(s => s.date === selectedDay);
   const dayGifts = state.gifts.filter(g => g.date === selectedDay);
   const dayExp = state.expenses.filter(e => e.date === selectedDay);
@@ -1119,37 +1049,176 @@ function renderDay() {
     : '<p class="empty">Nothing logged on this day yet — use the forms above.</p>';
 }
 
-/* ================= pending day draft ================= */
-function draftDesc(kind, d) {
-  if (kind === "sales") return `${prodById(d.product_id)?.name || ""} × ${d.qty} @ ${eurF.format(Number(d.price_per_unit))} — ${posById(d.pos_id)?.name || ""}`;
-  if (kind === "gifts") return `${prodById(d.product_id)?.name || ""} × ${d.qty}${d.note ? " — " + d.note : ""}`;
-  return `${d.description} (${d.category})`;
-}
-function renderDraft() {
-  const el = document.getElementById("draftBox");
+/* ================= interactive daily report ================= */
+const gv = id => { const el = document.getElementById(id); return el ? el.value : ""; };
+const NR_IDS = ["nr_s_pos", "nr_s_prod", "nr_s_qty", "nr_s_price", "nr_g_prod", "nr_g_qty", "nr_g_note", "nr_e_desc", "nr_e_cat", "nr_e_amt"];
+function renderReport() {
+  document.getElementById("repDate").textContent = fmtD(selectedDay);
   const n = draftCount();
-  if (!n) { el.innerHTML = ""; return; }
-  const TYPE = { sales: ["Sale", "#d9ecdd"], gifts: ["Gift", "#fdeeca"], expenses: ["Expense", "#ffdad6"] };
-  let rows = "";
-  for (const kind of ["sales", "gifts", "expenses"]) draft[kind].forEach((d, i) => {
-    const amt = kind === "sales" ? Number(d.qty) * Number(d.price_per_unit) : kind === "expenses" ? -Number(d.amount) : null;
-    rows += `<tr><td><span class="chip" style="background:${TYPE[kind][1]}">${TYPE[kind][0]}</span></td>
-      <td>${d.date !== selectedDay ? fmtD(d.date) + " · " : ""}${esc(draftDesc(kind, d))}</td>
-      <td class="num calc ${amt != null && amt < 0 ? "neg" : ""}">${amt == null ? "—" : fmtE(amt)}</td>
-      <td class="no-print"><button class="btn small ghost" onclick="editDraft('${kind}',${i})">Edit</button>
-      <button class="btn small danger" onclick="removeDraft('${kind}',${i})">Del</button></td></tr>`;
+  const savedCount = state.sales.filter(s => s.date === selectedDay).length
+    + state.gifts.filter(g => g.date === selectedDay).length
+    + state.expenses.filter(e => e.date === selectedDay).length;
+  document.getElementById("repStatus").innerHTML = n
+    ? `<span class="chip" style="background:#fdeeca">● ${n} item${n === 1 ? "" : "s"} in the report — not submitted yet</span>`
+    : savedCount
+      ? `<span class="chip" style="background:#d9ecdd">✓ Submitted — ${savedCount} entr${savedCount === 1 ? "y" : "ies"} saved</span>`
+      : `<span class="chip" style="background:#f3f4f6">Nothing logged for this day yet</span>`;
+
+  // keep whatever is being typed in the new-entry rows across re-renders
+  const keep = {};
+  for (const id of NR_IDS) { const el = document.getElementById(id); if (el) keep[id] = el.value; }
+
+  const prodSorted = [...state.products].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const posOpt = sel => state.pos.map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(p.name)}</option>`).join("");
+  const prodOpt = sel => prodSorted.map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(p.name)}</option>`).join("");
+  const catOpt = sel => CATEGORIES.map(c => `<option${c === sel ? " selected" : ""}>${c}</option>`).join("");
+  const enter = fn => `onkeydown="if(event.key==='Enter'){event.preventDefault();${fn}()}"`;
+
+  let h = '<div class="rep-sec">Sales</div><div style="overflow-x:auto"><table>';
+  h += `<tr><th style="min-width:150px">Point of sale</th><th style="min-width:230px">Product</th><th class="num">Qty</th><th class="num">Price / unit (€)</th><th class="num">Total</th><th></th></tr>`;
+  draft.sales.forEach((d, i) => {
+    h += `<tr>
+      <td><select class="rin" onchange="updDraft('sales',${i},'pos_id',this.value)">${posOpt(d.pos_id)}</select></td>
+      <td><select class="rin" onchange="updDraft('sales',${i},'product_id',this.value)">${prodOpt(d.product_id)}</select></td>
+      <td class="num"><input class="rin" type="number" min="1" step="1" value="${d.qty}" style="width:72px" onchange="updDraft('sales',${i},'qty',this.value)"></td>
+      <td class="num"><input class="rin" type="number" min="0" step="0.01" value="${d.price_per_unit}" style="width:95px" onchange="updDraft('sales',${i},'price_per_unit',this.value)"></td>
+      <td class="num calc">${fmtE(Number(d.qty) * Number(d.price_per_unit))}</td>
+      <td><button class="btn small danger" title="Remove line" onclick="removeDraft('sales',${i})">✕</button></td></tr>`;
   });
-  el.innerHTML = `<div class="draft">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-      <b>Pending — not saved yet (${n})</b>
-      <button class="btn gold small" onclick="saveDay()" id="saveDayBtn">Save day (${n} line${n === 1 ? "" : "s"})</button>
-      <button class="btn ghost small" onclick="clearDraft()">Discard all</button>
-    </div><div style="overflow-x:auto"><table>${rows}</table></div></div>`;
+  h += `<tr class="newrow">
+    <td style="white-space:nowrap"><select class="rin" id="nr_s_pos" onchange="nrSaleSync(true)">${posOpt("")}</select>
+      <button class="btn ghost small" type="button" onclick="quickAddPos()" title="New point of sale">+</button></td>
+    <td><select class="rin" id="nr_s_prod" onchange="nrSaleSync(true)"><option value=""></option>${prodOpt("")}</select></td>
+    <td class="num"><input class="rin" id="nr_s_qty" type="number" min="1" step="1" placeholder="qty" style="width:72px" oninput="nrSaleSync()" ${enter("addReportSale")}></td>
+    <td class="num"><input class="rin" id="nr_s_price" type="number" min="0" step="0.01" placeholder="price" style="width:95px" oninput="nrSaleSync()" ${enter("addReportSale")}></td>
+    <td class="num calc" id="nr_s_total">—</td>
+    <td><button class="btn small gold" onclick="addReportSale()">+ Add</button></td></tr>`;
+  h += `</table></div><p class="hint" id="nr_s_hint" style="margin-top:4px"></p>`;
+
+  h += '<div class="rep-sec">Gifts</div><div style="overflow-x:auto"><table>';
+  h += `<tr><th style="min-width:230px">Product</th><th class="num">Qty</th><th style="min-width:200px">Note</th><th></th></tr>`;
+  draft.gifts.forEach((d, i) => {
+    h += `<tr>
+      <td><select class="rin" onchange="updDraft('gifts',${i},'product_id',this.value)">${prodOpt(d.product_id)}</select></td>
+      <td class="num"><input class="rin" type="number" min="1" step="1" value="${d.qty}" style="width:72px" onchange="updDraft('gifts',${i},'qty',this.value)"></td>
+      <td><input class="rin" value="${esc(d.note || "")}" onchange="updDraft('gifts',${i},'note',this.value)"></td>
+      <td><button class="btn small danger" title="Remove line" onclick="removeDraft('gifts',${i})">✕</button></td></tr>`;
+  });
+  h += `<tr class="newrow">
+    <td><select class="rin" id="nr_g_prod" onchange="nrGiftSync()"><option value=""></option>${prodOpt("")}</select></td>
+    <td class="num"><input class="rin" id="nr_g_qty" type="number" min="1" step="1" placeholder="qty" style="width:72px" ${enter("addReportGift")}></td>
+    <td><input class="rin" id="nr_g_note" placeholder="e.g. PR gift — influencer" ${enter("addReportGift")}></td>
+    <td><button class="btn small gold" onclick="addReportGift()">+ Add</button></td></tr>`;
+  h += `</table></div><p class="hint" id="nr_g_hint" style="margin-top:4px"></p>`;
+
+  h += '<div class="rep-sec">Expenses</div><div style="overflow-x:auto"><table>';
+  h += `<tr><th style="min-width:240px">Description</th><th>Category</th><th class="num">Amount (€)</th><th></th></tr>`;
+  draft.expenses.forEach((d, i) => {
+    h += `<tr>
+      <td><input class="rin" value="${esc(d.description)}" onchange="updDraft('expenses',${i},'description',this.value)"></td>
+      <td><select class="rin" onchange="updDraft('expenses',${i},'category',this.value)">${catOpt(d.category)}</select></td>
+      <td class="num"><input class="rin" type="number" min="0" step="0.01" value="${d.amount}" style="width:95px" onchange="updDraft('expenses',${i},'amount',this.value)"></td>
+      <td><button class="btn small danger" title="Remove line" onclick="removeDraft('expenses',${i})">✕</button></td></tr>`;
+  });
+  h += `<tr class="newrow">
+    <td><input class="rin" id="nr_e_desc" placeholder="e.g. DHL shipment to Paris" ${enter("addReportExpense")}></td>
+    <td><select class="rin" id="nr_e_cat">${catOpt("")}</select></td>
+    <td class="num"><input class="rin" id="nr_e_amt" type="number" min="0" step="0.01" placeholder="amount" style="width:95px" ${enter("addReportExpense")}></td>
+    <td><button class="btn small gold" onclick="addReportExpense()">+ Add</button></td></tr>`;
+  h += `</table></div>`;
+
+  const rev = draft.sales.reduce((a, d) => a + Number(d.qty) * Number(d.price_per_unit), 0);
+  const units = draft.sales.reduce((a, d) => a + Number(d.qty), 0);
+  const cogs = draft.sales.reduce((a, d) => a + Number(d.qty) * avgCostOf(d.product_id), 0);
+  const exp = draft.expenses.reduce((a, d) => a + Number(d.amount), 0);
+  const giftU = draft.gifts.reduce((a, d) => a + Number(d.qty), 0);
+  h += `<div class="rep-tot">
+    <span class="chip" style="background:#d9ecdd">Sales ${fmtE(rev)} · ${fmtN(units)} units</span>
+    <span class="chip" style="background:#d9eaee">Gross profit ${fmtE(rev - cogs)}</span>
+    <span class="chip" style="background:#fdeeca">Gifts ${fmtN(giftU)} units</span>
+    <span class="chip" style="background:#ffdad6">Expenses ${fmtE(exp)}</span>
+    <span class="chip" style="background:${rev - cogs - exp >= 0 ? "#d9ecdd" : "#ffdad6"}">Report net ${fmtE(rev - cogs - exp)}</span>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap" class="no-print">
+    <button class="btn gold" id="submitDayBtn" style="padding:12px 28px;font-size:14.5px" onclick="saveDay()"${n ? "" : " disabled"}>Submit daily report${n ? ` (${n} item${n === 1 ? "" : "s"})` : ""}</button>
+    ${n ? '<button class="btn ghost" onclick="clearDraft()">Discard report</button>' : ""}
+  </div>`;
+  document.getElementById("reportBody").innerHTML = h;
+
+  for (const [id, v] of Object.entries(keep)) {
+    const el = document.getElementById(id);
+    if (el && v) el.value = v;
+  }
+  if (!keep.nr_s_pos) {
+    const last = localStorage.getItem(LS_LASTPOS);
+    const el = document.getElementById("nr_s_pos");
+    if (el && last && state.pos.some(p => p.id === last)) el.value = last;
+  }
+  nrSaleSync(); nrGiftSync();
 }
+window.nrSaleSync = (fillPrice = false) => {
+  const posEl = document.getElementById("nr_s_pos");
+  if (!posEl) return;
+  const pos = posEl.value, prod = gv("nr_s_prod");
+  const hint = document.getElementById("nr_s_hint");
+  if (prod) {
+    const p = pos ? priceFor(pos, prod) : null;
+    if (fillPrice && p != null) document.getElementById("nr_s_price").value = p;
+    const c = productCalc(prodById(prod));
+    hint.textContent = `In stock: ${fmtN(c.stock - pendingOut(prod))} · avg cost ${eurF.format(c.avgCost)}` +
+      (p != null ? ` · price list: ${eurF.format(p)}` : (pos ? " · no price set yet at this POS — the price you enter is remembered" : ""));
+  } else hint.textContent = "";
+  const q = Number(gv("nr_s_qty")), pr = Number(gv("nr_s_price"));
+  document.getElementById("nr_s_total").textContent = q > 0 && pr > 0 ? fmtE(q * pr) : "—";
+};
+window.nrGiftSync = () => {
+  const el = document.getElementById("nr_g_prod");
+  if (!el) return;
+  const prod = el.value, hint = document.getElementById("nr_g_hint");
+  if (!prod) { hint.textContent = ""; return; }
+  const c = productCalc(prodById(prod));
+  hint.textContent = `In stock: ${fmtN(c.stock - pendingOut(prod))} · cost value ${eurF.format(c.avgCost)}/unit`;
+};
+window.updDraft = (kind, i, field, val) => {
+  const d = draft[kind][i]; if (!d) return;
+  d[field] = ["qty", "price_per_unit", "amount"].includes(field) ? Number(val) : val;
+  saveDraft(); renderDay();
+};
+window.addReportSale = () => {
+  const pos_id = gv("nr_s_pos"), product_id = gv("nr_s_prod");
+  const qty = Number(gv("nr_s_qty")), price = Number(gv("nr_s_price"));
+  if (!pos_id) { alert("Create a point of sale first — use the + button next to the POS field."); return; }
+  if (!product_id) { alert("Pick a product."); return; }
+  if (!(qty > 0)) { alert("Enter the quantity sold."); return; }
+  if (gv("nr_s_price") === "" || !(price >= 0)) { alert("Enter the price per unit."); return; }
+  const available = productCalc(prodById(product_id)).stock - pendingOut(product_id);
+  if (qty > available && !confirm(`Only ${fmtN(available)} in stock (counting report lines) — add anyway?`)) return;
+  draft.sales.push({ date: selectedDay, pos_id, product_id, qty, price_per_unit: price });
+  saveDraft(); localStorage.setItem(LS_LASTPOS, pos_id);
+  renderDay();
+  const el = document.getElementById("nr_s_prod"); if (el) el.focus();
+};
+window.addReportGift = () => {
+  const product_id = gv("nr_g_prod"), qty = Number(gv("nr_g_qty"));
+  if (!product_id) { alert("Pick a product."); return; }
+  if (!(qty > 0)) { alert("Enter the quantity gifted."); return; }
+  const available = productCalc(prodById(product_id)).stock - pendingOut(product_id);
+  if (qty > available && !confirm(`Only ${fmtN(available)} in stock (counting report lines) — add anyway?`)) return;
+  draft.gifts.push({ date: selectedDay, product_id, qty, note: gv("nr_g_note").trim() });
+  saveDraft(); renderDay();
+};
+window.addReportExpense = () => {
+  const description = gv("nr_e_desc").trim(), amount = Number(gv("nr_e_amt"));
+  if (!description) { alert("Enter a description."); return; }
+  if (!(amount > 0)) { alert("Enter the amount."); return; }
+  draft.expenses.push({ date: selectedDay, description, category: gv("nr_e_cat"), amount });
+  saveDraft(); renderDay();
+  const el = document.getElementById("nr_e_desc"); if (el) el.focus();
+};
 window.saveDay = async () => {
   if (!draftCount()) return;
-  const btn = document.getElementById("saveDayBtn");
-  if (btn) btn.disabled = true;
+  const btn = document.getElementById("submitDayBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   let saved = 0;
   for (const kind of ["sales", "gifts", "expenses"]) {
     if (!draft[kind].length) continue;
@@ -1171,38 +1240,14 @@ window.saveDay = async () => {
     draft[kind] = []; saveDraft();
   }
   if (!remote) saveLocal();
-  toast(`Day saved ✓ — ${saved} entr${saved === 1 ? "y" : "ies"}`);
+  toast(`Daily report submitted ✓ — ${saved} entr${saved === 1 ? "y" : "ies"} saved`);
   render();
 };
 window.clearDraft = () => {
-  if (!confirm("Discard ALL pending lines? They were never saved.")) return;
+  if (!confirm("Discard the ENTIRE pending report? Its lines were never saved.")) return;
   draft = { sales: [], gifts: [], expenses: [] }; saveDraft(); renderDay();
 };
 window.removeDraft = (kind, i) => { draft[kind].splice(i, 1); saveDraft(); renderDay(); };
-window.editDraft = (kind, i) => {
-  const d = draft[kind][i]; if (!d) return;
-  draft[kind].splice(i, 1); saveDraft();
-  if (kind === "sales") {
-    document.getElementById("s_date").value = d.date;
-    document.getElementById("s_pos").value = d.pos_id;
-    document.getElementById("s_product").value = d.product_id;
-    document.getElementById("s_qty").value = d.qty;
-    document.getElementById("s_price").value = d.price_per_unit;
-    salePriceAutofill(false);
-  } else if (kind === "gifts") {
-    document.getElementById("g_date").value = d.date;
-    document.getElementById("g_product").value = d.product_id;
-    document.getElementById("g_qty").value = d.qty;
-    document.getElementById("g_note").value = d.note || "";
-    giftStockHint();
-  } else {
-    document.getElementById("e_date").value = d.date;
-    document.getElementById("e_desc").value = d.description;
-    document.getElementById("e_cat").value = d.category;
-    document.getElementById("e_amount").value = d.amount;
-  }
-  renderDay();
-};
 
 /* ================= catalog by category ================= */
 window.renderCatalog = () => {
@@ -1326,136 +1371,33 @@ document.getElementById("purchaseForm").addEventListener("submit", async ev => {
   if (ok) { document.getElementById("purchaseForm").reset(); document.getElementById("pu_date").value = todayISO(); toast("Purchase added ✓"); render(); }
 });
 
-document.getElementById("saleForm").addEventListener("submit", async ev => {
-  ev.preventDefault();
-  if (!state.pos.length) { alert("Create a point of sale first (Sales & prices tab)."); return; }
-  if (!state.products.length) { alert("Add products first (Inventory tab)."); return; }
-  const pos_id = document.getElementById("s_pos").value, product_id = document.getElementById("s_product").value;
-  const price = Number(document.getElementById("s_price").value);
-  const fields = { date: document.getElementById("s_date").value, pos_id, product_id, qty: Number(document.getElementById("s_qty").value), price_per_unit: price };
-  const id = document.getElementById("s_id").value;
-  const prevQty = id ? Number(state.sales.find(x => x.id === id)?.qty || 0) : 0;
-  const available = productCalc(prodById(product_id)).stock - pendingOut(product_id) + prevQty;
-  if (fields.qty > available && !confirm(`Only ${fmtN(available)} in stock (counting pending lines) — add this sale anyway?`)) return;
-  if (id) {
-    // editing an already-saved sale: update it directly
-    if (await updateRow("sales", id, fields)) {
-      await upsertPosPrice(pos_id, product_id, price);
-      localStorage.setItem(LS_LASTPOS, pos_id);
-      resetForm("s", "saleForm", "Add sale to day");
-      document.getElementById("s_date").value = selectedDay;
-      toast("Sale updated ✓");
-      render();
-      document.getElementById("s_pos").value = pos_id;
-    }
-    return;
-  }
-  // new line: goes to the pending day draft, saved with the Save day button
-  draft.sales.push(fields); saveDraft();
-  localStorage.setItem(LS_LASTPOS, pos_id);
-  resetForm("s", "saleForm", "Add sale to day");
-  document.getElementById("s_date").value = selectedDay;
-  document.getElementById("s_pos").value = pos_id;
-  document.getElementById("s_product").focus();
-  toast("Line added — press Save day when the day is complete");
-  renderDay();
-});
-window.editSale = id => {
-  const s = state.sales.find(s => s.id === id); if (!s) return;
-  showTab("day");
-  document.getElementById("s_id").value = s.id;
-  document.getElementById("s_date").value = s.date;
-  document.getElementById("s_pos").value = s.pos_id || "";
-  document.getElementById("s_product").value = s.product_id;
-  document.getElementById("s_qty").value = s.qty;
-  document.getElementById("s_price").value = s.price_per_unit;
-  document.getElementById("s_submit").textContent = "Save changes";
-  document.getElementById("s_cancel").style.display = "";
-  window.scrollTo({ top: 0, behavior: "smooth" });
+/* editing a saved entry moves it back into the daily report */
+window.editSale = async id => {
+  const s = state.sales.find(x => x.id === id); if (!s) return;
+  if (!confirm("Move this saved sale back into the daily report for editing? Submit the report again to re-save it.")) return;
+  await deleteRow("sales", id);
+  draft.sales.push({ date: s.date, pos_id: s.pos_id, product_id: s.product_id, qty: Number(s.qty), price_per_unit: Number(s.price_per_unit) });
+  saveDraft(); showTab("day"); setDay(s.date); render();
+  toast("Moved into the report — edit it there, then Submit");
 };
-document.getElementById("s_cancel").addEventListener("click", () => resetForm("s", "saleForm", "Add sale to day"));
-document.getElementById("s_pos").addEventListener("change", () => salePriceAutofill(true));
-document.getElementById("s_product").addEventListener("change", () => salePriceAutofill(true));
-document.getElementById("s_qty").addEventListener("input", () => salePriceAutofill(false));
-document.getElementById("s_price").addEventListener("input", () => salePriceAutofill(false));
-document.getElementById("g_product").addEventListener("change", giftStockHint);
-document.getElementById("g_qty").addEventListener("input", giftStockHint);
 
-document.getElementById("giftForm").addEventListener("submit", async ev => {
-  ev.preventDefault();
-  if (!state.products.length) { alert("Add products first (Inventory tab)."); return; }
-  const fields = {
-    date: document.getElementById("g_date").value,
-    product_id: document.getElementById("g_product").value,
-    qty: Number(document.getElementById("g_qty").value),
-    note: document.getElementById("g_note").value.trim(),
-  };
-  const id = document.getElementById("g_id").value;
-  const prevQty = id ? Number(state.gifts.find(x => x.id === id)?.qty || 0) : 0;
-  const available = productCalc(prodById(fields.product_id)).stock - pendingOut(fields.product_id) + prevQty;
-  if (fields.qty > available && !confirm(`Only ${fmtN(available)} in stock (counting pending lines) — add this gift anyway?`)) return;
-  if (id) {
-    if (await updateRow("gifts", id, fields)) {
-      resetForm("g", "giftForm", "Add gift to day");
-      document.getElementById("g_date").value = selectedDay;
-      toast("Gift updated ✓"); render();
-    }
-    return;
-  }
-  draft.gifts.push(fields); saveDraft();
-  resetForm("g", "giftForm", "Add gift to day");
-  document.getElementById("g_date").value = selectedDay;
-  toast("Line added — press Save day when the day is complete");
-  renderDay();
-});
-window.editGift = id => {
-  const g = state.gifts.find(g => g.id === id); if (!g) return;
-  showTab("day");
-  document.getElementById("g_id").value = g.id;
-  document.getElementById("g_date").value = g.date;
-  document.getElementById("g_product").value = g.product_id;
-  document.getElementById("g_qty").value = g.qty;
-  document.getElementById("g_note").value = g.note || "";
-  document.getElementById("g_submit").textContent = "Save changes";
-  document.getElementById("g_cancel").style.display = "";
+window.editGift = async id => {
+  const g = state.gifts.find(x => x.id === id); if (!g) return;
+  if (!confirm("Move this saved gift back into the daily report for editing? Submit the report again to re-save it.")) return;
+  await deleteRow("gifts", id);
+  draft.gifts.push({ date: g.date, product_id: g.product_id, qty: Number(g.qty), note: g.note || "" });
+  saveDraft(); showTab("day"); setDay(g.date); render();
+  toast("Moved into the report — edit it there, then Submit");
 };
-document.getElementById("g_cancel").addEventListener("click", () => resetForm("g", "giftForm", "Add gift to day"));
 
-document.getElementById("expenseForm").addEventListener("submit", async ev => {
-  ev.preventDefault();
-  const fields = {
-    date: document.getElementById("e_date").value,
-    description: document.getElementById("e_desc").value.trim(),
-    category: document.getElementById("e_cat").value,
-    amount: Number(document.getElementById("e_amount").value),
-  };
-  const id = document.getElementById("e_id").value;
-  if (id) {
-    if (await updateRow("expenses", id, fields)) {
-      resetForm("e", "expenseForm", "Add expense to day");
-      document.getElementById("e_date").value = selectedDay;
-      toast("Expense updated ✓"); render();
-    }
-    return;
-  }
-  draft.expenses.push(fields); saveDraft();
-  resetForm("e", "expenseForm", "Add expense to day");
-  document.getElementById("e_date").value = selectedDay;
-  toast("Line added — press Save day when the day is complete");
-  renderDay();
-});
-window.editExpense = id => {
-  const e = state.expenses.find(e => e.id === id); if (!e) return;
-  showTab("day");
-  document.getElementById("e_id").value = e.id;
-  document.getElementById("e_date").value = e.date;
-  document.getElementById("e_desc").value = e.description;
-  document.getElementById("e_cat").value = CATEGORIES.includes(e.category) ? e.category : "Other";
-  document.getElementById("e_amount").value = e.amount;
-  document.getElementById("e_submit").textContent = "Save changes";
-  document.getElementById("e_cancel").style.display = "";
+window.editExpense = async id => {
+  const e = state.expenses.find(x => x.id === id); if (!e) return;
+  if (!confirm("Move this saved expense back into the daily report for editing? Submit the report again to re-save it.")) return;
+  await deleteRow("expenses", id);
+  draft.expenses.push({ date: e.date, description: e.description, category: CATEGORIES.includes(e.category) ? e.category : "Other", amount: Number(e.amount) });
+  saveDraft(); showTab("day"); setDay(e.date); render();
+  toast("Moved into the report — edit it there, then Submit");
 };
-document.getElementById("e_cancel").addEventListener("click", () => resetForm("e", "expenseForm", "Add expense to day"));
 
 window.delRow = async (kind, id) => {
   if (!confirm("Delete this entry? This cannot be undone.")) return;
@@ -1651,7 +1593,7 @@ window.pushLocalToCloud = async () => {
 };
 
 /* ================= boot ================= */
-for (const id of ["s_date", "g_date", "e_date", "pu_date"]) document.getElementById(id).value = todayISO();
+document.getElementById("pu_date").value = todayISO();
 document.getElementById("p_cat_sel").innerHTML = PRODUCT_CATS.map(c => `<option>${c}</option>`).join("");
 loadLocal(); setBadge(); render(); initSupabase();
 </script>
