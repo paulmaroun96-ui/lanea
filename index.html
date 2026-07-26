@@ -114,6 +114,9 @@
   .rep-sec::after { content: ""; flex: 1; height: 1px; background: var(--line); }
   #reportBody .rin { padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--input-bg); font-family: inherit; font-size: 12.5px; max-width: 100%; }
   #reportBody .rin:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
+  #priceList .rin { padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--input-bg); font-family: inherit; font-size: 12.5px; }
+  #priceList .rin:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
+  #priceList .rin.chg { border-color: #d8a53f; background: #fffbeb; }
   #reportBody tr.newrow td { background: #f4f9f9; border-bottom: 2px solid var(--gold-light); }
   .rep-tot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
   .rep-tot .chip { padding: 7px 14px; font-weight: 600; }
@@ -390,7 +393,7 @@
   </section>
   <section class="card">
     <h2>Price list per point of sale</h2>
-    <p class="hint">Type a price and press <b>Enter</b> (or click anywhere else) — it saves instantly and a "Price saved ✓" confirmation appears at the bottom right.</p>
+    <p class="hint">Set as many prices as you want — changed rows turn amber, margins preview live — then press <b>Save prices</b> once to save them all.</p>
     <div class="rowform no-print">
       <label>Point of sale<select id="pl_pos" onchange="renderPriceList()"></select></label>
       <label>Search<input id="pl_search" oninput="renderPriceList()" placeholder="product…" style="min-width:200px"></label>
@@ -998,6 +1001,16 @@ function renderSales() {
     <td class="num">${fmtE(tT)}</td><td class="num">${fmtE(tC)}</td><td class="num ${tT - tC < 0 ? "neg" : ""}">${fmtE(tT - tC)}</td><td class="no-print"></td></tr></table>`;
   el.innerHTML = h;
 }
+let priceDraft = {};   // "posId|prodId" -> typed value, until "Save prices"
+function plChangedCount() { return Object.keys(priceDraft).length; }
+function updatePlBar() {
+  const btn = document.getElementById("plSaveBtn"), dis = document.getElementById("plDiscardBtn");
+  if (!btn) return;
+  const n = plChangedCount();
+  btn.disabled = !n;
+  btn.textContent = n ? `Save prices (${n} changed)` : "Save prices";
+  if (dis) dis.style.display = n ? "" : "none";
+}
 window.renderPriceList = () => {
   const pos = document.getElementById("pl_pos").value;
   const q = (document.getElementById("pl_search").value || "").toLowerCase();
@@ -1005,24 +1018,61 @@ window.renderPriceList = () => {
   if (!pos) { el.innerHTML = '<p class="empty">Select a point of sale to edit its prices.</p>'; return; }
   const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  el.innerHTML = `<table><tr><th>Product</th><th class="num">Avg cost</th><th class="num" style="width:140px">Price (€)</th><th class="num">Margin</th></tr>` +
-    list.map(p => {
-      const c = productCalc(p), price = priceFor(pos, p.id);
-      const m = price != null && price > 0 ? (price - c.avgCost) / price : null;
-      return `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtE(c.avgCost)}</td>
-        <td class="num"><input type="number" min="0" step="0.01" value="${price ?? ""}" style="width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--input-bg)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
-          onchange="setPrice('${pos}','${p.id}',this.value)"></td>
-        <td class="num calc">${fmtP(m)}</td></tr>`;
-    }).join("") + "</table>";
+  const rows = list.map(p => {
+    const c = productCalc(p), saved = priceFor(pos, p.id);
+    const key = pos + "|" + p.id;
+    const val = priceDraft[key] !== undefined ? priceDraft[key] : (saved ?? "");
+    const changed = priceDraft[key] !== undefined;
+    const num = Number(val);
+    const m = val !== "" && num > 0 ? (num - c.avgCost) / num : null;
+    return `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtE(c.avgCost)}</td>
+      <td class="num"><input type="number" min="0" step="0.01" value="${val}" class="rin pl-in ${changed ? "chg" : ""}"
+        style="width:110px" data-cost="${c.avgCost}"
+        oninput="priceEdit('${pos}','${p.id}',this)"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();focusNextPrice(this)}"></td>
+      <td class="num calc pl-margin">${fmtP(m)}</td></tr>`;
+  }).join("");
+  const n = plChangedCount();
+  el.innerHTML = `
+    <div class="no-print" style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn gold" id="plSaveBtn" onclick="savePrices()"${n ? "" : " disabled"}>${n ? `Save prices (${n} changed)` : "Save prices"}</button>
+      <button class="btn ghost" id="plDiscardBtn" onclick="discardPrices()" style="${n ? "" : "display:none"}">Discard changes</button>
+      <span class="hint" style="margin:0">Changed rows turn amber · Enter jumps to the next product</span>
+    </div>
+    <table><tr><th>Product</th><th class="num">Avg cost</th><th class="num" style="width:140px">Price (€)</th><th class="num">Margin</th></tr>${rows}</table>`;
 };
-window.setPrice = async (pos, prod, val) => {
-  const price = Number(val);
-  if (!isFinite(price) || price < 0) { renderPriceList(); return; }
-  await upsertPosPrice(pos, prod, price);
-  toast(`Price saved ✓ — ${prodById(prod)?.name || ""} at ${posById(pos)?.name || ""}: ${eurF.format(price)}`);
+window.priceEdit = (pos, prod, el) => {
+  const key = pos + "|" + prod;
+  const saved = priceFor(pos, prod);
+  const val = el.value;
+  const unchanged = val === "" ? true : (saved != null && isFinite(Number(val)) && Number(val) === Number(saved));
+  if (unchanged) delete priceDraft[key]; else priceDraft[key] = val;
+  el.classList.toggle("chg", priceDraft[key] !== undefined);
+  // live margin preview on this row
+  const cost = Number(el.dataset.cost), num = Number(val);
+  const cell = el.closest("tr").querySelector(".pl-margin");
+  if (cell) cell.textContent = fmtP(val !== "" && num > 0 ? (num - cost) / num : null);
+  updatePlBar();
+};
+window.focusNextPrice = el => {
+  const inputs = [...document.querySelectorAll("#priceList input.pl-in")];
+  const next = inputs[inputs.indexOf(el) + 1];
+  if (next) { next.focus(); next.select(); } else el.blur();
+};
+window.savePrices = async () => {
+  const entries = Object.entries(priceDraft).filter(([, v]) => v !== "" && isFinite(Number(v)) && Number(v) >= 0);
+  if (!entries.length) return;
+  const btn = document.getElementById("plSaveBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+  for (const [key, v] of entries) {
+    const [posId, prodId] = key.split("|");
+    await upsertPosPrice(posId, prodId, Number(v));
+  }
+  priceDraft = {};
+  toast(`${entries.length} price${entries.length === 1 ? "" : "s"} saved ✓`);
   renderPriceList(); renderPos();
 };
+window.discardPrices = () => { priceDraft = {}; renderPriceList(); };
 
 /* ================= rendering: gifts ================= */
 function renderGifts() {
