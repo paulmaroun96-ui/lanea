@@ -512,6 +512,41 @@ const DEFAULT_CFG = {
 function loadLocal() {
   try { const raw = localStorage.getItem(LS_DATA); if (raw) { const d = JSON.parse(raw); for (const k of KINDS) state[k] = d[k] || []; } }
   catch (e) { console.error(e); }
+  repairMissingProducts();
+}
+/* self-healing: if rows reference a product that no longer exists (e.g. data
+   corrupted by an earlier partial cloud load), rebuild the product. Invoice-
+   imported products are identified through their purchase lines. */
+function repairMissingProducts() {
+  const have = new Set(state.products.map(p => p.id));
+  const orphanIds = new Set();
+  for (const k of ["purchases", "sales", "gifts", "transfers", "pos_prices", "inventory_lines"])
+    for (const r of (state[k] || [])) if (r.product_id && !have.has(r.product_id)) orphanIds.add(r.product_id);
+  if (!orphanIds.size) return 0;
+  const lineByKey = {};
+  if (typeof INVOICE_DATA !== "undefined")
+    for (const inv of INVOICE_DATA) for (const l of inv.lines)
+      lineByKey[inv.ref + "|" + Number(l.units) + "|" + Number(l.unitCost)] = l;
+  let repaired = 0;
+  for (const pid of orphanIds) {
+    let made = null;
+    for (const u of state.purchases) {
+      if (u.product_id !== pid || !u.invoice_ref) continue;
+      const l = lineByKey[u.invoice_ref + "|" + Number(u.qty) + "|" + Number(u.unit_cost)];
+      if (l) {
+        made = { id: pid, ref: l.key, name: l.name, supplier: "Au pays des Ânes", initial_qty: 0, initial_cost: 0 };
+        made.category = catOf(made);
+        break;
+      }
+    }
+    if (!made) made = { id: pid, ref: null, name: "Produit récupéré — à renommer", supplier: "", category: "Other", initial_qty: 0, initial_cost: 0 };
+    state.products.push(made); repaired++;
+  }
+  if (repaired) {
+    localStorage.setItem(LS_DATA, JSON.stringify(state));
+    console.warn("repaired missing products:", repaired);
+  }
+  return repaired;
 }
 function saveLocal() { localStorage.setItem(LS_DATA, JSON.stringify(state)); }
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
@@ -1819,21 +1854,25 @@ async function initSupabase() {
   } catch (e) { note.innerHTML = `<span class="err-note">${esc(e.message)}</span>`; }
 }
 async function enterRemote(session) {
-  remote = true;
   document.getElementById("sb_auth").style.display = "none";
   document.getElementById("sb_session").style.display = "";
   document.getElementById("sb_session_note").textContent = "Signed in as " + session.user.email + " — all changes sync to the cloud.";
-  hideBanner();
+  // fetch EVERYTHING into a temporary object first — state is only replaced
+  // when the whole load succeeds, so a missing table can never corrupt local data
+  const fetched = {};
   for (const k of KINDS) {
     const { data, error } = await client.from(k).select("*").order("created_at", { ascending: true });
     if (error) {
       if (error.code === "PGRST205") {
-        showBanner(`Your database is missing the <b>${k}</b> table — open Supabase &rarr; SQL Editor and run <b>supabase/migration-v2.sql</b> from the repo, then reload this page.`);
+        showBanner(`Your database is missing the <b>${k}</b> table — open Supabase &rarr; SQL Editor and run <b>supabase/migration-v2.sql</b> from the repo, then reload this page. Meanwhile your data stays safely in this browser.`);
       } else alert("Could not load " + k + ": " + error.message);
-      remote = false; setBadge(); return;
+      remote = false; loadLocal(); setBadge(); render(); return;
     }
-    state[k] = data;
+    fetched[k] = data;
   }
+  for (const k of KINDS) state[k] = fetched[k];
+  remote = true;
+  hideBanner();
   setBadge(); render();
 }
 window.saveSupabaseConfig = async () => {
