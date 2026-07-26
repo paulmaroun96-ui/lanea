@@ -239,7 +239,7 @@
       <label>Product<select id="s_product" required></select></label>
       <label>Qty<input id="s_qty" type="number" min="1" step="1" required style="width:90px"></label>
       <label>Price / unit (€)<input id="s_price" type="number" min="0" step="0.01" required style="width:120px"></label>
-      <button class="btn gold" type="submit" id="s_submit">Add sale</button>
+      <button class="btn gold" type="submit" id="s_submit">Save sale</button>
       <button class="btn ghost" type="button" id="s_cancel" style="display:none">Cancel</button>
     </form>
     <p class="hint" id="s_pricehint"></p>
@@ -252,7 +252,7 @@
       <label>Product<select id="g_product" required></select></label>
       <label>Qty<input id="g_qty" type="number" min="1" step="1" required style="width:90px"></label>
       <label>Note<input id="g_note" placeholder="e.g. PR gift — influencer" style="min-width:220px"></label>
-      <button class="btn gold" type="submit" id="g_submit">Add gift</button>
+      <button class="btn gold" type="submit" id="g_submit">Save gift</button>
       <button class="btn ghost" type="button" id="g_cancel" style="display:none">Cancel</button>
     </form>
     <p class="hint" id="g_stockhint"></p>
@@ -266,7 +266,7 @@
       <label>Description<input id="e_desc" required style="min-width:260px"></label>
       <label>Category<select id="e_cat" required></select></label>
       <label>Amount (€)<input id="e_amount" type="number" min="0" step="0.01" required style="width:110px"></label>
-      <button class="btn gold" type="submit" id="e_submit">Add expense</button>
+      <button class="btn gold" type="submit" id="e_submit">Save expense</button>
       <button class="btn ghost" type="button" id="e_cancel" style="display:none">Cancel</button>
     </form>
   </section>
@@ -285,7 +285,7 @@
       <label>Supplier<input id="p_supplier" placeholder="Au pays des Ânes"></label>
       <label>Initial stock (qty)<input id="p_iqty" type="number" min="0" step="1" value="0" style="width:110px"></label>
       <label>Initial cost / unit (€)<input id="p_icost" type="number" min="0" step="0.0001" value="0" style="width:130px"></label>
-      <button class="btn gold" type="submit" id="p_submit">Add product</button>
+      <button class="btn gold" type="submit" id="p_submit">Save product</button>
       <button class="btn ghost" type="button" id="p_cancel" style="display:none">Cancel</button>
     </form>
     <p class="hint">Initial stock = what you already had before tracking here. Purchases from invoices add on top; average cost blends both.</p>
@@ -320,7 +320,7 @@
       <label>Product<select id="pu_product" required></select></label>
       <label>Qty (units)<input id="pu_qty" type="number" min="1" step="1" required style="width:100px"></label>
       <label>Cost / unit (€)<input id="pu_cost" type="number" min="0" step="0.0001" required style="width:120px"></label>
-      <button class="btn gold" type="submit">Add purchase</button>
+      <button class="btn gold" type="submit">Save purchase</button>
     </form>
   </section>
   <section class="card"><h2>Invoices &amp; purchase lines</h2><div id="purchasesList"></div></section>
@@ -339,6 +339,7 @@
   </section>
   <section class="card">
     <h2>Price list per point of sale</h2>
+    <p class="hint">Type a price and press <b>Enter</b> (or click anywhere else) — it saves instantly and a "Price saved ✓" confirmation appears at the bottom right.</p>
     <div class="rowform no-print">
       <label>Point of sale<select id="pl_pos" onchange="renderPriceList()"></select></label>
       <label>Search<input id="pl_search" oninput="renderPriceList()" placeholder="product…" style="min-width:200px"></label>
@@ -878,15 +879,17 @@ window.renderPriceList = () => {
       const m = price != null && price > 0 ? (price - c.avgCost) / price : null;
       return `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtE(c.avgCost)}</td>
         <td class="num"><input type="number" min="0" step="0.01" value="${price ?? ""}" style="width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--input-bg)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
           onchange="setPrice('${pos}','${p.id}',this.value)"></td>
         <td class="num calc">${fmtP(m)}</td></tr>`;
     }).join("") + "</table>";
 };
 window.setPrice = async (pos, prod, val) => {
   const price = Number(val);
-  if (!isFinite(price) || price < 0) return;
+  if (!isFinite(price) || price < 0) { renderPriceList(); return; }
   await upsertPosPrice(pos, prod, price);
-  renderPriceList();
+  toast(`Price saved ✓ — ${prodById(prod)?.name || ""} at ${posById(pos)?.name || ""}: ${eurF.format(price)}`);
+  renderPriceList(); renderPos();
 };
 
 /* ================= rendering: gifts ================= */
@@ -1071,8 +1074,10 @@ window.renderInitInv = () => {
       const c = productCalc(p);
       return `<tr><td>${esc(p.name)}</td>
         <td class="num"><input type="number" min="0" step="1" value="${Number(p.initial_qty || 0)}" style="width:85px;${inputStyle}"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
           onchange="setInitial('${p.id}','initial_qty',this.value)"></td>
         <td class="num"><input type="number" min="0" step="0.0001" value="${Number(p.initial_cost || 0)}" style="width:110px;${inputStyle}"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
           onchange="setInitial('${p.id}','initial_cost',this.value)"></td>
         <td class="num calc">${fmtN(c.purQty)}</td>
         <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td></tr>`;
@@ -1104,7 +1109,7 @@ document.getElementById("productForm").addEventListener("submit", async ev => {
   };
   const id = document.getElementById("p_id").value;
   const ok = id ? await updateRow("products", id, fields) : await addRow("products", fields);
-  if (ok) { resetForm("p", "productForm", "Add product"); document.getElementById("prodFormTitle").textContent = "Add product"; toast(id ? "Product updated ✓" : "Product added ✓"); render(); }
+  if (ok) { resetForm("p", "productForm", "Save product"); document.getElementById("prodFormTitle").textContent = "Add product"; toast(id ? "Product updated ✓" : "Product added ✓"); render(); }
 });
 window.editProduct = id => {
   const p = prodById(id); if (!p) return;
@@ -1126,7 +1131,7 @@ window.delProduct = async id => {
   if (!confirm(`Delete this product${n ? ` and its ${n} purchase/sale/gift lines` : ""}? This cannot be undone.`)) return;
   await deleteRow("products", id); render();
 };
-document.getElementById("p_cancel").addEventListener("click", () => { resetForm("p", "productForm", "Add product"); document.getElementById("prodFormTitle").textContent = "Add product"; });
+document.getElementById("p_cancel").addEventListener("click", () => { resetForm("p", "productForm", "Save product"); document.getElementById("prodFormTitle").textContent = "Add product"; });
 
 document.getElementById("purchaseForm").addEventListener("submit", async ev => {
   ev.preventDefault();
@@ -1156,7 +1161,7 @@ document.getElementById("saleForm").addEventListener("submit", async ev => {
   if (ok) {
     await upsertPosPrice(pos_id, product_id, price);
     localStorage.setItem(LS_LASTPOS, pos_id);
-    resetForm("s", "saleForm", "Add sale");
+    resetForm("s", "saleForm", "Save sale");
     document.getElementById("s_date").value = selectedDay;
     toast(id ? "Sale updated ✓" : "Sale logged ✓");
     render();
@@ -1178,7 +1183,7 @@ window.editSale = id => {
   document.getElementById("s_cancel").style.display = "";
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
-document.getElementById("s_cancel").addEventListener("click", () => resetForm("s", "saleForm", "Add sale"));
+document.getElementById("s_cancel").addEventListener("click", () => resetForm("s", "saleForm", "Save sale"));
 document.getElementById("s_pos").addEventListener("change", () => salePriceAutofill(true));
 document.getElementById("s_product").addEventListener("change", () => salePriceAutofill(true));
 document.getElementById("s_qty").addEventListener("input", () => salePriceAutofill(false));
@@ -1200,7 +1205,7 @@ document.getElementById("giftForm").addEventListener("submit", async ev => {
   const available = productCalc(prodById(fields.product_id)).stock + prevQty;
   if (fields.qty > available && !confirm(`Only ${fmtN(available)} in stock for this product — log this gift anyway?`)) return;
   const ok = id ? await updateRow("gifts", id, fields) : await addRow("gifts", fields);
-  if (ok) { resetForm("g", "giftForm", "Add gift"); document.getElementById("g_date").value = selectedDay; toast(id ? "Gift updated ✓" : "Gift logged ✓"); render(); }
+  if (ok) { resetForm("g", "giftForm", "Save gift"); document.getElementById("g_date").value = selectedDay; toast(id ? "Gift updated ✓" : "Gift logged ✓"); render(); }
 });
 window.editGift = id => {
   const g = state.gifts.find(g => g.id === id); if (!g) return;
@@ -1213,7 +1218,7 @@ window.editGift = id => {
   document.getElementById("g_submit").textContent = "Save changes";
   document.getElementById("g_cancel").style.display = "";
 };
-document.getElementById("g_cancel").addEventListener("click", () => resetForm("g", "giftForm", "Add gift"));
+document.getElementById("g_cancel").addEventListener("click", () => resetForm("g", "giftForm", "Save gift"));
 
 document.getElementById("expenseForm").addEventListener("submit", async ev => {
   ev.preventDefault();
@@ -1225,7 +1230,7 @@ document.getElementById("expenseForm").addEventListener("submit", async ev => {
   };
   const id = document.getElementById("e_id").value;
   const ok = id ? await updateRow("expenses", id, fields) : await addRow("expenses", fields);
-  if (ok) { resetForm("e", "expenseForm", "Add expense"); document.getElementById("e_date").value = selectedDay; toast(id ? "Expense updated ✓" : "Expense logged ✓"); render(); }
+  if (ok) { resetForm("e", "expenseForm", "Save expense"); document.getElementById("e_date").value = selectedDay; toast(id ? "Expense updated ✓" : "Expense logged ✓"); render(); }
 });
 window.editExpense = id => {
   const e = state.expenses.find(e => e.id === id); if (!e) return;
@@ -1238,7 +1243,7 @@ window.editExpense = id => {
   document.getElementById("e_submit").textContent = "Save changes";
   document.getElementById("e_cancel").style.display = "";
 };
-document.getElementById("e_cancel").addEventListener("click", () => resetForm("e", "expenseForm", "Add expense"));
+document.getElementById("e_cancel").addEventListener("click", () => resetForm("e", "expenseForm", "Save expense"));
 
 window.delRow = async (kind, id) => {
   if (!confirm("Delete this entry? This cannot be undone.")) return;
