@@ -3,221 +3,304 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LANEA Books — Accounting &amp; Inventory</title>
+<title>LÂNEA Books — Accounting &amp; Inventory</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" fill="none" stroke="%231c2026" stroke-width="3"/><text x="32" y="44" font-family="Georgia,serif" font-size="34" text-anchor="middle" fill="%235C9FA3">L</text></svg>'>
 <style>
   :root {
-    --bg: #f7f5f1;
-    --panel: #ffffff;
-    --ink: #1f2430;
-    --muted: #6b7280;
-    --line: #e5e1d8;
-    --gold: #b08d4f;
-    --gold-dark: #8a6d3b;
-    --navy: #1f3864;
-    --green: #2e7d32;
-    --amber: #b45309;
-    --red: #b91c1c;
-    --red-soft: #fee2e2;
-    --input-bg: #fffdf5;
-    --chip-operating: #dbeafe;
-    --chip-marketing: #fce7f3;
-    --chip-event: #ede9fe;
-    --chip-shipping: #d1fae5;
-    --chip-other: #f3f4f6;
+    --bg: #f4f1ea; --panel: #ffffff; --ink: #1c2026; --muted: #6b7280;
+    --line: #e7e2d6; --gold: #5C9FA3; --gold-dark: #47827f; --gold-light: #e3efee;
+    --side: #171a21; --side-ink: #9ca3af; --side-active: #ffffff;
+    --green: #1e7c45; --red: #b91c1c; --red-soft: #fee2e2; --input-bg: #fffdf5;
+    --shadow: 0 1px 3px rgba(23,26,33,.07), 0 4px 14px rgba(23,26,33,.05);
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font-family: "Segoe UI", Arial, sans-serif; font-size: 14px;
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--ink); font-family: "Segoe UI", Arial, sans-serif; font-size: 14px; display: flex; }
+
+  /* ---------- sidebar ---------- */
+  aside {
+    width: 218px; min-height: 100vh; background: var(--side); color: var(--side-ink);
+    display: flex; flex-direction: column; flex-shrink: 0; position: sticky; top: 0; height: 100vh;
   }
-  header {
-    background: var(--ink); color: #fff; padding: 14px 24px;
-    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
-  }
-  header h1 { font-size: 18px; margin: 0; letter-spacing: 3px; font-weight: 600; }
-  header h1 span { color: var(--gold); }
-  .conn {
-    margin-left: auto; font-size: 12px; padding: 4px 10px; border-radius: 999px;
-    background: #374151; color: #d1d5db;
-  }
-  .conn.remote { background: #14532d; color: #bbf7d0; }
-  nav { background: var(--panel); border-bottom: 1px solid var(--line); padding: 0 16px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .brand { padding: 22px 20px 16px; border-bottom: 1px solid #262a33; text-align: center; }
+  .brand img { width: 92px; height: 92px; object-fit: contain; margin-bottom: 6px; background: #fff; border-radius: 50%; padding: 6px; }
+  .brand .logo { font-family: Georgia, "Times New Roman", serif; font-size: 21px; letter-spacing: 6px; color: var(--gold); font-weight: 600; }
+  .brand .sub { font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase; color: #6b7280; margin-top: 4px; }
+  nav { padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; flex: 1; }
   nav button {
-    background: none; border: none; padding: 12px 16px; cursor: pointer;
-    font-size: 14px; color: var(--muted); border-bottom: 3px solid transparent; font-family: inherit;
+    display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+    background: none; border: none; color: var(--side-ink); padding: 10px 12px;
+    border-radius: 8px; cursor: pointer; font-size: 13.5px; font-family: inherit;
   }
-  nav button.active { color: var(--ink); border-bottom-color: var(--gold); font-weight: 600; }
-  main { padding: 20px; max-width: 1280px; margin: 0 auto; }
-  section.card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    padding: 18px; margin-bottom: 20px; overflow-x: auto;
-  }
-  h2 { font-size: 15px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 1px; }
-  h2.products { color: var(--navy); } h2.sales { color: var(--green); }
-  h2.gifts { color: var(--amber); } h2.expenses { color: var(--ink); } h2.pl { color: #5b21b6; }
-  .hint { color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
-  form.rowform { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
-  form.rowform label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--muted); }
-  form.rowform input, form.rowform select {
-    padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px;
+  nav button:hover { background: #20242e; color: #e5e7eb; }
+  nav button.active { background: #262b36; color: var(--side-active); box-shadow: inset 3px 0 0 var(--gold); }
+  nav button .ic { width: 20px; text-align: center; }
+  .side-foot { padding: 14px 20px; border-top: 1px solid #262a33; font-size: 11.5px; }
+  .conn { display: inline-block; padding: 3px 10px; border-radius: 999px; background: #262a33; color: #9ca3af; }
+  .conn.remote { background: #113322; color: #6ee7a0; }
+
+  /* ---------- main ---------- */
+  main { flex: 1; min-width: 0; padding: 26px 30px 60px; }
+  .pagehead { margin-bottom: 18px; }
+  .pagehead h1 { margin: 0; font-size: 21px; font-weight: 650; }
+  .pagehead p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow); overflow-x: auto; }
+  section.card h2 { font-size: 13px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--gold-dark); }
+  .hint { color: var(--muted); font-size: 12.5px; margin: -6px 0 12px; }
+  .banner { background: #fef3c7; border: 1px solid #fcd34d; color: #78350f; padding: 11px 15px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; }
+
+  /* ---------- forms ---------- */
+  form.rowform, .rowform { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 14px; }
+  .rowform label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .rowform input, .rowform select, .filters input, .filters select {
+    padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
     background: var(--input-bg); font-size: 13.5px; font-family: inherit; min-width: 90px;
   }
-  form.rowform input:focus, form.rowform select:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
-  button.btn {
-    background: var(--ink); color: #fff; border: none; padding: 9px 16px; border-radius: 6px;
-    cursor: pointer; font-size: 13.5px; font-family: inherit;
-  }
-  button.btn:hover { background: #000; }
-  button.btn.gold { background: var(--gold); } button.btn.gold:hover { background: var(--gold-dark); }
-  button.btn.ghost { background: none; color: var(--ink); border: 1px solid var(--line); }
-  button.btn.small { padding: 4px 9px; font-size: 12px; }
+  .rowform input:focus, .rowform select:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
+  button.btn { background: var(--ink); color: #fff; border: none; padding: 9px 18px; border-radius: 8px; cursor: pointer; font-size: 13.5px; font-family: inherit; }
+  button.btn:hover { filter: brightness(1.25); }
+  button.btn.gold { background: var(--gold); } button.btn.gold:hover { background: var(--gold-dark); filter: none; }
+  button.btn.ghost { background: none; color: var(--ink); border: 1px solid #d6d0c2; }
+  button.btn.small { padding: 4px 10px; font-size: 12px; border-radius: 6px; }
   button.btn.danger { background: none; color: var(--red); border: 1px solid var(--red-soft); }
+
+  /* ---------- tables ---------- */
   table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; white-space: nowrap; }
-  th { background: #f1eee7; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; color: #4b5563; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; white-space: nowrap; font-size: 13px; }
+  th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: #8b8578; background: #faf8f3; position: sticky; top: 0; }
+  tbody tr:hover td { background: #faf8f2; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  td.calc { background: #fafaf7; color: #374151; }
-  tr.total td { font-weight: 700; border-top: 2px solid var(--ink); background: #f1eee7; }
-  td.neg, .neg { color: var(--red); font-weight: 600; }
+  td.calc { color: #40454e; }
+  tr.total td { font-weight: 700; border-top: 2px solid var(--ink); background: #faf8f3; }
+  .neg { color: var(--red); font-weight: 600; }
   td.stock-neg { background: var(--red-soft); color: var(--red); font-weight: 700; }
-  .chip { padding: 2px 9px; border-radius: 999px; font-size: 12px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
-  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-  .stat .k { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
-  .stat .v { font-size: 20px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
-  .toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
-  .split { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; }
-  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
-  .empty { color: var(--muted); font-style: italic; padding: 14px 4px; }
-  .banner { background: #fef3c7; border: 1px solid #fcd34d; color: #78350f; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
+  .chip { padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+  .empty { color: var(--muted); font-style: italic; padding: 12px 2px; }
+  .scrollbox { max-height: 430px; overflow-y: auto; }
+
+  /* ---------- dashboard ---------- */
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
+  .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 15px 17px; box-shadow: var(--shadow); border-top: 3px solid var(--gold); }
+  .stat .k { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+  .stat .v { font-size: 21px; font-weight: 700; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .stat .s { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
+
+  details.inv { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; background: #fffefb; }
+  details.inv summary { cursor: pointer; padding: 11px 14px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; font-size: 13px; list-style: none; }
+  details.inv summary::-webkit-details-marker { display: none; }
+  details.inv summary .ref { font-weight: 700; }
+  details.inv summary .meta { color: var(--muted); }
+  details.inv .lines { padding: 0 14px 12px; overflow-x: auto; }
+
   .settings-grid { display: grid; gap: 10px; max-width: 480px; }
-  .settings-grid input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13.5px; font-family: inherit; }
-  .ok-note { color: var(--green); font-size: 13px; }
-  .err-note { color: var(--red); font-size: 13px; }
+  .settings-grid input { padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; font-size: 13.5px; font-family: inherit; }
+  .ok-note { color: var(--green); font-size: 13px; } .err-note { color: var(--red); font-size: 13px; }
+
+  @media (max-width: 880px) {
+    body { flex-direction: column; }
+    aside { width: 100%; height: auto; position: static; min-height: 0; }
+    nav { flex-direction: row; overflow-x: auto; padding: 6px 10px; }
+    nav button { white-space: nowrap; width: auto; }
+    .side-foot { display: none; }
+    main { padding: 16px 14px 50px; }
+  }
   @media print {
-    header, nav, .no-print, form.rowform, .toolbar button { display: none !important; }
-    body { background: #fff; } section.card { border: none; padding: 0; }
+    aside, .no-print, form, .filters button { display: none !important; }
+    body { background: #fff; } section.card { box-shadow: none; border: none; }
     .tab { display: none; } .tab.print-target { display: block !important; }
   }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>LAN<span>E</span>A &middot; BOOKS</h1>
-  <span style="font-size:12px;color:#9ca3af">Accounting &amp; Inventory</span>
-  <span id="connBadge" class="conn">Local data (this browser)</span>
-</header>
-
-<nav>
-  <button data-tab="inv" class="active">Inventory &amp; Sales</button>
-  <button data-tab="exp">Expenses</button>
-  <button data-tab="pl">P&amp;L Report</button>
-  <button data-tab="set">Settings</button>
-</nav>
+<aside>
+  <div class="brand">
+    <img src="logo.png" alt="" onerror="this.style.display='none'">
+    <div class="logo">L&Acirc;NEA</div>
+    <div class="sub">Business Books</div>
+  </div>
+  <nav id="nav">
+    <button data-tab="dash" class="active"><span class="ic">📊</span>Dashboard</button>
+    <button data-tab="prod"><span class="ic">🧴</span>Products &amp; Stock</button>
+    <button data-tab="pur"><span class="ic">🧾</span>Purchases</button>
+    <button data-tab="sal"><span class="ic">🛍️</span>Sales</button>
+    <button data-tab="gif"><span class="ic">🎁</span>Gifts</button>
+    <button data-tab="exp"><span class="ic">💳</span>Expenses</button>
+    <button data-tab="set"><span class="ic">⚙️</span>Settings</button>
+  </nav>
+  <div class="side-foot"><span id="connBadge" class="conn">Local data</span></div>
+</aside>
 
 <main>
 <div id="banner" class="banner" style="display:none"></div>
 
-<!-- ============ TAB: INVENTORY & SALES ============ -->
-<div class="tab" id="tab-inv">
+<!-- ================= DASHBOARD ================= -->
+<div class="tab" id="tab-dash">
+  <div class="pagehead"><h1>Dashboard</h1><p>Cumulative performance — filter by period, point of sale or product.</p></div>
+  <div class="filters no-print">
+    <label>From month<input type="month" id="f_from"></label>
+    <label>To month<input type="month" id="f_to"></label>
+    <label>Point of sale<select id="f_pos"><option value="">All</option></select></label>
+    <label>Product<select id="f_prod"><option value="">All</option></select></label>
+    <button class="btn ghost" onclick="clearFilters()">Reset</button>
+    <button class="btn ghost" onclick="exportDashboardCSV()">Export CSV</button>
+    <button class="btn ghost" onclick="printDash()">Print / PDF</button>
+  </div>
+  <div class="cards" id="dashCards"></div>
+  <section class="card"><h2>Monthly performance</h2><div id="dashMonthly"></div></section>
+  <div class="grid2">
+    <section class="card"><h2>Sales by point of sale</h2><div id="dashPos"></div></section>
+    <section class="card"><h2>Expenses by category</h2><div id="dashCats"></div></section>
+  </div>
+  <section class="card"><h2>Top products</h2><div id="dashTop"></div></section>
+</div>
 
+<!-- ================= PRODUCTS ================= -->
+<div class="tab" id="tab-prod" style="display:none">
+  <div class="pagehead"><h1>Products &amp; Stock</h1><p>Catalog, initial inventory, average cost and live stock. Costs come from initial inventory + supplier invoices.</p></div>
   <section class="card">
-    <h2 class="products">Products &amp; Profitability</h2>
-    <p class="hint">Add each product with what you purchased and its unit cost. Revenue, COGS, profit, margin and stock are calculated automatically from the sales and gift logs below.</p>
+    <h2 id="prodFormTitle">Add product</h2>
     <form class="rowform" id="productForm">
       <input type="hidden" id="p_id">
-      <label>Product name<input id="p_name" required placeholder="e.g. Silk Scarf — Ivory"></label>
-      <label>Supplier<input id="p_supplier" placeholder="e.g. Maison Soie Lyon"></label>
-      <label>Qty purchased<input id="p_qty" type="number" min="0" step="1" required style="width:110px"></label>
-      <label>Cost / unit (€)<input id="p_cost" type="number" min="0" step="0.01" required style="width:110px"></label>
+      <label>Product name<input id="p_name" required style="min-width:260px"></label>
+      <label>Reference<input id="p_ref" placeholder="optional" style="width:130px"></label>
+      <label>Supplier<input id="p_supplier" placeholder="Au pays des Ânes"></label>
+      <label>Initial stock (qty)<input id="p_iqty" type="number" min="0" step="1" value="0" style="width:110px"></label>
+      <label>Initial cost / unit (€)<input id="p_icost" type="number" min="0" step="0.0001" value="0" style="width:130px"></label>
       <button class="btn gold" type="submit" id="p_submit">Add product</button>
       <button class="btn ghost" type="button" id="p_cancel" style="display:none">Cancel</button>
     </form>
-    <div id="productsTable"></div>
+    <p class="hint">Initial stock = what you already had before tracking here. Purchases from invoices add on top; average cost blends both.</p>
   </section>
-
   <section class="card">
-    <h2 class="sales">Sales Log</h2>
-    <p class="hint">Log each sale. Sale total and cost of goods are computed automatically; the product's totals update instantly.</p>
+    <div class="rowform no-print" style="margin-bottom:10px">
+      <label>Search<input id="p_search" placeholder="name or ref…" oninput="renderProducts()" style="min-width:220px"></label>
+      <button class="btn ghost" onclick="exportProductsCSV()">Export CSV</button>
+    </div>
+    <div class="scrollbox" id="productsTable"></div>
+  </section>
+</div>
+
+<!-- ================= PURCHASES ================= -->
+<div class="tab" id="tab-pur" style="display:none">
+  <div class="pagehead"><h1>Purchases</h1><p>Supplier invoices — every line adds stock and feeds the average cost per product.</p></div>
+  <section class="card no-print" id="importCard">
+    <h2>Au pays des Ânes invoices</h2>
+    <p class="hint" id="importHint"></p>
+    <button class="btn gold" id="importBtn" onclick="importInvoices()">Import invoices</button>
+    <span id="importStatus" style="margin-left:10px;font-size:13px"></span>
+  </section>
+  <section class="card no-print">
+    <h2>Add purchase manually</h2>
+    <form class="rowform" id="purchaseForm">
+      <label>Date<input id="pu_date" type="date" required></label>
+      <label>Invoice ref<input id="pu_ref" placeholder="optional" style="width:130px"></label>
+      <label>Product<select id="pu_product" required></select></label>
+      <label>Qty (units)<input id="pu_qty" type="number" min="1" step="1" required style="width:100px"></label>
+      <label>Cost / unit (€)<input id="pu_cost" type="number" min="0" step="0.0001" required style="width:120px"></label>
+      <button class="btn gold" type="submit">Add purchase</button>
+    </form>
+  </section>
+  <section class="card"><h2>Invoices &amp; purchase lines</h2><div id="purchasesList"></div></section>
+</div>
+
+<!-- ================= SALES ================= -->
+<div class="tab" id="tab-sal" style="display:none">
+  <div class="pagehead"><h1>Sales</h1><p>Each point of sale has its own prices. Log a sale and the price is remembered for next time.</p></div>
+  <section class="card no-print">
+    <h2>Points of sale</h2>
+    <div class="rowform">
+      <label>New point of sale<input id="pos_name" placeholder="e.g. Beirut Boutique, Shopify, Exhibition…" style="min-width:240px"></label>
+      <button class="btn gold" onclick="addPos()">Add</button>
+    </div>
+    <div id="posList"></div>
+  </section>
+  <section class="card no-print">
+    <h2>Log a sale</h2>
     <form class="rowform" id="saleForm">
       <input type="hidden" id="s_id">
       <label>Date<input id="s_date" type="date" required></label>
+      <label>Point of sale<select id="s_pos" required></select></label>
       <label>Product<select id="s_product" required></select></label>
-      <label>Qty sold<input id="s_qty" type="number" min="1" step="1" required style="width:100px"></label>
+      <label>Qty<input id="s_qty" type="number" min="1" step="1" required style="width:90px"></label>
       <label>Price / unit (€)<input id="s_price" type="number" min="0" step="0.01" required style="width:120px"></label>
       <button class="btn gold" type="submit" id="s_submit">Add sale</button>
       <button class="btn ghost" type="button" id="s_cancel" style="display:none">Cancel</button>
     </form>
-    <div id="salesTable"></div>
+    <p class="hint" id="s_pricehint"></p>
   </section>
-
   <section class="card">
-    <h2 class="gifts">Gift Log</h2>
-    <p class="hint">Products given away (PR, samples, presents). Gifts reduce stock but are not counted as sales.</p>
+    <h2>Price list per point of sale</h2>
+    <div class="rowform no-print">
+      <label>Point of sale<select id="pl_pos" onchange="renderPriceList()"></select></label>
+      <label>Search<input id="pl_search" oninput="renderPriceList()" placeholder="product…" style="min-width:200px"></label>
+    </div>
+    <div class="scrollbox" id="priceList"></div>
+  </section>
+  <section class="card">
+    <div class="rowform no-print" style="margin-bottom:10px">
+      <label>Filter by POS<select id="sl_pos" onchange="renderSales()"><option value="">All</option></select></label>
+      <button class="btn ghost" onclick="exportSalesCSV()">Export CSV</button>
+    </div>
+    <div class="scrollbox" id="salesTable"></div>
+  </section>
+</div>
+
+<!-- ================= GIFTS ================= -->
+<div class="tab" id="tab-gif" style="display:none">
+  <div class="pagehead"><h1>Gifts</h1><p>Products given away (PR, samples, presents). Gifts reduce stock but don't count as sales.</p></div>
+  <section class="card no-print">
     <form class="rowform" id="giftForm">
       <input type="hidden" id="g_id">
       <label>Date<input id="g_date" type="date" required></label>
       <label>Product<select id="g_product" required></select></label>
-      <label>Qty gifted<input id="g_qty" type="number" min="1" step="1" required style="width:100px"></label>
-      <label>Note<input id="g_note" placeholder="e.g. PR gift — influencer" style="min-width:200px"></label>
+      <label>Qty<input id="g_qty" type="number" min="1" step="1" required style="width:90px"></label>
+      <label>Note<input id="g_note" placeholder="e.g. PR gift — influencer" style="min-width:220px"></label>
       <button class="btn gold" type="submit" id="g_submit">Add gift</button>
       <button class="btn ghost" type="button" id="g_cancel" style="display:none">Cancel</button>
     </form>
-    <div id="giftsTable"></div>
   </section>
+  <section class="card"><div class="scrollbox" id="giftsTable"></div></section>
 </div>
 
-<!-- ============ TAB: EXPENSES ============ -->
+<!-- ================= EXPENSES ================= -->
 <div class="tab" id="tab-exp" style="display:none">
-  <section class="card">
-    <h2 class="expenses">Expense Log</h2>
-    <p class="hint">All business expenses in EUR. Category subtotals and monthly totals update automatically.</p>
+  <div class="pagehead"><h1>Expenses</h1><p>All business costs in EUR — marketing, logistics, shipment, exhibitions, accounting, Shopify, phone and more.</p></div>
+  <section class="card no-print">
     <form class="rowform" id="expenseForm">
       <input type="hidden" id="e_id">
       <label>Date<input id="e_date" type="date" required></label>
-      <label>Description<input id="e_desc" required placeholder="e.g. Rent + utilities (July)" style="min-width:240px"></label>
+      <label>Description<input id="e_desc" required style="min-width:260px"></label>
       <label>Category<select id="e_cat" required></select></label>
-      <label>Amount (€)<input id="e_amount" type="number" min="0" step="0.01" required style="width:120px"></label>
+      <label>Amount (€)<input id="e_amount" type="number" min="0" step="0.01" required style="width:110px"></label>
       <button class="btn gold" type="submit" id="e_submit">Add expense</button>
       <button class="btn ghost" type="button" id="e_cancel" style="display:none">Cancel</button>
     </form>
-    <div class="split">
-      <div id="expensesTable"></div>
-      <div>
-        <h2 class="expenses" style="font-size:13px">By category</h2>
-        <div id="expenseCats"></div>
-        <h2 class="expenses" style="font-size:13px;margin-top:18px">By month</h2>
-        <div id="expenseMonths"></div>
+  </section>
+  <div class="grid2">
+    <section class="card">
+      <div class="rowform no-print" style="margin-bottom:8px">
+        <label>Category filter<select id="el_cat" onchange="renderExpenses()"><option value="">All</option></select></label>
+        <button class="btn ghost" onclick="exportExpensesCSV()">Export CSV</button>
       </div>
+      <div class="scrollbox" id="expensesTable"></div>
+    </section>
+    <div>
+      <section class="card"><h2>By category</h2><div id="expenseCats"></div></section>
+      <section class="card"><h2>By month</h2><div id="expenseMonths"></div></section>
     </div>
-  </section>
-</div>
-
-<!-- ============ TAB: P&L ============ -->
-<div class="tab" id="tab-pl" style="display:none">
-  <div class="toolbar no-print">
-    <button class="btn ghost" onclick="exportPL()">Export P&amp;L (CSV)</button>
-    <button class="btn ghost" onclick="exportAllCSV()">Export all data (CSV)</button>
-    <button class="btn ghost" onclick="printPL()">Print / Save as PDF</button>
   </div>
-  <div class="cards" id="plCards"></div>
-  <section class="card">
-    <h2 class="pl">Expenses by category</h2>
-    <div id="plCats"></div>
-  </section>
-  <section class="card">
-    <h2 class="pl">Monthly performance</h2>
-    <p class="hint">One row per month that has activity. Cumulative net shows the running result of the business.</p>
-    <div id="plMonthly"></div>
-  </section>
 </div>
 
-<!-- ============ TAB: SETTINGS ============ -->
+<!-- ================= SETTINGS ================= -->
 <div class="tab" id="tab-set" style="display:none">
+  <div class="pagehead"><h1>Settings</h1><p>Cloud sync and backups.</p></div>
   <section class="card">
     <h2>Cloud sync (Supabase)</h2>
-    <p class="hint">Without cloud sync, data is stored only in this browser. Connect a Supabase project to sync across devices. Paste the Project URL and the anon public key from your Supabase dashboard (Settings &rarr; API), then sign in.</p>
     <div class="settings-grid">
       <input id="sb_url" placeholder="https://xxxxxxxx.supabase.co">
       <input id="sb_key" placeholder="anon public key (eyJ...)">
@@ -240,8 +323,7 @@
   </section>
   <section class="card">
     <h2>Backup</h2>
-    <p class="hint">Download a full backup of your data, or restore one.</p>
-    <div class="toolbar">
+    <div class="rowform">
       <button class="btn ghost" onclick="exportJSON()">Download backup (JSON)</button>
       <button class="btn ghost" onclick="document.getElementById('importFile').click()">Restore backup</button>
       <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
@@ -250,333 +332,596 @@
 </div>
 </main>
 
+<script src="invoices-data.js"></script>
 <script>
 "use strict";
-/* ================= state & persistence ================= */
-const CATEGORIES = ["Monthly Operating", "Marketing", "Exhibition / Event", "Shipping", "Other"];
+/* ================= constants & state ================= */
+const CATEGORIES = ["Marketing", "Logistics", "Shipment", "Exhibitions", "Accounting", "Shopify Website", "Phone", "Other"];
 const CAT_CHIPS = {
-  "Monthly Operating": "var(--chip-operating)", "Marketing": "var(--chip-marketing)",
-  "Exhibition / Event": "var(--chip-event)", "Shipping": "var(--chip-shipping)", "Other": "var(--chip-other)"
+  "Marketing": "#fce7f3", "Logistics": "#dbeafe", "Shipment": "#d1fae5", "Exhibitions": "#ede9fe",
+  "Accounting": "#fef3c7", "Shopify Website": "#ccfbf1", "Phone": "#fee2e2", "Other": "#f3f4f6",
+  // legacy categories from v1 keep a chip
+  "Monthly Operating": "#dbeafe", "Exhibition / Event": "#ede9fe", "Shipping": "#d1fae5"
 };
+const KINDS = ["products", "purchases", "pos", "pos_prices", "sales", "gifts", "expenses"];
 const LS_DATA = "lanea-books-data";
-const LS_CFG  = "lanea-books-supabase";
+const LS_CFG = "lanea-books-supabase";
 
-let state = { products: [], sales: [], gifts: [], expenses: [] };
-let client = null;      // supabase client
-let remote = false;     // true when signed in and syncing
+let state = { products: [], purchases: [], pos: [], pos_prices: [], sales: [], gifts: [], expenses: [] };
+let client = null, remote = false;
+let filters = { from: "", to: "", pos: "", prod: "" };
+
+const DEFAULT_CFG = {
+  url: "https://kpzsslzagpryjsxstvri.supabase.co",
+  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwenNzbHphZ3ByeWpzeHN0dnJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5OTgyNzEsImV4cCI6MjEwMDU3NDI3MX0.Ol4h-JzPQ-xqwuzG87Q8gS-ezB5PC-q3LvtE5Q_7hbs"
+};
 
 function loadLocal() {
-  try { const raw = localStorage.getItem(LS_DATA); if (raw) state = Object.assign(state, JSON.parse(raw)); }
+  try { const raw = localStorage.getItem(LS_DATA); if (raw) { const d = JSON.parse(raw); for (const k of KINDS) state[k] = d[k] || []; } }
   catch (e) { console.error(e); }
 }
 function saveLocal() { localStorage.setItem(LS_DATA, JSON.stringify(state)); }
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
 
 /* ================= formatting ================= */
-const eur = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
-const fmtE = v => v < 0 ? `(${eur.format(Math.abs(v))})` : eur.format(v);
+const eurF = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
+const fmtE = v => v < 0 ? `(${eurF.format(Math.abs(v))})` : eurF.format(v);
 const fmtP = v => (v == null || !isFinite(v)) ? "—" : (v * 100).toFixed(1) + "%";
 const fmtD = iso => { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
+const fmtN = v => Number(v).toLocaleString("en-IE");
 const monthLabel = ym => new Date(ym + "-01T00:00:00").toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 /* ================= derived values ================= */
-function productStats(p) {
-  const sales = state.sales.filter(s => s.product_id === p.id);
-  const qty_sold = sales.reduce((a, s) => a + Number(s.qty), 0);
-  const revenue = sales.reduce((a, s) => a + Number(s.qty) * Number(s.price_per_unit), 0);
-  const cogs = qty_sold * Number(p.cost_per_unit);
-  const gifted = state.gifts.filter(g => g.product_id === p.id).reduce((a, g) => a + Number(g.qty), 0);
-  const gross = revenue - cogs;
-  return {
-    total_cost: Number(p.qty_purchased) * Number(p.cost_per_unit),
-    qty_sold, revenue, cogs, gross,
-    margin: revenue > 0 ? gross / revenue : null,
-    gifted, stock: Number(p.qty_purchased) - qty_sold - gifted
-  };
+function productCalc(p) {
+  const iq = Number(p.initial_qty || 0), ic = Number(p.initial_cost || 0);
+  let purQty = 0, purCost = 0;
+  for (const u of state.purchases) if (u.product_id === p.id) { purQty += Number(u.qty); purCost += Number(u.qty) * Number(u.unit_cost); }
+  const totQty = iq + purQty, totCost = iq * ic + purCost;
+  const avgCost = totQty > 0 ? totCost / totQty : 0;
+  let sold = 0, revenue = 0, gifted = 0;
+  for (const s of state.sales) if (s.product_id === p.id) { sold += Number(s.qty); revenue += Number(s.qty) * Number(s.price_per_unit); }
+  for (const g of state.gifts) if (g.product_id === p.id) gifted += Number(g.qty);
+  const stock = totQty - sold - gifted;
+  return { iq, purQty, avgCost, sold, revenue, gifted, stock, cogs: sold * avgCost, stockValue: stock * avgCost, totCost };
 }
-function totals() {
-  const t = { revenue: 0, cogs: 0, cost: 0, qty: 0, sold: 0, gifted: 0, stock: 0 };
-  for (const p of state.products) {
-    const s = productStats(p);
-    t.revenue += s.revenue; t.cogs += s.cogs; t.cost += s.total_cost;
-    t.qty += Number(p.qty_purchased); t.sold += s.qty_sold; t.gifted += s.gifted; t.stock += s.stock;
-  }
-  t.gross = t.revenue - t.cogs;
-  t.expenses = state.expenses.reduce((a, e) => a + Number(e.amount), 0);
-  t.net = t.gross - t.expenses;
-  return t;
-}
-function monthlyRows() {
-  const months = {};
-  const bucket = ym => months[ym] ??= { revenue: 0, cogs: 0, expenses: 0 };
-  for (const s of state.sales) {
-    if (!s.date) continue;
-    const b = bucket(s.date.slice(0, 7));
-    b.revenue += Number(s.qty) * Number(s.price_per_unit);
-    const p = state.products.find(p => p.id === s.product_id);
-    b.cogs += Number(s.qty) * Number(p ? p.cost_per_unit : 0);
-  }
-  for (const e of state.expenses) {
-    if (!e.date) continue;
-    bucket(e.date.slice(0, 7)).expenses += Number(e.amount);
-  }
-  return Object.entries(months).sort(([a], [b]) => a.localeCompare(b))
-    .map(([ym, v]) => ({ ym, ...v, gross: v.revenue - v.cogs, net: v.revenue - v.cogs - v.expenses }));
-}
+const prodById = id => state.products.find(p => p.id === id);
+const posById = id => state.pos.find(p => p.id === id);
+const avgCostOf = id => { const p = prodById(id); return p ? productCalc(p).avgCost : 0; };
 
-/* ================= CRUD (local + supabase) ================= */
-const TABLE = { products: "products", sales: "sales", gifts: "gifts", expenses: "expenses" };
+function inPeriod(date) {
+  if (!date) return false;
+  const ym = date.slice(0, 7);
+  if (filters.from && ym < filters.from) return false;
+  if (filters.to && ym > filters.to) return false;
+  return true;
+}
+function filteredSales() {
+  return state.sales.filter(s => inPeriod(s.date)
+    && (!filters.pos || s.pos_id === filters.pos)
+    && (!filters.prod || s.product_id === filters.prod));
+}
+function filteredExpenses() { return state.expenses.filter(e => inPeriod(e.date)); }
 
+/* ================= CRUD ================= */
 async function addRow(kind, row) {
   if (remote) {
-    const { data, error } = await client.from(TABLE[kind]).insert(row).select().single();
-    if (error) { alert("Cloud error: " + error.message); return false; }
-    state[kind].push(data);
-  } else {
-    state[kind].push({ id: uid(), ...row });
-    saveLocal();
+    const { data, error } = await client.from(kind).insert(row).select().single();
+    if (error) { alert("Cloud error: " + error.message); return null; }
+    state[kind].push(data); return data;
   }
-  return true;
+  const r = { id: uid(), ...row }; state[kind].push(r); saveLocal(); return r;
 }
 async function updateRow(kind, id, fields) {
   if (remote) {
-    const { data, error } = await client.from(TABLE[kind]).update(fields).eq("id", id).select().single();
+    const { data, error } = await client.from(kind).update(fields).eq("id", id).select().single();
     if (error) { alert("Cloud error: " + error.message); return false; }
-    const i = state[kind].findIndex(r => r.id === id);
-    if (i >= 0) state[kind][i] = data;
-  } else {
-    const r = state[kind].find(r => r.id === id);
-    if (r) Object.assign(r, fields);
-    saveLocal();
+    const i = state[kind].findIndex(r => r.id === id); if (i >= 0) state[kind][i] = data; return true;
   }
-  return true;
+  const r = state[kind].find(r => r.id === id); if (r) Object.assign(r, fields); saveLocal(); return true;
 }
 async function deleteRow(kind, id) {
   if (remote) {
-    const { error } = await client.from(TABLE[kind]).delete().eq("id", id);
+    const { error } = await client.from(kind).delete().eq("id", id);
     if (error) { alert("Cloud error: " + error.message); return false; }
   }
   state[kind] = state[kind].filter(r => r.id !== id);
-  if (kind === "products") { // cascade locally (FK cascade handles it server-side)
-    state.sales = state.sales.filter(s => s.product_id !== id);
-    state.gifts = state.gifts.filter(g => g.product_id !== id);
+  if (kind === "products") {
+    for (const k of ["purchases", "sales", "gifts", "pos_prices"]) state[k] = state[k].filter(r => r.product_id !== id);
+  }
+  if (kind === "pos") {
+    state.pos_prices = state.pos_prices.filter(r => r.pos_id !== id);
+    for (const s of state.sales) if (s.pos_id === id) s.pos_id = null;
   }
   if (!remote) saveLocal();
   return true;
 }
+async function upsertPosPrice(pos_id, product_id, price) {
+  const existing = state.pos_prices.find(r => r.pos_id === pos_id && r.product_id === product_id);
+  if (remote) {
+    const { data, error } = await client.from("pos_prices")
+      .upsert({ pos_id, product_id, price }, { onConflict: "pos_id,product_id" }).select().single();
+    if (error) { console.error(error); return; }
+    if (existing) Object.assign(existing, data); else state.pos_prices.push(data);
+  } else {
+    if (existing) existing.price = price; else state.pos_prices.push({ id: uid(), pos_id, product_id, price });
+    saveLocal();
+  }
+}
+const priceFor = (pos_id, product_id) => {
+  const r = state.pos_prices.find(r => r.pos_id === pos_id && r.product_id === product_id);
+  return r ? Number(r.price) : null;
+};
 
-/* ================= rendering ================= */
-function render() {
-  renderProducts(); renderSales(); renderGifts();
-  renderExpenses(); renderPL(); refreshProductSelects();
+/* ================= invoice import ================= */
+function importedRefs() { return new Set(state.purchases.map(u => u.invoice_ref).filter(Boolean)); }
+function refreshImportCard() {
+  const done = importedRefs();
+  const pending = (typeof INVOICE_DATA !== "undefined" ? INVOICE_DATA : []).filter(i => !done.has(i.ref));
+  const total = (typeof INVOICE_DATA !== "undefined" ? INVOICE_DATA : []).length;
+  document.getElementById("importHint").textContent = pending.length
+    ? `${pending.length} of ${total} supplier invoices ready to import (${pending.map(i => i.ref).join(", ")}). Products are created automatically; discounts and shipping are already spread into each unit cost. The credit note AV00000221 is already applied inside FA050897.`
+    : `All ${total} supplier invoices are imported. Add future invoices manually below, or send the PDF to Claude to extend the import file.`;
+  document.getElementById("importBtn").style.display = pending.length ? "" : "none";
+}
+async function importInvoices() {
+  if (typeof INVOICE_DATA === "undefined") { alert("invoices-data.js not loaded"); return; }
+  const btn = document.getElementById("importBtn"), st = document.getElementById("importStatus");
+  btn.disabled = true;
+  const done = importedRefs();
+  const pending = INVOICE_DATA.filter(i => !done.has(i.ref));
+  try {
+    // 1. ensure products exist (match by ref key, else by exact name)
+    const byRef = {}; for (const p of state.products) if (p.ref) byRef[p.ref] = p;
+    const newProducts = [];
+    for (const inv of pending) for (const l of inv.lines) {
+      if (!byRef[l.key]) {
+        const row = { id: uid(), ref: l.key, name: l.name, supplier: "Au pays des Ânes", initial_qty: 0, initial_cost: 0 };
+        byRef[l.key] = row; newProducts.push(row);
+      }
+    }
+    if (newProducts.length) {
+      st.textContent = `Creating ${newProducts.length} products…`;
+      if (remote) {
+        const { data, error } = await client.from("products").insert(newProducts).select();
+        if (error) throw error;
+        state.products.push(...data);
+        for (const p of data) byRef[p.ref] = p;
+      } else state.products.push(...newProducts);
+    }
+    // 2. insert purchase lines invoice by invoice
+    for (const inv of pending) {
+      st.textContent = `Importing ${inv.ref}…`;
+      const rows = inv.lines.map(l => ({
+        id: uid(), date: inv.date, invoice_ref: inv.ref,
+        product_id: byRef[l.key].id, qty: l.units, unit_cost: l.unitCost
+      }));
+      if (remote) {
+        const { data, error } = await client.from("purchases").insert(rows).select();
+        if (error) throw error;
+        state.purchases.push(...data);
+      } else state.purchases.push(...rows);
+    }
+    if (!remote) saveLocal();
+    st.textContent = `Done — ${pending.length} invoices imported.`;
+  } catch (e) {
+    st.textContent = ""; alert("Import failed: " + e.message);
+  }
+  btn.disabled = false;
+  render();
 }
 
-function renderProducts() {
-  const el = document.getElementById("productsTable");
-  if (!state.products.length) { el.innerHTML = '<p class="empty">No products yet — add your first product above.</p>'; return; }
-  const t = totals();
-  let h = `<table><tr>
-    <th>Product</th><th>Supplier</th><th class="num">Purchased</th><th class="num">Cost/unit</th>
-    <th class="num">Total cost</th><th class="num">Sold</th><th class="num">Revenue</th><th class="num">COGS</th>
-    <th class="num">Gross profit</th><th class="num">Margin</th><th class="num">Gifted</th><th class="num">Stock</th><th class="no-print"></th></tr>`;
-  for (const p of state.products) {
-    const s = productStats(p);
-    h += `<tr>
-      <td><b>${esc(p.name)}</b></td><td>${esc(p.supplier)}</td>
-      <td class="num">${p.qty_purchased}</td><td class="num">${fmtE(Number(p.cost_per_unit))}</td>
-      <td class="num calc">${fmtE(s.total_cost)}</td><td class="num calc">${s.qty_sold}</td>
-      <td class="num calc">${fmtE(s.revenue)}</td><td class="num calc">${fmtE(s.cogs)}</td>
-      <td class="num calc ${s.gross < 0 ? "neg" : ""}">${fmtE(s.gross)}</td>
-      <td class="num calc">${fmtP(s.margin)}</td><td class="num calc">${s.gifted}</td>
-      <td class="num calc ${s.stock < 0 ? "stock-neg" : ""}">${s.stock}</td>
-      <td class="no-print"><button class="btn small ghost" onclick="editProduct('${p.id}')">Edit</button>
-          <button class="btn small danger" onclick="delProduct('${p.id}')">Delete</button></td></tr>`;
+/* ================= rendering: dashboard ================= */
+function renderDash() {
+  const sales = filteredSales(), expenses = filteredExpenses();
+  let revenue = 0, units = 0, cogs = 0;
+  for (const s of sales) { const q = Number(s.qty); units += q; revenue += q * Number(s.price_per_unit); cogs += q * avgCostOf(s.product_id); }
+  const expTotal = expenses.reduce((a, e) => a + Number(e.amount), 0);
+  const gross = revenue - cogs, net = gross - expTotal;
+  let stockValue = 0, stockUnits = 0;
+  for (const p of state.products) { const c = productCalc(p); stockValue += c.stockValue; stockUnits += Math.max(c.stock, 0); }
+  const cards = [
+    ["Revenue", fmtE(revenue), `${fmtN(units)} units sold`],
+    ["COGS", fmtE(cogs), "avg cost basis"],
+    ["Gross profit", fmtE(gross), fmtP(revenue > 0 ? gross / revenue : null) + " margin"],
+    ["Expenses", fmtE(expTotal), `${expenses.length} entries`],
+    ["Net profit", fmtE(net), fmtP(revenue > 0 ? net / revenue : null) + " net margin"],
+    ["Stock on hand", fmtN(stockUnits), fmtE(stockValue) + " at cost"],
+  ];
+  document.getElementById("dashCards").innerHTML = cards.map(([k, v, s]) =>
+    `<div class="stat"><div class="k">${k}</div><div class="v ${String(v).startsWith("(") ? "neg" : ""}">${v}</div><div class="s">${s}</div></div>`).join("");
+
+  // monthly table
+  const months = {};
+  const bucket = ym => months[ym] ??= { revenue: 0, cogs: 0, expenses: 0 };
+  for (const s of sales) { const b = bucket(s.date.slice(0, 7)); const q = Number(s.qty); b.revenue += q * Number(s.price_per_unit); b.cogs += q * avgCostOf(s.product_id); }
+  for (const e of expenses) bucket(e.date.slice(0, 7)).expenses += Number(e.amount);
+  const rows = Object.entries(months).sort(([a], [b]) => a.localeCompare(b));
+  if (!rows.length) document.getElementById("dashMonthly").innerHTML = '<p class="empty">No activity in this selection yet.</p>';
+  else {
+    let h = `<table><tr><th>Month</th><th class="num">Revenue</th><th class="num">COGS</th><th class="num">Gross profit</th><th class="num">Expenses</th><th class="num">Net</th><th class="num">Net margin</th><th class="num">Cumulative net</th></tr>`;
+    let cum = 0, tR = 0, tC = 0, tE = 0;
+    for (const [ym, v] of rows) {
+      const g = v.revenue - v.cogs, n = g - v.expenses; cum += n; tR += v.revenue; tC += v.cogs; tE += v.expenses;
+      h += `<tr><td>${monthLabel(ym)}</td><td class="num calc">${fmtE(v.revenue)}</td><td class="num calc">${fmtE(v.cogs)}</td>
+        <td class="num calc">${fmtE(g)}</td><td class="num calc">${fmtE(v.expenses)}</td>
+        <td class="num calc ${n < 0 ? "neg" : ""}">${fmtE(n)}</td><td class="num calc">${fmtP(v.revenue > 0 ? n / v.revenue : null)}</td>
+        <td class="num calc ${cum < 0 ? "neg" : ""}">${fmtE(cum)}</td></tr>`;
+    }
+    const tG = tR - tC, tN = tG - tE;
+    h += `<tr class="total"><td>TOTAL</td><td class="num">${fmtE(tR)}</td><td class="num">${fmtE(tC)}</td><td class="num">${fmtE(tG)}</td>
+      <td class="num">${fmtE(tE)}</td><td class="num ${tN < 0 ? "neg" : ""}">${fmtE(tN)}</td>
+      <td class="num">${fmtP(tR > 0 ? tN / tR : null)}</td><td></td></tr></table>`;
+    document.getElementById("dashMonthly").innerHTML = h;
   }
-  h += `<tr class="total"><td>TOTAL</td><td></td><td class="num">${t.qty}</td><td></td>
-    <td class="num">${fmtE(t.cost)}</td><td class="num">${t.sold}</td><td class="num">${fmtE(t.revenue)}</td>
-    <td class="num">${fmtE(t.cogs)}</td><td class="num ${t.gross < 0 ? "neg" : ""}">${fmtE(t.gross)}</td>
-    <td class="num">${fmtP(t.revenue > 0 ? t.gross / t.revenue : null)}</td>
-    <td class="num">${t.gifted}</td><td class="num">${t.stock}</td><td class="no-print"></td></tr></table>`;
+
+  // by POS
+  const byPos = {};
+  for (const s of sales) {
+    const k = s.pos_id || "none"; byPos[k] ??= { units: 0, revenue: 0, cogs: 0 };
+    const q = Number(s.qty); byPos[k].units += q; byPos[k].revenue += q * Number(s.price_per_unit); byPos[k].cogs += q * avgCostOf(s.product_id);
+  }
+  const posRows = Object.entries(byPos).sort((a, b) => b[1].revenue - a[1].revenue);
+  document.getElementById("dashPos").innerHTML = posRows.length
+    ? `<table><tr><th>Point of sale</th><th class="num">Units</th><th class="num">Revenue</th><th class="num">COGS</th><th class="num">Gross</th><th class="num">Margin</th></tr>` +
+      posRows.map(([k, v]) => {
+        const g = v.revenue - v.cogs;
+        return `<tr><td>${k === "none" ? "<i>No POS set</i>" : esc(posById(k)?.name || "(deleted)")}</td><td class="num calc">${fmtN(v.units)}</td>
+          <td class="num calc">${fmtE(v.revenue)}</td><td class="num calc">${fmtE(v.cogs)}</td>
+          <td class="num calc ${g < 0 ? "neg" : ""}">${fmtE(g)}</td><td class="num calc">${fmtP(v.revenue > 0 ? g / v.revenue : null)}</td></tr>`;
+      }).join("") + "</table>"
+    : '<p class="empty">No sales in this selection.</p>';
+
+  // expenses by category
+  const byCat = {};
+  for (const e of expenses) byCat[e.category] = (byCat[e.category] || 0) + Number(e.amount);
+  const catRows = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  document.getElementById("dashCats").innerHTML = catRows.length
+    ? "<table>" + catRows.map(([c, v]) =>
+        `<tr><td><span class="chip" style="background:${CAT_CHIPS[c] || "#f3f4f6"}">${esc(c)}</span></td><td class="num calc">${fmtE(v)}</td>
+         <td class="num calc">${fmtP(expTotal > 0 ? v / expTotal : null)}</td></tr>`).join("") +
+      `<tr class="total"><td>TOTAL</td><td class="num">${fmtE(expTotal)}</td><td></td></tr></table>`
+    : '<p class="empty">No expenses in this selection.</p>';
+
+  // top products
+  const byProd = {};
+  for (const s of sales) {
+    byProd[s.product_id] ??= { units: 0, revenue: 0, cogs: 0 };
+    const q = Number(s.qty); byProd[s.product_id].units += q;
+    byProd[s.product_id].revenue += q * Number(s.price_per_unit);
+    byProd[s.product_id].cogs += q * avgCostOf(s.product_id);
+  }
+  const top = Object.entries(byProd).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 15);
+  document.getElementById("dashTop").innerHTML = top.length
+    ? `<table><tr><th>Product</th><th class="num">Units</th><th class="num">Revenue</th><th class="num">Gross profit</th><th class="num">Margin</th></tr>` +
+      top.map(([id, v]) => {
+        const g = v.revenue - v.cogs;
+        return `<tr><td>${esc(prodById(id)?.name || "(deleted)")}</td><td class="num calc">${fmtN(v.units)}</td>
+          <td class="num calc">${fmtE(v.revenue)}</td><td class="num calc ${g < 0 ? "neg" : ""}">${fmtE(g)}</td>
+          <td class="num calc">${fmtP(v.revenue > 0 ? g / v.revenue : null)}</td></tr>`;
+      }).join("") + "</table>"
+    : '<p class="empty">No sales in this selection.</p>';
+}
+window.clearFilters = () => {
+  filters = { from: "", to: "", pos: "", prod: "" };
+  for (const id of ["f_from", "f_to", "f_pos", "f_prod"]) document.getElementById(id).value = "";
+  renderDash();
+};
+
+/* ================= rendering: products ================= */
+function renderProducts() {
+  const q = (document.getElementById("p_search").value || "").toLowerCase();
+  const list = state.products
+    .filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const el = document.getElementById("productsTable");
+  if (!list.length) { el.innerHTML = '<p class="empty">No products yet — add one above or import your invoices in the Purchases tab.</p>'; return; }
+  let h = `<table><tr><th>Product</th><th>Ref</th><th class="num">Initial</th><th class="num">Purchased</th>
+    <th class="num">Avg cost</th><th class="num">Sold</th><th class="num">Gifted</th><th class="num">Stock</th>
+    <th class="num">Stock value</th><th class="no-print"></th></tr>`;
+  let tStock = 0, tVal = 0;
+  for (const p of list) {
+    const c = productCalc(p); tStock += c.stock; tVal += c.stockValue;
+    h += `<tr><td><b>${esc(p.name)}</b></td><td style="color:var(--muted)">${esc(p.ref || "")}</td>
+      <td class="num">${fmtN(c.iq)}</td><td class="num calc">${fmtN(c.purQty)}</td>
+      <td class="num calc">${fmtE(c.avgCost)}</td><td class="num calc">${fmtN(c.sold)}</td>
+      <td class="num calc">${fmtN(c.gifted)}</td><td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td>
+      <td class="num calc">${fmtE(c.stockValue)}</td>
+      <td class="no-print"><button class="btn small ghost" onclick="editProduct('${p.id}')">Edit</button>
+        <button class="btn small danger" onclick="delProduct('${p.id}')">Del</button></td></tr>`;
+  }
+  h += `<tr class="total"><td>TOTAL (${list.length})</td><td></td><td></td><td></td><td></td><td></td><td></td>
+    <td class="num">${fmtN(tStock)}</td><td class="num">${fmtE(tVal)}</td><td class="no-print"></td></tr></table>`;
   el.innerHTML = h;
 }
 
-function productName(id) { const p = state.products.find(p => p.id === id); return p ? p.name : "(deleted product)"; }
-
-function renderSales() {
-  const el = document.getElementById("salesTable");
-  if (!state.sales.length) { el.innerHTML = '<p class="empty">No sales logged yet.</p>'; return; }
-  const rows = [...state.sales].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  let h = `<table><tr><th>Date</th><th>Product</th><th class="num">Qty</th><th class="num">Price/unit</th>
-    <th class="num">Sale total</th><th class="num">COGS</th><th class="no-print"></th></tr>`;
-  for (const s of rows) {
-    const p = state.products.find(p => p.id === s.product_id);
-    const total = Number(s.qty) * Number(s.price_per_unit);
-    const cogs = Number(s.qty) * Number(p ? p.cost_per_unit : 0);
-    h += `<tr><td>${fmtD(s.date)}</td><td>${esc(productName(s.product_id))}</td>
-      <td class="num">${s.qty}</td><td class="num">${fmtE(Number(s.price_per_unit))}</td>
-      <td class="num calc">${fmtE(total)}</td><td class="num calc">${fmtE(cogs)}</td>
-      <td class="no-print"><button class="btn small ghost" onclick="editSale('${s.id}')">Edit</button>
-          <button class="btn small danger" onclick="delRow('sales','${s.id}')">Delete</button></td></tr>`;
+/* ================= rendering: purchases ================= */
+function renderPurchases() {
+  refreshImportCard();
+  const el = document.getElementById("purchasesList");
+  if (!state.purchases.length) { el.innerHTML = '<p class="empty">No purchases yet — import your invoices above.</p>'; return; }
+  const groups = {};
+  for (const u of state.purchases) {
+    const k = u.invoice_ref || "Manual entries";
+    (groups[k] ??= []).push(u);
   }
-  el.innerHTML = h + "</table>";
+  const entries = Object.entries(groups).sort((a, b) => (b[1][0].date || "").localeCompare(a[1][0].date || ""));
+  el.innerHTML = entries.map(([ref, lines]) => {
+    const units = lines.reduce((a, l) => a + Number(l.qty), 0);
+    const total = lines.reduce((a, l) => a + Number(l.qty) * Number(l.unit_cost), 0);
+    const date = lines[0].date;
+    const rows = lines.map(l => `<tr><td>${esc(prodById(l.product_id)?.name || "(deleted)")}</td>
+      <td class="num">${fmtN(l.qty)}</td><td class="num">${eurF.format(Number(l.unit_cost))}</td>
+      <td class="num calc">${fmtE(Number(l.qty) * Number(l.unit_cost))}</td>
+      <td class="no-print"><button class="btn small danger" onclick="delRow('purchases','${l.id}')">Del</button></td></tr>`).join("");
+    return `<details class="inv"><summary><span class="ref">${esc(ref)}</span>
+      <span class="meta">${fmtD(date)}</span><span class="meta">${lines.length} lines</span>
+      <span class="meta">${fmtN(units)} units</span><span style="margin-left:auto;font-weight:700">${fmtE(total)}</span></summary>
+      <div class="lines"><table><tr><th>Product</th><th class="num">Units</th><th class="num">Cost/unit</th><th class="num">Total</th><th class="no-print"></th></tr>${rows}</table></div></details>`;
+  }).join("");
 }
 
+/* ================= rendering: sales & POS ================= */
+function renderPos() {
+  const el = document.getElementById("posList");
+  el.innerHTML = state.pos.length
+    ? "<table>" + state.pos.map(p => {
+        const n = state.sales.filter(s => s.pos_id === p.id).length;
+        return `<tr><td><b>${esc(p.name)}</b></td><td style="color:var(--muted)">${n} sales</td>
+        <td class="no-print"><button class="btn small ghost" onclick="renamePos('${p.id}')">Rename</button>
+        <button class="btn small danger" onclick="delPos('${p.id}')">Del</button></td></tr>`;
+      }).join("") + "</table>"
+    : '<p class="empty">No points of sale yet — add your first one (e.g. Beirut Boutique, Shopify, Paris Exhibition…).</p>';
+}
+window.addPos = async () => {
+  const name = document.getElementById("pos_name").value.trim();
+  if (!name) return;
+  await addRow("pos", { name });
+  document.getElementById("pos_name").value = "";
+  render();
+};
+window.renamePos = async id => {
+  const p = posById(id); if (!p) return;
+  const name = prompt("New name for this point of sale:", p.name);
+  if (name && name.trim()) { await updateRow("pos", id, { name: name.trim() }); render(); }
+};
+window.delPos = async id => {
+  const n = state.sales.filter(s => s.pos_id === id).length;
+  if (!confirm(`Delete this point of sale?${n ? ` Its ${n} sales are kept but lose their POS tag.` : ""}`)) return;
+  await deleteRow("pos", id); render();
+};
+
+function salePriceAutofill() {
+  const pos = document.getElementById("s_pos").value, prod = document.getElementById("s_product").value;
+  const hint = document.getElementById("s_pricehint");
+  if (!pos || !prod) { hint.textContent = ""; return; }
+  const p = priceFor(pos, prod);
+  const priceInput = document.getElementById("s_price");
+  if (p != null) { priceInput.value = p; hint.textContent = `Price list: ${eurF.format(p)} for this product at ${posById(pos)?.name || ""}. Change it here to update the price list.`; }
+  else {
+    const last = [...state.sales].reverse().find(s => s.product_id === prod);
+    if (last && !priceInput.value) priceInput.value = last.price_per_unit;
+    const c = avgCostOf(prod);
+    hint.textContent = `No price set yet for this POS — the price you enter will be remembered. Average cost: ${eurF.format(c)}.`;
+  }
+}
+function renderSales() {
+  const posFilter = document.getElementById("sl_pos").value;
+  const el = document.getElementById("salesTable");
+  const rows = state.sales.filter(s => !posFilter || s.pos_id === posFilter)
+    .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  if (!rows.length) { el.innerHTML = '<p class="empty">No sales logged yet.</p>'; return; }
+  let h = `<table><tr><th>Date</th><th>POS</th><th>Product</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th><th class="num">COGS</th><th class="num">Gross</th><th class="no-print"></th></tr>`;
+  let tQ = 0, tT = 0, tC = 0;
+  for (const s of rows) {
+    const q = Number(s.qty), total = q * Number(s.price_per_unit), cogs = q * avgCostOf(s.product_id);
+    tQ += q; tT += total; tC += cogs;
+    h += `<tr><td>${fmtD(s.date)}</td><td>${esc(posById(s.pos_id)?.name || "—")}</td><td>${esc(prodById(s.product_id)?.name || "(deleted)")}</td>
+      <td class="num">${q}</td><td class="num">${eurF.format(Number(s.price_per_unit))}</td>
+      <td class="num calc">${fmtE(total)}</td><td class="num calc">${fmtE(cogs)}</td>
+      <td class="num calc ${total - cogs < 0 ? "neg" : ""}">${fmtE(total - cogs)}</td>
+      <td class="no-print"><button class="btn small ghost" onclick="editSale('${s.id}')">Edit</button>
+        <button class="btn small danger" onclick="delRow('sales','${s.id}')">Del</button></td></tr>`;
+  }
+  h += `<tr class="total"><td>TOTAL</td><td></td><td></td><td class="num">${fmtN(tQ)}</td><td></td>
+    <td class="num">${fmtE(tT)}</td><td class="num">${fmtE(tC)}</td><td class="num ${tT - tC < 0 ? "neg" : ""}">${fmtE(tT - tC)}</td><td class="no-print"></td></tr></table>`;
+  el.innerHTML = h;
+}
+window.renderPriceList = () => {
+  const pos = document.getElementById("pl_pos").value;
+  const q = (document.getElementById("pl_search").value || "").toLowerCase();
+  const el = document.getElementById("priceList");
+  if (!pos) { el.innerHTML = '<p class="empty">Select a point of sale to edit its prices.</p>'; return; }
+  const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q))
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  el.innerHTML = `<table><tr><th>Product</th><th class="num">Avg cost</th><th class="num" style="width:140px">Price (€)</th><th class="num">Margin</th></tr>` +
+    list.map(p => {
+      const c = productCalc(p), price = priceFor(pos, p.id);
+      const m = price != null && price > 0 ? (price - c.avgCost) / price : null;
+      return `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtE(c.avgCost)}</td>
+        <td class="num"><input type="number" min="0" step="0.01" value="${price ?? ""}" style="width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--input-bg)"
+          onchange="setPrice('${pos}','${p.id}',this.value)"></td>
+        <td class="num calc">${fmtP(m)}</td></tr>`;
+    }).join("") + "</table>";
+};
+window.setPrice = async (pos, prod, val) => {
+  const price = Number(val);
+  if (!isFinite(price) || price < 0) return;
+  await upsertPosPrice(pos, prod, price);
+  renderPriceList();
+};
+
+/* ================= rendering: gifts ================= */
 function renderGifts() {
   const el = document.getElementById("giftsTable");
-  if (!state.gifts.length) { el.innerHTML = '<p class="empty">No gifts logged yet.</p>'; return; }
   const rows = [...state.gifts].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  let h = `<table><tr><th>Date</th><th>Product</th><th class="num">Qty</th><th>Note</th><th class="no-print"></th></tr>`;
+  if (!rows.length) { el.innerHTML = '<p class="empty">No gifts logged yet.</p>'; return; }
+  let h = `<table><tr><th>Date</th><th>Product</th><th class="num">Qty</th><th class="num">Cost value</th><th>Note</th><th class="no-print"></th></tr>`;
   for (const g of rows) {
-    h += `<tr><td>${fmtD(g.date)}</td><td>${esc(productName(g.product_id))}</td>
-      <td class="num">${g.qty}</td><td>${esc(g.note)}</td>
+    h += `<tr><td>${fmtD(g.date)}</td><td>${esc(prodById(g.product_id)?.name || "(deleted)")}</td>
+      <td class="num">${g.qty}</td><td class="num calc">${fmtE(Number(g.qty) * avgCostOf(g.product_id))}</td><td>${esc(g.note)}</td>
       <td class="no-print"><button class="btn small ghost" onclick="editGift('${g.id}')">Edit</button>
-          <button class="btn small danger" onclick="delRow('gifts','${g.id}')">Delete</button></td></tr>`;
+        <button class="btn small danger" onclick="delRow('gifts','${g.id}')">Del</button></td></tr>`;
   }
   el.innerHTML = h + "</table>";
 }
 
+/* ================= rendering: expenses ================= */
 function renderExpenses() {
+  const catFilter = document.getElementById("el_cat").value;
   const el = document.getElementById("expensesTable");
-  if (!state.expenses.length) el.innerHTML = '<p class="empty">No expenses logged yet.</p>';
+  const rows = state.expenses.filter(e => !catFilter || e.category === catFilter)
+    .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  if (!rows.length) el.innerHTML = '<p class="empty">No expenses logged yet.</p>';
   else {
-    const rows = [...state.expenses].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     let h = `<table><tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Amount</th><th class="no-print"></th></tr>`;
+    let t = 0;
     for (const e of rows) {
+      t += Number(e.amount);
       h += `<tr><td>${fmtD(e.date)}</td><td>${esc(e.description)}</td>
-        <td><span class="chip" style="background:${CAT_CHIPS[e.category] || "var(--chip-other)"}">${esc(e.category)}</span></td>
+        <td><span class="chip" style="background:${CAT_CHIPS[e.category] || "#f3f4f6"}">${esc(e.category)}</span></td>
         <td class="num">${fmtE(Number(e.amount))}</td>
         <td class="no-print"><button class="btn small ghost" onclick="editExpense('${e.id}')">Edit</button>
-            <button class="btn small danger" onclick="delRow('expenses','${e.id}')">Delete</button></td></tr>`;
+          <button class="btn small danger" onclick="delRow('expenses','${e.id}')">Del</button></td></tr>`;
     }
-    const total = state.expenses.reduce((a, e) => a + Number(e.amount), 0);
-    h += `<tr class="total"><td colspan="3">TOTAL EXPENSES</td><td class="num">${fmtE(total)}</td><td class="no-print"></td></tr></table>`;
+    h += `<tr class="total"><td colspan="3">TOTAL</td><td class="num">${fmtE(t)}</td><td class="no-print"></td></tr></table>`;
     el.innerHTML = h;
   }
-  // category subtotals
-  let hc = "<table>";
-  let totalC = 0;
-  for (const c of CATEGORIES) {
-    const v = state.expenses.filter(e => e.category === c).reduce((a, e) => a + Number(e.amount), 0);
-    totalC += v;
-    hc += `<tr><td><span class="chip" style="background:${CAT_CHIPS[c]}">${esc(c)}</span></td><td class="num calc">${fmtE(v)}</td></tr>`;
-  }
-  hc += `<tr class="total"><td>TOTAL</td><td class="num">${fmtE(totalC)}</td></tr></table>`;
-  document.getElementById("expenseCats").innerHTML = hc;
-  // monthly
+  const byCat = {};
+  for (const e of state.expenses) byCat[e.category] = (byCat[e.category] || 0) + Number(e.amount);
+  const total = Object.values(byCat).reduce((a, v) => a + v, 0);
+  document.getElementById("expenseCats").innerHTML = Object.keys(byCat).length
+    ? "<table>" + Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([c, v]) =>
+        `<tr><td><span class="chip" style="background:${CAT_CHIPS[c] || "#f3f4f6"}">${esc(c)}</span></td><td class="num calc">${fmtE(v)}</td></tr>`).join("") +
+      `<tr class="total"><td>TOTAL</td><td class="num">${fmtE(total)}</td></tr></table>`
+    : '<p class="empty">—</p>';
   const byMonth = {};
-  for (const e of state.expenses) { if (e.date) byMonth[e.date.slice(0, 7)] = (byMonth[e.date.slice(0, 7)] || 0) + Number(e.amount); }
+  for (const e of state.expenses) if (e.date) byMonth[e.date.slice(0, 7)] = (byMonth[e.date.slice(0, 7)] || 0) + Number(e.amount);
   const keys = Object.keys(byMonth).sort();
-  let hm = "<table><tr><th>Month</th><th class='num'>Total</th><th class='num'>Cumulative</th></tr>";
   let cum = 0;
-  for (const k of keys) { cum += byMonth[k]; hm += `<tr><td>${monthLabel(k)}</td><td class="num calc">${fmtE(byMonth[k])}</td><td class="num calc">${fmtE(cum)}</td></tr>`; }
-  document.getElementById("expenseMonths").innerHTML = keys.length ? hm + "</table>" : '<p class="empty">—</p>';
+  document.getElementById("expenseMonths").innerHTML = keys.length
+    ? `<table><tr><th>Month</th><th class="num">Total</th><th class="num">Cumulative</th></tr>` +
+      keys.map(k => { cum += byMonth[k]; return `<tr><td>${monthLabel(k)}</td><td class="num calc">${fmtE(byMonth[k])}</td><td class="num calc">${fmtE(cum)}</td></tr>`; }).join("") + "</table>"
+    : '<p class="empty">—</p>';
 }
 
-function renderPL() {
-  const t = totals();
-  const cards = [
-    ["Total revenue", fmtE(t.revenue), ""], ["COGS", fmtE(t.cogs), ""],
-    ["Gross profit", fmtE(t.gross), t.gross < 0 ? "neg" : ""],
-    ["Gross margin", fmtP(t.revenue > 0 ? t.gross / t.revenue : null), ""],
-    ["Total expenses", fmtE(t.expenses), ""],
-    ["Net profit / (loss)", fmtE(t.net), t.net < 0 ? "neg" : ""],
-    ["Net margin", fmtP(t.revenue > 0 ? t.net / t.revenue : null), t.net < 0 ? "neg" : ""],
-  ];
-  document.getElementById("plCards").innerHTML = cards.map(([k, v, cls]) =>
-    `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`).join("");
-
-  let hc = "<table>";
-  for (const c of CATEGORIES) {
-    const v = state.expenses.filter(e => e.category === c).reduce((a, e) => a + Number(e.amount), 0);
-    hc += `<tr><td><span class="chip" style="background:${CAT_CHIPS[c]}">${esc(c)}</span></td><td class="num calc">${fmtE(v)}</td></tr>`;
+/* ================= selects & render root ================= */
+function refreshSelects() {
+  const prods = [...state.products].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const prodOpts = prods.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  for (const id of ["s_product", "g_product", "pu_product"]) {
+    const sel = document.getElementById(id); const cur = sel.value;
+    sel.innerHTML = prodOpts; if (cur) sel.value = cur;
   }
-  hc += `<tr class="total"><td>TOTAL</td><td class="num">${fmtE(t.expenses)}</td></tr></table>`;
-  document.getElementById("plCats").innerHTML = hc;
-
-  const rows = monthlyRows();
-  if (!rows.length) { document.getElementById("plMonthly").innerHTML = '<p class="empty">No activity yet.</p>'; return; }
-  let h = `<table><tr><th>Month</th><th class="num">Revenue</th><th class="num">COGS</th><th class="num">Gross profit</th>
-    <th class="num">Expenses</th><th class="num">Net profit</th><th class="num">Net margin</th><th class="num">Cumulative net</th></tr>`;
-  let cum = 0;
-  for (const r of rows) {
-    cum += r.net;
-    h += `<tr><td>${monthLabel(r.ym)}</td><td class="num calc">${fmtE(r.revenue)}</td><td class="num calc">${fmtE(r.cogs)}</td>
-      <td class="num calc">${fmtE(r.gross)}</td><td class="num calc">${fmtE(r.expenses)}</td>
-      <td class="num calc ${r.net < 0 ? "neg" : ""}">${fmtE(r.net)}</td>
-      <td class="num calc">${fmtP(r.revenue > 0 ? r.net / r.revenue : null)}</td>
-      <td class="num calc ${cum < 0 ? "neg" : ""}">${fmtE(cum)}</td></tr>`;
+  const posOpts = state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  for (const id of ["s_pos", "pl_pos"]) {
+    const sel = document.getElementById(id); const cur = sel.value;
+    sel.innerHTML = posOpts; if (cur) sel.value = cur;
   }
-  document.getElementById("plMonthly").innerHTML = h + "</table>";
+  for (const [id, opts] of [["f_pos", posOpts], ["sl_pos", posOpts], ["f_prod", prodOpts]]) {
+    const sel = document.getElementById(id); const cur = sel.value;
+    sel.innerHTML = '<option value="">All</option>' + opts; sel.value = cur;
+  }
+  const catOpts = CATEGORIES.map(c => `<option>${c}</option>`).join("");
+  document.getElementById("e_cat").innerHTML = catOpts;
+  const elc = document.getElementById("el_cat"); const curc = elc.value;
+  elc.innerHTML = '<option value="">All</option>' + catOpts; elc.value = curc;
 }
-
-function refreshProductSelects() {
-  for (const id of ["s_product", "g_product"]) {
-    const sel = document.getElementById(id);
-    const cur = sel.value;
-    sel.innerHTML = state.products.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-    if (cur) sel.value = cur;
-  }
+function render() {
+  refreshSelects();
+  renderDash(); renderProducts(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
 }
 
 /* ================= forms ================= */
-function todayISO() { return new Date().toISOString().slice(0, 10); }
-
+function resetForm(prefix, formId, label) {
+  document.getElementById(formId).reset();
+  const idEl = document.getElementById(prefix + "_id"); if (idEl) idEl.value = "";
+  document.getElementById(prefix + "_submit").textContent = label;
+  const c = document.getElementById(prefix + "_cancel"); if (c) c.style.display = "none";
+}
 document.getElementById("productForm").addEventListener("submit", async ev => {
   ev.preventDefault();
   const fields = {
     name: document.getElementById("p_name").value.trim(),
+    ref: document.getElementById("p_ref").value.trim() || null,
     supplier: document.getElementById("p_supplier").value.trim(),
-    qty_purchased: Number(document.getElementById("p_qty").value),
-    cost_per_unit: Number(document.getElementById("p_cost").value),
+    initial_qty: Number(document.getElementById("p_iqty").value || 0),
+    initial_cost: Number(document.getElementById("p_icost").value || 0),
   };
   const id = document.getElementById("p_id").value;
   const ok = id ? await updateRow("products", id, fields) : await addRow("products", fields);
-  if (ok) { resetForm("p", "Add product"); render(); }
+  if (ok) { resetForm("p", "productForm", "Add product"); document.getElementById("prodFormTitle").textContent = "Add product"; render(); }
 });
 window.editProduct = id => {
-  const p = state.products.find(p => p.id === id); if (!p) return;
+  const p = prodById(id); if (!p) return;
   document.getElementById("p_id").value = p.id;
-  document.getElementById("p_name").value = p.name;
+  document.getElementById("p_name").value = p.name || "";
+  document.getElementById("p_ref").value = p.ref || "";
   document.getElementById("p_supplier").value = p.supplier || "";
-  document.getElementById("p_qty").value = p.qty_purchased;
-  document.getElementById("p_cost").value = p.cost_per_unit;
+  document.getElementById("p_iqty").value = p.initial_qty || 0;
+  document.getElementById("p_icost").value = p.initial_cost || 0;
   document.getElementById("p_submit").textContent = "Save changes";
   document.getElementById("p_cancel").style.display = "";
+  document.getElementById("prodFormTitle").textContent = "Edit product";
+  window.scrollTo({ top: 0, behavior: "smooth" });
 };
 window.delProduct = async id => {
-  const n = state.sales.filter(s => s.product_id === id).length + state.gifts.filter(g => g.product_id === id).length;
-  if (!confirm(`Delete this product${n ? ` and its ${n} sale/gift entries` : ""}? This cannot be undone.`)) return;
+  const n = state.sales.filter(s => s.product_id === id).length + state.gifts.filter(g => g.product_id === id).length
+    + state.purchases.filter(u => u.product_id === id).length;
+  if (!confirm(`Delete this product${n ? ` and its ${n} purchase/sale/gift lines` : ""}? This cannot be undone.`)) return;
   await deleteRow("products", id); render();
 };
+document.getElementById("p_cancel").addEventListener("click", () => { resetForm("p", "productForm", "Add product"); document.getElementById("prodFormTitle").textContent = "Add product"; });
+
+document.getElementById("purchaseForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  if (!state.products.length) { alert("Add a product first."); return; }
+  const ok = await addRow("purchases", {
+    date: document.getElementById("pu_date").value,
+    invoice_ref: document.getElementById("pu_ref").value.trim() || null,
+    product_id: document.getElementById("pu_product").value,
+    qty: Number(document.getElementById("pu_qty").value),
+    unit_cost: Number(document.getElementById("pu_cost").value),
+  });
+  if (ok) { document.getElementById("purchaseForm").reset(); document.getElementById("pu_date").value = todayISO(); render(); }
+});
 
 document.getElementById("saleForm").addEventListener("submit", async ev => {
   ev.preventDefault();
-  if (!state.products.length) { alert("Add a product first."); return; }
-  const fields = {
-    date: document.getElementById("s_date").value,
-    product_id: document.getElementById("s_product").value,
-    qty: Number(document.getElementById("s_qty").value),
-    price_per_unit: Number(document.getElementById("s_price").value),
-  };
+  if (!state.pos.length) { alert("Create a point of sale first (top of this page)."); return; }
+  if (!state.products.length) { alert("Add products first."); return; }
+  const pos_id = document.getElementById("s_pos").value, product_id = document.getElementById("s_product").value;
+  const price = Number(document.getElementById("s_price").value);
+  const fields = { date: document.getElementById("s_date").value, pos_id, product_id, qty: Number(document.getElementById("s_qty").value), price_per_unit: price };
   const id = document.getElementById("s_id").value;
   const ok = id ? await updateRow("sales", id, fields) : await addRow("sales", fields);
-  if (ok) { resetForm("s", "Add sale"); document.getElementById("s_date").value = todayISO(); render(); }
+  if (ok) {
+    await upsertPosPrice(pos_id, product_id, price);
+    resetForm("s", "saleForm", "Add sale");
+    document.getElementById("s_date").value = todayISO();
+    render();
+  }
 });
 window.editSale = id => {
   const s = state.sales.find(s => s.id === id); if (!s) return;
   document.getElementById("s_id").value = s.id;
   document.getElementById("s_date").value = s.date;
+  document.getElementById("s_pos").value = s.pos_id || "";
   document.getElementById("s_product").value = s.product_id;
   document.getElementById("s_qty").value = s.qty;
   document.getElementById("s_price").value = s.price_per_unit;
   document.getElementById("s_submit").textContent = "Save changes";
   document.getElementById("s_cancel").style.display = "";
+  window.scrollTo({ top: 0, behavior: "smooth" });
 };
+document.getElementById("s_cancel").addEventListener("click", () => resetForm("s", "saleForm", "Add sale"));
+document.getElementById("s_pos").addEventListener("change", salePriceAutofill);
+document.getElementById("s_product").addEventListener("change", salePriceAutofill);
 
 document.getElementById("giftForm").addEventListener("submit", async ev => {
   ev.preventDefault();
-  if (!state.products.length) { alert("Add a product first."); return; }
+  if (!state.products.length) { alert("Add products first."); return; }
   const fields = {
     date: document.getElementById("g_date").value,
     product_id: document.getElementById("g_product").value,
@@ -585,7 +930,7 @@ document.getElementById("giftForm").addEventListener("submit", async ev => {
   };
   const id = document.getElementById("g_id").value;
   const ok = id ? await updateRow("gifts", id, fields) : await addRow("gifts", fields);
-  if (ok) { resetForm("g", "Add gift"); document.getElementById("g_date").value = todayISO(); render(); }
+  if (ok) { resetForm("g", "giftForm", "Add gift"); document.getElementById("g_date").value = todayISO(); render(); }
 });
 window.editGift = id => {
   const g = state.gifts.find(g => g.id === id); if (!g) return;
@@ -597,6 +942,7 @@ window.editGift = id => {
   document.getElementById("g_submit").textContent = "Save changes";
   document.getElementById("g_cancel").style.display = "";
 };
+document.getElementById("g_cancel").addEventListener("click", () => resetForm("g", "giftForm", "Add gift"));
 
 document.getElementById("expenseForm").addEventListener("submit", async ev => {
   ev.preventDefault();
@@ -608,43 +954,40 @@ document.getElementById("expenseForm").addEventListener("submit", async ev => {
   };
   const id = document.getElementById("e_id").value;
   const ok = id ? await updateRow("expenses", id, fields) : await addRow("expenses", fields);
-  if (ok) { resetForm("e", "Add expense"); document.getElementById("e_date").value = todayISO(); render(); }
+  if (ok) { resetForm("e", "expenseForm", "Add expense"); document.getElementById("e_date").value = todayISO(); render(); }
 });
 window.editExpense = id => {
   const e = state.expenses.find(e => e.id === id); if (!e) return;
   document.getElementById("e_id").value = e.id;
   document.getElementById("e_date").value = e.date;
   document.getElementById("e_desc").value = e.description;
-  document.getElementById("e_cat").value = e.category;
+  document.getElementById("e_cat").value = CATEGORIES.includes(e.category) ? e.category : "Other";
   document.getElementById("e_amount").value = e.amount;
   document.getElementById("e_submit").textContent = "Save changes";
   document.getElementById("e_cancel").style.display = "";
 };
+document.getElementById("e_cancel").addEventListener("click", () => resetForm("e", "expenseForm", "Add expense"));
 
 window.delRow = async (kind, id) => {
   if (!confirm("Delete this entry? This cannot be undone.")) return;
   await deleteRow(kind, id); render();
 };
-function resetForm(prefix, label) {
-  const map = { p: "productForm", s: "saleForm", g: "giftForm", e: "expenseForm" };
-  document.getElementById(map[prefix]).reset();
-  document.getElementById(prefix + "_id").value = "";
-  document.getElementById(prefix + "_submit").textContent = label;
-  document.getElementById(prefix + "_cancel").style.display = "none";
-}
-for (const [pfx, label] of [["p", "Add product"], ["s", "Add sale"], ["g", "Add gift"], ["e", "Add expense"]]) {
-  document.getElementById(pfx + "_cancel").addEventListener("click", () => resetForm(pfx, label));
-}
 
-/* ================= tabs ================= */
-document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
-  document.querySelectorAll("nav button").forEach(x => x.classList.remove("active"));
+/* dashboard filter events */
+document.getElementById("f_from").addEventListener("change", ev => { filters.from = ev.target.value; renderDash(); });
+document.getElementById("f_to").addEventListener("change", ev => { filters.to = ev.target.value; renderDash(); });
+document.getElementById("f_pos").addEventListener("change", ev => { filters.pos = ev.target.value; renderDash(); });
+document.getElementById("f_prod").addEventListener("change", ev => { filters.prod = ev.target.value; renderDash(); });
+
+/* tabs */
+document.querySelectorAll("#nav button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#nav button").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
   document.querySelectorAll(".tab").forEach(t => t.style.display = "none");
   document.getElementById("tab-" + b.dataset.tab).style.display = "";
 }));
 
-/* ================= export ================= */
+/* ================= exports ================= */
 function downloadFile(name, mime, content) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([content], { type: mime }));
@@ -653,31 +996,44 @@ function downloadFile(name, mime, content) {
 const csvCell = v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 const toCSV = rows => "﻿" + rows.map(r => r.map(csvCell).join(",")).join("\r\n");
 
-window.exportPL = () => {
-  const t = totals();
-  const rows = [["LANEA — Profit & Loss"], [],
-    ["Total revenue", t.revenue], ["COGS", t.cogs], ["Gross profit", t.gross],
-    ["Total expenses", t.expenses], ["Net profit", t.net], [],
-    ["Month", "Revenue", "COGS", "Gross profit", "Expenses", "Net profit"]];
-  for (const r of monthlyRows()) rows.push([r.ym, r.revenue, r.cogs, r.gross, r.expenses, r.net]);
-  downloadFile("lanea-pl.csv", "text/csv", toCSV(rows));
+window.exportDashboardCSV = () => {
+  const sales = filteredSales(), expenses = filteredExpenses();
+  const months = {};
+  const bucket = ym => months[ym] ??= { revenue: 0, cogs: 0, expenses: 0 };
+  for (const s of sales) { const b = bucket(s.date.slice(0, 7)); b.revenue += Number(s.qty) * Number(s.price_per_unit); b.cogs += Number(s.qty) * avgCostOf(s.product_id); }
+  for (const e of expenses) bucket(e.date.slice(0, 7)).expenses += Number(e.amount);
+  const rows = [["LANEA — Dashboard export"], [`Filters: ${filters.from || "start"} → ${filters.to || "now"}${filters.pos ? " | POS: " + (posById(filters.pos)?.name || "") : ""}${filters.prod ? " | Product: " + (prodById(filters.prod)?.name || "") : ""}`], [],
+    ["Month", "Revenue", "COGS", "Gross profit", "Expenses", "Net"]];
+  for (const [ym, v] of Object.entries(months).sort(([a], [b]) => a.localeCompare(b)))
+    rows.push([ym, v.revenue.toFixed(2), v.cogs.toFixed(2), (v.revenue - v.cogs).toFixed(2), v.expenses.toFixed(2), (v.revenue - v.cogs - v.expenses).toFixed(2)]);
+  downloadFile("lanea-dashboard.csv", "text/csv", toCSV(rows));
 };
-window.exportAllCSV = () => {
-  const rows = [["PRODUCTS"], ["Name", "Supplier", "Qty purchased", "Cost/unit", "Total cost", "Qty sold", "Revenue", "COGS", "Gross profit", "Gifted", "Stock"]];
-  for (const p of state.products) { const s = productStats(p);
-    rows.push([p.name, p.supplier, p.qty_purchased, p.cost_per_unit, s.total_cost, s.qty_sold, s.revenue, s.cogs, s.gross, s.gifted, s.stock]); }
-  rows.push([], ["SALES"], ["Date", "Product", "Qty", "Price/unit", "Total"]);
-  for (const s of state.sales) rows.push([s.date, productName(s.product_id), s.qty, s.price_per_unit, Number(s.qty) * Number(s.price_per_unit)]);
-  rows.push([], ["GIFTS"], ["Date", "Product", "Qty", "Note"]);
-  for (const g of state.gifts) rows.push([g.date, productName(g.product_id), g.qty, g.note]);
-  rows.push([], ["EXPENSES"], ["Date", "Description", "Category", "Amount"]);
-  for (const e of state.expenses) rows.push([e.date, e.description, e.category, e.amount]);
-  downloadFile("lanea-data.csv", "text/csv", toCSV(rows));
+window.exportProductsCSV = () => {
+  const rows = [["Product", "Ref", "Supplier", "Initial qty", "Initial cost", "Purchased qty", "Avg cost", "Sold", "Gifted", "Stock", "Stock value"]];
+  for (const p of [...state.products].sort((a, b) => (a.name || "").localeCompare(b.name || ""))) {
+    const c = productCalc(p);
+    rows.push([p.name, p.ref || "", p.supplier || "", c.iq, p.initial_cost || 0, c.purQty, c.avgCost.toFixed(4), c.sold, c.gifted, c.stock, c.stockValue.toFixed(2)]);
+  }
+  downloadFile("lanea-products.csv", "text/csv", toCSV(rows));
 };
-window.printPL = () => {
-  document.getElementById("tab-pl").classList.add("print-target");
+window.exportSalesCSV = () => {
+  const rows = [["Date", "POS", "Product", "Qty", "Price/unit", "Total", "COGS", "Gross"]];
+  for (const s of [...state.sales].sort((a, b) => (a.date || "").localeCompare(b.date || ""))) {
+    const total = Number(s.qty) * Number(s.price_per_unit), cogs = Number(s.qty) * avgCostOf(s.product_id);
+    rows.push([s.date, posById(s.pos_id)?.name || "", prodById(s.product_id)?.name || "", s.qty, s.price_per_unit, total.toFixed(2), cogs.toFixed(2), (total - cogs).toFixed(2)]);
+  }
+  downloadFile("lanea-sales.csv", "text/csv", toCSV(rows));
+};
+window.exportExpensesCSV = () => {
+  const rows = [["Date", "Description", "Category", "Amount"]];
+  for (const e of [...state.expenses].sort((a, b) => (a.date || "").localeCompare(b.date || "")))
+    rows.push([e.date, e.description, e.category, e.amount]);
+  downloadFile("lanea-expenses.csv", "text/csv", toCSV(rows));
+};
+window.printDash = () => {
+  document.getElementById("tab-dash").classList.add("print-target");
   window.print();
-  document.getElementById("tab-pl").classList.remove("print-target");
+  document.getElementById("tab-dash").classList.remove("print-target");
 };
 window.exportJSON = () => downloadFile("lanea-backup.json", "application/json", JSON.stringify(state, null, 2));
 window.importJSON = ev => {
@@ -686,9 +1042,9 @@ window.importJSON = ev => {
   rd.onload = () => {
     try {
       const d = JSON.parse(rd.result);
-      if (!d.products || !d.expenses) throw new Error("Not a LANEA backup file");
+      if (!d.products) throw new Error("Not a LANEA backup file");
       if (!confirm("Replace current data with this backup?")) return;
-      state = { products: [], sales: [], gifts: [], expenses: [], ...d };
+      for (const k of KINDS) state[k] = d[k] || [];
       saveLocal(); render(); alert("Backup restored.");
     } catch (e) { alert("Could not restore: " + e.message); }
   };
@@ -696,12 +1052,6 @@ window.importJSON = ev => {
 };
 
 /* ================= supabase ================= */
-// Default connection for the LANEA project (the anon key is public by design; data
-// access is protected by sign-in + row level security). Settings tab can override.
-const DEFAULT_CFG = {
-  url: "https://kpzsslzagpryjsxstvri.supabase.co",
-  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwenNzbHphZ3ByeWpzeHN0dnJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5OTgyNzEsImV4cCI6MjEwMDU3NDI3MX0.Ol4h-JzPQ-xqwuzG87Q8gS-ezB5PC-q3LvtE5Q_7hbs"
-};
 function getCfg() {
   try { return JSON.parse(localStorage.getItem(LS_CFG) || "null") || DEFAULT_CFG; }
   catch { return DEFAULT_CFG; }
@@ -717,9 +1067,12 @@ function loadSupabaseLib() {
 }
 function setBadge() {
   const b = document.getElementById("connBadge");
-  if (remote) { b.textContent = "Cloud sync on (Supabase)"; b.classList.add("remote"); }
-  else { b.textContent = "Local data (this browser)"; b.classList.remove("remote"); }
+  if (remote) { b.textContent = "Cloud sync on"; b.classList.add("remote"); }
+  else { b.textContent = "Local data"; b.classList.remove("remote"); }
 }
+function showBanner(msg) { const b = document.getElementById("banner"); b.innerHTML = msg; b.style.display = ""; }
+function hideBanner() { document.getElementById("banner").style.display = "none"; }
+
 async function initSupabase() {
   const cfg = getCfg();
   const note = document.getElementById("sb_cfg_note");
@@ -733,8 +1086,8 @@ async function initSupabase() {
     if (session) await enterRemote(session);
     else {
       document.getElementById("sb_auth").style.display = "";
-      note.innerHTML = '<span class="ok-note">Configuration saved — sign in below to start syncing.</span>';
-      showBanner('Cloud sync is configured but you are signed out — data is local only. Sign in from the Settings tab.');
+      note.innerHTML = '<span class="ok-note">Connected to Supabase — sign in below to sync.</span>';
+      showBanner('You are signed out — data stays in this browser only. Sign in from the <b>Settings</b> tab to sync to the cloud.');
     }
   } catch (e) { note.innerHTML = `<span class="err-note">${esc(e.message)}</span>`; }
 }
@@ -744,10 +1097,14 @@ async function enterRemote(session) {
   document.getElementById("sb_session").style.display = "";
   document.getElementById("sb_session_note").textContent = "Signed in as " + session.user.email + " — all changes sync to the cloud.";
   hideBanner();
-  const kinds = ["products", "sales", "gifts", "expenses"];
-  for (const k of kinds) {
-    const { data, error } = await client.from(TABLE[k]).select("*").order("created_at", { ascending: true });
-    if (error) { alert("Could not load " + k + ": " + error.message); remote = false; setBadge(); return; }
+  for (const k of KINDS) {
+    const { data, error } = await client.from(k).select("*").order("created_at", { ascending: true });
+    if (error) {
+      if (error.code === "PGRST205") {
+        showBanner(`Your database is missing the <b>${k}</b> table — open Supabase &rarr; SQL Editor and run <b>supabase/migration-v2.sql</b> from the repo, then reload this page.`);
+      } else alert("Could not load " + k + ": " + error.message);
+      remote = false; setBadge(); return;
+    }
     state[k] = data;
   }
   setBadge(); render();
@@ -778,29 +1135,26 @@ window.signOut = async () => {
   remote = false;
   document.getElementById("sb_session").style.display = "none";
   document.getElementById("sb_auth").style.display = "";
+  for (const k of KINDS) state[k] = [];
   loadLocal(); setBadge(); render();
 };
 window.pushLocalToCloud = async () => {
   if (!remote) { alert("Sign in first."); return; }
   const local = JSON.parse(localStorage.getItem(LS_DATA) || "null");
-  if (!local || !local.products?.length && !local.expenses?.length) { alert("No local data found in this browser."); return; }
+  if (!local) { alert("No local data found in this browser."); return; }
   if (!confirm("Upload the data stored in this browser to the cloud? Existing cloud rows are kept; local rows are added.")) return;
-  for (const k of ["products", "sales", "gifts", "expenses"]) {
-    for (const row of (local[k] || [])) {
-      if (state[k].some(r => r.id === row.id)) continue;
-      const { error } = await client.from(TABLE[k]).insert(row);
-      if (error) { alert(`Upload stopped at ${k}: ` + error.message); return; }
-    }
+  for (const k of KINDS) {
+    const rows = (local[k] || []).filter(row => !state[k].some(r => r.id === row.id));
+    if (!rows.length) continue;
+    const { data, error } = await client.from(k).insert(rows).select();
+    if (error) { alert(`Upload stopped at ${k}: ` + error.message); return; }
+    state[k].push(...data);
   }
-  await enterRemote((await client.auth.getSession()).data.session);
-  alert("Local data uploaded.");
+  render(); alert("Local data uploaded.");
 };
-function showBanner(msg) { const b = document.getElementById("banner"); b.textContent = msg; b.style.display = ""; }
-function hideBanner() { document.getElementById("banner").style.display = "none"; }
 
 /* ================= boot ================= */
-document.getElementById("e_cat").innerHTML = CATEGORIES.map(c => `<option>${c}</option>`).join("");
-for (const id of ["s_date", "g_date", "e_date"]) document.getElementById(id).value = todayISO();
+for (const id of ["s_date", "g_date", "e_date", "pu_date"]) document.getElementById(id).value = todayISO();
 loadLocal(); setBadge(); render(); initSupabase();
 </script>
 </body>

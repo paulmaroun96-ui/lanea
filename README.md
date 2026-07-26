@@ -1,6 +1,13 @@
-# LANEA Books
+# LÂNEA Books
 
-Business accounting & inventory web app for LANEA: products, sales, gifts, expenses, and an automatic P&L report — all in EUR.
+Business accounting & inventory web app for LÂNEA: products & stock, supplier invoices (purchases), sales by point of sale with per-POS price lists, gifts, expenses, and a filterable cumulative dashboard — all in EUR.
+
+**v2 highlights**
+- `invoices-data.js`: 8 Au pays des Ânes invoices (233 lines, 109 products) extracted from the PDFs, one-click import inside the app. Discounts and shipping are spread into each unit cost; the credit note AV00000221 is already applied inside FA050897.
+- Points of sale with per-POS prices (remembered automatically when you log a sale).
+- Initial inventory per product; COGS uses the weighted-average cost of initial stock + all purchases.
+- Dashboard filters: month range, point of sale, product.
+- Existing v1 databases must run `supabase/migration-v2.sql` once (SQL Editor).
 
 - **Zero build step** — a single static `index.html`. Open it locally or deploy anywhere.
 - **Works offline** — data is stored in the browser (localStorage) by default.
