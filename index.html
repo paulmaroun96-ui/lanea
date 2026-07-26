@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LÂNEA Books — Accounting &amp; Inventory</title>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" fill="none" stroke="%231c2026" stroke-width="3"/><text x="32" y="44" font-family="Georgia,serif" font-size="34" text-anchor="middle" fill="%235C9FA3">L</text></svg>'>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#36656e">
+<link rel="apple-touch-icon" href="icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -171,7 +174,7 @@
 
 <aside>
   <div class="brand">
-    <img src="logo.png" alt="" onerror="this.style.display='none'">
+    <img src="logo.png" alt="" onerror="this.onerror=null;this.src='icon-192.png'">
     <div class="logo">L&Acirc;NEA</div>
     <div class="sub">Business Books</div>
   </div>
@@ -185,6 +188,7 @@
     <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
     <button data-tab="cat"><span class="ms">category</span>Catalog</button>
     <button data-tab="set"><span class="ms">settings</span>Settings</button>
+    <button data-tab="help"><span class="ms">help</span>Guide</button>
   </nav>
   <div class="side-foot"><span id="connBadge" class="conn">Local data</span></div>
 </aside>
@@ -195,7 +199,11 @@
 <!-- ================= DASHBOARD ================= -->
 <div class="tab" id="tab-dash">
   <div class="pagehead"><h1>Dashboard</h1><p>Cumulative performance — filter by period, point of sale or product.</p></div>
+  <div id="setupCard"></div>
   <div class="filters no-print">
+    <button class="btn ghost small" onclick="setPeriod('this')">This month</button>
+    <button class="btn ghost small" onclick="setPeriod('last')">Last month</button>
+    <button class="btn ghost small" onclick="setPeriod('all')">All time</button>
     <label>From month<input type="month" id="f_from"></label>
     <label>To month<input type="month" id="f_to"></label>
     <label>Point of sale<select id="f_pos"><option value="">All</option></select></label>
@@ -454,12 +462,62 @@
     </div>
   </section>
   <section class="card">
+    <h2>Preferences</h2>
+    <div class="rowform">
+      <label>Low-stock alert threshold (units)<input id="set_low" type="number" min="0" step="1" style="width:110px"></label>
+      <button class="btn gold" onclick="saveLowStock()">Save</button>
+    </div>
+    <p class="hint">Products at or below this quantity show LOW on the dashboard and in the stock tables.</p>
+  </section>
+  <section class="card">
     <h2>Backup</h2>
     <div class="rowform">
       <button class="btn ghost" onclick="exportJSON()">Download backup (JSON)</button>
       <button class="btn ghost" onclick="document.getElementById('importFile').click()">Restore backup</button>
       <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
     </div>
+  </section>
+</div>
+
+<!-- ================= GUIDE ================= -->
+<div class="tab" id="tab-help" style="display:none">
+  <div class="pagehead"><h1>Guide</h1><p>How LÂNEA Books works — the full workflow in one page.</p></div>
+  <section class="card">
+    <h2>The stock model</h2>
+    <p style="line-height:1.8">Everything you buy (<b>Purchases</b>) and your <b>initial inventory</b> (Catalog) enters the <b>Warehouse</b>.
+    From the <b>Stocks</b> tab you <b>transfer</b> stock to a point of sale when you supply it. A <b>sale</b> in the Daily report
+    consumes that POS's stock; a <b>gift</b> consumes the warehouse. A submitted <b>inventory count</b> corrects the counted location
+    to reality. At all times: <b>Global stock = Warehouse + all points of sale</b>, and every product's value is carried at its
+    <b>average cost</b> (invoice discounts and shipping included).</p>
+  </section>
+  <section class="card">
+    <h2>Daily routine</h2>
+    <p style="line-height:1.8">Open <b>Daily report</b> → pick the day on the calendar (grey = submitted, amber = unfinished) →
+    add each sale (POS → product → qty → price auto-fills → Enter), plus gifts and expenses → check the live totals →
+    <b>Submit daily report</b> once. Corrections: "Edit" on a saved entry pulls it back into the report.</p>
+  </section>
+  <section class="card">
+    <h2>When goods move</h2>
+    <p style="line-height:1.8"><b>New supplier delivery</b> → Purchases tab (add lines, or send the PDF invoice to Claude to extend the import).
+    <b>Supplying a boutique or exhibition</b> → Stocks → "Send to POS"; leftovers → "Return to warehouse".</p>
+  </section>
+  <section class="card">
+    <h2>Counting &amp; reconciling</h2>
+    <p style="line-height:1.8"><b>Inventory</b> tab → open a fiche d'inventaire for one location → type the actual counted quantities
+    (drafts pause and resume) → <b>Submit</b> → stock snaps to reality and the écart (units and €) stays in the inventory list forever.</p>
+  </section>
+  <section class="card">
+    <h2>Reading the business</h2>
+    <p style="line-height:1.8"><b>Dashboard</b>: revenue, COGS, gross, expenses, net, stock value, low stock — filter by period, POS or product.
+    <b>Stocks</b>: the per-product statement (initial + purchased − sold − gifted ± adjustments = stock) and the warehouse/POS matrix.
+    <b>Sales &amp; prices</b>: each POS's performance and its price list (bulk edit + Save prices).
+    <b>Catalog</b>: products by category. Everything exports to CSV; the dashboard prints to PDF.</p>
+  </section>
+  <section class="card">
+    <h2>What saves when</h2>
+    <p style="line-height:1.8"><b>Daily reports</b> and <b>inventory sheets</b> save when you <b>Submit</b> (drafts survive closing the browser).
+    <b>Prices</b> save with the "Save prices" button. Everything else (products, purchases, transfers) saves instantly with a ✓ confirmation.
+    Signed in = every save syncs to the cloud and appears on all your devices. Settings keeps a JSON backup as a safety net.</p>
   </section>
 </div>
 <div id="toast"></div>
@@ -479,7 +537,7 @@ const CAT_CHIPS = {
 const KINDS = ["products", "purchases", "pos", "pos_prices", "transfers", "inventories", "inventory_lines", "sales", "gifts", "expenses"];
 const LS_DATA = "lanea-books-data";
 const LS_CFG = "lanea-books-supabase";
-const LOW_STOCK = 5;   // "low stock" threshold in units — dashboard + inventory badges
+let LOW_STOCK = Number(localStorage.getItem("lanea-low-stock") || 5);   // low-stock threshold, editable in Settings
 const LS_LASTPOS = "lanea-last-pos";
 const LS_DRAFT = "lanea-books-draft";
 
@@ -519,6 +577,16 @@ function catOf(p) {
   const ref = p.ref || "";
   for (const [c, re] of CAT_RULES) if (re.test(ref)) return c;
   return "Other";
+}
+/* product <option>s grouped by category — easier picking among 100+ products */
+function prodOptionsGrouped(sel) {
+  const groups = {};
+  for (const p of state.products) (groups[catOf(p)] ??= []).push(p);
+  const order = PRODUCT_CATS.filter(c => groups[c]).concat(Object.keys(groups).filter(c => !PRODUCT_CATS.includes(c)).sort());
+  return order.map(c => `<optgroup label="${esc(c)}">` +
+    groups[c].sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+      .map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(p.name)}</option>`).join("") +
+    "</optgroup>").join("");
 }
 
 let state = { products: [], purchases: [], pos: [], pos_prices: [], transfers: [], inventories: [], inventory_lines: [], sales: [], gifts: [], expenses: [] };
@@ -758,6 +826,7 @@ async function importInvoices() {
 
 /* ================= rendering: dashboard ================= */
 function renderDash() {
+  renderSetup();
   const sales = filteredSales(), expenses = filteredExpenses();
   let revenue = 0, units = 0, cogs = 0;
   for (const s of sales) { const q = Number(s.qty); units += q; revenue += q * Number(s.price_per_unit); cogs += q * avgCostOf(s.product_id); }
@@ -862,6 +931,38 @@ window.clearFilters = () => {
   for (const id of ["f_from", "f_to", "f_pos", "f_prod"]) document.getElementById(id).value = "";
   renderDash();
 };
+window.setPeriod = mode => {
+  const now = new Date();
+  const ym = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  if (mode === "all") { filters.from = ""; filters.to = ""; }
+  else if (mode === "this") { filters.from = ym(now); filters.to = ym(now); }
+  else { const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1); filters.from = ym(lm); filters.to = ym(lm); }
+  document.getElementById("f_from").value = filters.from;
+  document.getElementById("f_to").value = filters.to;
+  renderDash();
+};
+function renderSetup() {
+  const el = document.getElementById("setupCard");
+  const steps = [
+    ["Import your supplier invoices", state.purchases.length > 0, "pur"],
+    ["Create your points of sale", state.pos.length > 0, "sal"],
+    ["Set prices per point of sale", state.pos_prices.length > 0, "sal"],
+    ["Send stock to your points of sale", state.transfers.length > 0, "stk"],
+    ["Submit your first daily report", state.sales.length > 0 || state.expenses.length > 0, "day"],
+    ["Sign in for cloud sync", remote, "set"],
+  ];
+  const todo = steps.filter(s => !s[1]).length;
+  if (!todo) { el.innerHTML = ""; return; }
+  el.innerHTML = `<section class="card no-print" style="border-left:4px solid var(--gold)">
+    <h2>Getting started — ${steps.length - todo}/${steps.length} done</h2>
+    ${steps.map(([label, done, tab]) =>
+      `<div style="display:flex;align-items:center;gap:10px;padding:5px 0">
+        <span class="ms" style="color:${done ? "var(--green)" : "#c4ced1"}">${done ? "check_circle" : "radio_button_unchecked"}</span>
+        <span style="${done ? "color:var(--muted)" : ""}">${label}</span>
+        ${done ? "" : `<button class="btn small ghost" style="margin-left:auto" onclick="showTab('${tab}')">Go</button>`}
+      </div>`).join("")}
+  </section>`;
+}
 
 /* ================= rendering: products ================= */
 function renderProducts() {
@@ -1132,9 +1233,10 @@ function renderExpenses() {
 function refreshSelects() {
   const prods = [...state.products].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const prodOpts = prods.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  const grouped = prodOptionsGrouped("");
   for (const id of ["pu_product", "t_product"]) {
     const sel = document.getElementById(id); const cur = sel.value;
-    sel.innerHTML = prodOpts; if (cur) sel.value = cur;
+    sel.innerHTML = grouped; if (cur) sel.value = cur;
   }
   const posOpts = state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
   for (const id of ["pl_pos", "t_pos"]) {
@@ -1261,9 +1363,8 @@ function renderReport() {
   const keep = {};
   for (const id of NR_IDS) { const el = document.getElementById(id); if (el) keep[id] = el.value; }
 
-  const prodSorted = [...state.products].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const posOpt = sel => state.pos.map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(p.name)}</option>`).join("");
-  const prodOpt = sel => prodSorted.map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(p.name)}</option>`).join("");
+  const prodOpt = sel => prodOptionsGrouped(sel);
   const catOpt = sel => CATEGORIES.map(c => `<option${c === sel ? " selected" : ""}>${c}</option>`).join("");
   const enter = fn => `onkeydown="if(event.key==='Enter'){event.preventDefault();${fn}()}"`;
 
@@ -2066,7 +2167,16 @@ window.pushLocalToCloud = async () => {
 document.getElementById("pu_date").value = todayISO();
 document.getElementById("t_date").value = todayISO();
 document.getElementById("inv_date").value = todayISO();
+document.getElementById("set_low").value = LOW_STOCK;
 document.getElementById("p_cat_sel").innerHTML = PRODUCT_CATS.map(c => `<option>${c}</option>`).join("");
+window.saveLowStock = () => {
+  const v = Number(gv("set_low"));
+  if (!isFinite(v) || v < 0) return;
+  LOW_STOCK = v;
+  localStorage.setItem("lanea-low-stock", String(v));
+  toast(`Low-stock threshold set to ${v} ✓`);
+  render();
+};
 loadLocal(); setBadge(); render(); initSupabase();
 </script>
 </body>

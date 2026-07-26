@@ -1,0 +1,13 @@
+{
+  "name": "LÂNEA Books",
+  "short_name": "LÂNEA",
+  "description": "Accounting & inventory for LÂNEA — sales by point of sale, stock, purchases and P&L.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f7f8",
+  "theme_color": "#36656e",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
