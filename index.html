@@ -406,6 +406,7 @@
       <label>Point of sale<select id="pl_pos" onchange="renderPriceList()"></select></label>
       <label>Search<input id="pl_search" oninput="renderPriceList()" placeholder="product…" style="min-width:200px"></label>
     </div>
+    <div id="plBar" class="no-print" style="margin:2px 0 10px"></div>
     <div class="scrollbox" id="priceList"></div>
   </section>
   <section class="card">
@@ -1108,7 +1109,6 @@ function updatePlBar() {
   const btn = document.getElementById("plSaveBtn"), dis = document.getElementById("plDiscardBtn");
   if (!btn) return;
   const n = plChangedCount();
-  btn.disabled = !n;
   btn.textContent = n ? `Save prices (${n} changed)` : "Save prices";
   if (dis) dis.style.display = n ? "" : "none";
 }
@@ -1116,7 +1116,8 @@ window.renderPriceList = () => {
   const pos = document.getElementById("pl_pos").value;
   const q = (document.getElementById("pl_search").value || "").toLowerCase();
   const el = document.getElementById("priceList");
-  if (!pos) { el.innerHTML = '<p class="empty">Select a point of sale to edit its prices.</p>'; return; }
+  const bar = document.getElementById("plBar");
+  if (!pos) { bar.innerHTML = ""; el.innerHTML = '<p class="empty">Select a point of sale to edit its prices.</p>'; return; }
   const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const rows = list.map(p => {
@@ -1134,13 +1135,12 @@ window.renderPriceList = () => {
       <td class="num calc pl-margin">${fmtP(m)}</td></tr>`;
   }).join("");
   const n = plChangedCount();
-  el.innerHTML = `
-    <div class="no-print" style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-      <button class="btn gold" id="plSaveBtn" onclick="savePrices()"${n ? "" : " disabled"}>${n ? `Save prices (${n} changed)` : "Save prices"}</button>
+  bar.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="btn gold" id="plSaveBtn" onclick="savePrices()">${n ? `Save prices (${n} changed)` : "Save prices"}</button>
       <button class="btn ghost" id="plDiscardBtn" onclick="discardPrices()" style="${n ? "" : "display:none"}">Discard changes</button>
-      <span class="hint" style="margin:0">Changed rows turn amber · Enter jumps to the next product</span>
-    </div>
-    <table><tr><th>Product</th><th class="num">Avg cost</th><th class="num" style="width:140px">Price (€)</th><th class="num">Margin</th></tr>${rows}</table>`;
+      <span class="hint" style="margin:0">Type prices below — nothing saves until you press <b>Save prices</b></span>
+    </div>`;
+  el.innerHTML = `<table><tr><th>Product</th><th class="num">Avg cost</th><th class="num" style="width:140px">Price (€)</th><th class="num">Margin</th></tr>${rows}</table>`;
 };
 window.priceEdit = (pos, prod, el) => {
   const key = pos + "|" + prod;
@@ -1162,7 +1162,7 @@ window.focusNextPrice = el => {
 };
 window.savePrices = async () => {
   const entries = Object.entries(priceDraft).filter(([, v]) => v !== "" && isFinite(Number(v)) && Number(v) >= 0);
-  if (!entries.length) return;
+  if (!entries.length) { toast("No price changes yet — type prices in the list first"); return; }
   const btn = document.getElementById("plSaveBtn");
   if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   for (const [key, v] of entries) {
@@ -1555,7 +1555,7 @@ try {
 } catch {}
 function saveInvDrafts() { localStorage.setItem(LS_INVDRAFT, JSON.stringify(invDrafts)); }
 const activeDraft = () => invDrafts.find(d => d.id === activeInv) || null;
-const invScopeName = posId => posId ? (posById(posId)?.name || "(deleted POS)") : "Warehouse";
+const invScopeName = posId => posId === "ALL" ? "All locations" : posId ? (posById(posId)?.name || "(deleted POS)") : "Warehouse";
 
 window.startInventory = () => {
   const d = { id: uid(), date: gv("inv_date") || todayISO(), pos_id: gv("inv_scope") || null, counts: {} };
@@ -1578,18 +1578,32 @@ window.invCount = (pid, val) => {
   const d = activeDraft(); if (!d) return;
   if (val === "") delete d.counts[pid];
   else d.counts[pid] = val;
-  saveInvDrafts(); renderInvTotals();
+  saveInvDrafts(); renderInventory();
+};
+window.invCountM = (pid, loc, val) => {
+  const d = activeDraft(); if (!d) return;
+  const key = pid + "|" + loc;
+  if (val === "") delete d.counts[key];
+  else d.counts[key] = val;
+  saveInvDrafts(); renderInventory();
 };
 function renderInvTotals() {
   const el = document.getElementById("invTotals");
   const invDraft = activeDraft();
   if (!invDraft) { el.innerHTML = ""; return; }
-  const theoOf = pid => invDraft.pos_id ? posStockOf(pid, invDraft.pos_id) : warehouseOf(prodById(pid));
   let n = 0, dUnits = 0, dValue = 0;
-  for (const [pid, v] of Object.entries(invDraft.counts)) {
+  for (const [k, v] of Object.entries(invDraft.counts)) {
     if (v === "" || !isFinite(Number(v))) continue;
+    let pid = k, theo;
+    if (invDraft.pos_id === "ALL") {
+      const i = k.indexOf("|"); pid = k.slice(0, i);
+      const loc = k.slice(i + 1);
+      theo = loc === "wh" ? warehouseOf(prodById(pid)) : posStockOf(pid, loc);
+    } else {
+      theo = invDraft.pos_id ? posStockOf(pid, invDraft.pos_id) : warehouseOf(prodById(pid));
+    }
     n++;
-    const diff = Number(v) - theoOf(pid);
+    const diff = Number(v) - theo;
     dUnits += diff; dValue += diff * avgCostOf(pid);
   }
   el.innerHTML = `
@@ -1600,8 +1614,9 @@ function renderInvTotals() {
 function renderInventory() {
   const sel = document.getElementById("inv_scope");
   { const cur = sel.value;
-    sel.innerHTML = '<option value="">Warehouse</option>' + state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-    sel.value = cur; }
+    sel.innerHTML = '<option value="ALL">All locations — matrix</option><option value="">Warehouse only</option>'
+      + state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+    sel.value = cur || "ALL"; }
   const startEl = document.getElementById("invStart"), sheetEl = document.getElementById("invSheet");
   const invDraft = activeDraft();
   if (!invDraft) { startEl.style.display = ""; sheetEl.style.display = "none"; renderInvList(); return; }
@@ -1609,27 +1624,88 @@ function renderInventory() {
   document.getElementById("invTitle").innerHTML =
     `Fiche d'inventaire — ${esc(invScopeName(invDraft.pos_id))} — ${fmtD(invDraft.date)} <span class="chip" style="background:#fdeeca">DRAFT</span>`;
   const q = (gv("inv_search") || "").toLowerCase();
-  const theoOf = p => invDraft.pos_id ? posStockOf(p.id, invDraft.pos_id) : warehouseOf(p);
   const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  let h = `<table><tr><th>Product</th><th class="num">Theoretical</th><th class="num" style="width:130px">Counted (actual)</th><th class="num">Difference</th></tr>`;
-  for (const p of list) {
-    const theo = theoOf(p);
-    const v = invDraft.counts[p.id] ?? "";
-    const diff = v === "" ? null : Number(v) - theo;
-    h += `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtN(theo)}</td>
-      <td class="num"><input class="rin" type="number" min="0" step="1" value="${v}" placeholder="—" style="width:90px"
-        onchange="invCount('${p.id}',this.value)"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"></td>
-      <td class="num calc ${diff != null && diff !== 0 ? "neg" : ""}">${diff == null ? "—" : (diff > 0 ? "+" : "") + fmtN(diff)}</td></tr>`;
+  let h;
+  if (invDraft.pos_id === "ALL") {
+    // matrix sheet: rows = products, columns = warehouse + every POS
+    const locs = [{ key: "wh", name: "Warehouse" }, ...state.pos.map(p => ({ key: p.id, name: p.name }))];
+    h = `<table><tr><th>Product</th>` + locs.map(l => `<th class="num">${esc(l.name)}</th>`).join("") + `<th class="num">Diff</th></tr>`;
+    for (const p of list) {
+      let rowDiff = 0, any = false;
+      const cells = locs.map(l => {
+        const theo = l.key === "wh" ? warehouseOf(p) : posStockOf(p.id, l.key);
+        const v = invDraft.counts[p.id + "|" + l.key] ?? "";
+        if (v !== "" && isFinite(Number(v))) { rowDiff += Number(v) - theo; any = true; }
+        return `<td class="num"><input class="rin ${v !== "" ? "chg" : ""}" type="number" min="0" step="1" value="${v}" placeholder="—" style="width:68px"
+          onchange="invCountM('${p.id}','${l.key}',this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">theo ${fmtN(theo)}</div></td>`;
+      }).join("");
+      h += `<tr><td>${esc(p.name)}</td>${cells}<td class="num calc ${any && rowDiff !== 0 ? "neg" : ""}">${any ? (rowDiff > 0 ? "+" : "") + fmtN(rowDiff) : "—"}</td></tr>`;
+    }
+  } else {
+    const theoOf = p => invDraft.pos_id ? posStockOf(p.id, invDraft.pos_id) : warehouseOf(p);
+    h = `<table><tr><th>Product</th><th class="num">Theoretical</th><th class="num" style="width:130px">Counted (actual)</th><th class="num">Difference</th></tr>`;
+    for (const p of list) {
+      const theo = theoOf(p);
+      const v = invDraft.counts[p.id] ?? "";
+      const diff = v === "" ? null : Number(v) - theo;
+      h += `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtN(theo)}</td>
+        <td class="num"><input class="rin" type="number" min="0" step="1" value="${v}" placeholder="—" style="width:90px"
+          onchange="invCount('${p.id}',this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"></td>
+        <td class="num calc ${diff != null && diff !== 0 ? "neg" : ""}">${diff == null ? "—" : (diff > 0 ? "+" : "") + fmtN(diff)}</td></tr>`;
+    }
   }
   document.getElementById("invTable").innerHTML = h + "</table>";
   renderInvTotals();
   renderInvList();
 }
+async function persistInventory(invRow, lines) {
+  if (remote) {
+    let { data, error } = await client.from("inventories").insert(invRow).select().single();
+    if (error) { alert("Cloud error: " + error.message); return false; }
+    state.inventories.push(data);
+    ({ data, error } = await client.from("inventory_lines").insert(lines).select());
+    if (error) { alert("Cloud error: " + error.message); return false; }
+    state.inventory_lines.push(...data);
+  } else {
+    state.inventories.push(invRow); state.inventory_lines.push(...lines); saveLocal();
+  }
+  return true;
+}
 window.submitInventory = async () => {
   const invDraft = activeDraft();
   if (!invDraft) return;
+  if (invDraft.pos_id === "ALL") {
+    // matrix sheet: one inventory record per location that has counts
+    const byLoc = {};
+    for (const [k, v] of Object.entries(invDraft.counts)) {
+      if (v === "" || !isFinite(Number(v))) continue;
+      const i = k.indexOf("|");
+      (byLoc[k.slice(i + 1)] ??= []).push([k.slice(0, i), Number(v)]);
+    }
+    const locs = Object.keys(byLoc);
+    const total = locs.reduce((a, l) => a + byLoc[l].length, 0);
+    if (!total) { alert("Count at least one product first (type its actual quantity)."); return; }
+    if (!confirm(`Submit this inventory? ${total} count${total === 1 ? "" : "s"} across ${locs.length} location${locs.length === 1 ? "" : "s"} — stock will be adjusted to the counted quantities.`)) return;
+    for (const loc of locs) {
+      const posId = loc === "wh" ? null : loc;
+      const invRow = { id: uid(), date: invDraft.date, pos_id: posId };
+      const lines = byLoc[loc].map(([pid, counted]) => ({
+        id: uid(), inventory_id: invRow.id, product_id: pid,
+        theoretical: posId ? posStockOf(pid, posId) : warehouseOf(prodById(pid)),
+        counted,
+      }));
+      if (!(await persistInventory(invRow, lines))) return;
+    }
+    invDrafts = invDrafts.filter(d => d.id !== activeInv);
+    activeInv = null; saveInvDrafts();
+    toast(`Inventory submitted ✓ — ${total} count${total === 1 ? "" : "s"} across ${locs.length} location${locs.length === 1 ? "" : "s"}`);
+    render();
+    return;
+  }
   const entries = Object.entries(invDraft.counts).filter(([, v]) => v !== "" && isFinite(Number(v)));
   if (!entries.length) { alert("Count at least one product first (type its actual quantity)."); return; }
   if (!confirm(`Submit this inventory for ${invScopeName(invDraft.pos_id)}? ${entries.length} product${entries.length === 1 ? "" : "s"} counted — stock will be adjusted to the counted quantities.`)) return;
@@ -1639,16 +1715,7 @@ window.submitInventory = async () => {
     theoretical: invDraft.pos_id ? posStockOf(pid, invDraft.pos_id) : warehouseOf(prodById(pid)),
     counted: Number(v),
   }));
-  if (remote) {
-    let { data, error } = await client.from("inventories").insert(invRow).select().single();
-    if (error) { alert("Cloud error: " + error.message); return; }
-    state.inventories.push(data);
-    ({ data, error } = await client.from("inventory_lines").insert(lines).select());
-    if (error) { alert("Cloud error: " + error.message); return; }
-    state.inventory_lines.push(...data);
-  } else {
-    state.inventories.push(invRow); state.inventory_lines.push(...lines); saveLocal();
-  }
+  if (!(await persistInventory(invRow, lines))) return;
   invDrafts = invDrafts.filter(d => d.id !== activeInv);
   activeInv = null; saveInvDrafts();
   toast(`Inventory submitted ✓ — stock adjusted for ${lines.length} product${lines.length === 1 ? "" : "s"}`);
