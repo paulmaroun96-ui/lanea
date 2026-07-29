@@ -262,10 +262,9 @@
   <div class="pagehead"><h1>Inventory</h1><p>Physical inventory counts (fiches d'inventaire). A sheet stays a <b>draft</b> until you submit it — submitting updates the stock levels of all counted products.</p></div>
   <section class="card no-print" id="invStart">
     <h2>Fiche d'inventaire — start a count</h2>
-    <p class="hint">Open a sheet for the warehouse or a point of sale, count the real stock (leave blank what you don't count), then submit — stock adjusts to the counted quantities and every difference is kept in the history below.</p>
+    <p class="hint">One sheet counts everything: <b>rows = products, columns = Warehouse + each point of sale</b>. Type the real balance in the cells you count (leave the rest blank), then submit — stock adjusts per location and every difference is kept in the list below.</p>
     <div class="rowform">
       <label>Date<input id="inv_date" type="date"></label>
-      <label>Location<select id="inv_scope"></select></label>
       <button class="btn gold" type="button" onclick="startInventory()">Open inventory sheet</button>
     </div>
   </section>
@@ -401,9 +400,8 @@
   </section>
   <section class="card">
     <h2>Price list per point of sale</h2>
-    <p class="hint">Set as many prices as you want — changed rows turn amber, margins preview live — then press <b>Save prices</b> once to save them all.</p>
+    <p class="hint"><b>Rows = products, columns = your points of sale.</b> Type prices in any cells (Enter moves down the column, margin previews under each price), then press <b>Save prices</b> once.</p>
     <div class="rowform no-print">
-      <label>Point of sale<select id="pl_pos" onchange="renderPriceList()"></select></label>
       <label>Search<input id="pl_search" oninput="renderPriceList()" placeholder="product…" style="min-width:200px"></label>
     </div>
     <div id="plBar" class="no-print" style="margin:2px 0 10px"></div>
@@ -1044,8 +1042,7 @@ function renderPos() {
       </div></div>`;
   }).join("") + "</div>";
 }
-window.openPriceList = id => {
-  document.getElementById("pl_pos").value = id;
+window.openPriceList = () => {
   renderPriceList();
   document.getElementById("priceList").scrollIntoView({ behavior: "smooth", block: "center" });
 };
@@ -1113,34 +1110,38 @@ function updatePlBar() {
   if (dis) dis.style.display = n ? "" : "none";
 }
 window.renderPriceList = () => {
-  const pos = document.getElementById("pl_pos").value;
   const q = (document.getElementById("pl_search").value || "").toLowerCase();
   const el = document.getElementById("priceList");
   const bar = document.getElementById("plBar");
-  if (!pos) { bar.innerHTML = ""; el.innerHTML = '<p class="empty">Select a point of sale to edit its prices.</p>'; return; }
+  if (!state.pos.length) { bar.innerHTML = ""; el.innerHTML = '<p class="empty">Create a point of sale above first — its price column appears here.</p>'; return; }
   const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  const rows = list.map(p => {
-    const c = productCalc(p), saved = priceFor(pos, p.id);
-    const key = pos + "|" + p.id;
-    const val = priceDraft[key] !== undefined ? priceDraft[key] : (saved ?? "");
-    const changed = priceDraft[key] !== undefined;
-    const num = Number(val);
-    const m = val !== "" && num > 0 ? (num - c.avgCost) / num : null;
-    return `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtE(c.avgCost)}</td>
-      <td class="num"><input type="number" min="0" step="0.01" value="${val}" class="rin pl-in ${changed ? "chg" : ""}"
-        style="width:110px" data-cost="${c.avgCost}"
-        oninput="priceEdit('${pos}','${p.id}',this)"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();focusNextPrice(this)}"></td>
-      <td class="num calc pl-margin">${fmtP(m)}</td></tr>`;
-  }).join("");
   const n = plChangedCount();
   bar.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <button class="btn gold" id="plSaveBtn" onclick="savePrices()">${n ? `Save prices (${n} changed)` : "Save prices"}</button>
       <button class="btn ghost" id="plDiscardBtn" onclick="discardPrices()" style="${n ? "" : "display:none"}">Discard changes</button>
-      <span class="hint" style="margin:0">Type prices below — nothing saves until you press <b>Save prices</b></span>
+      <span class="hint" style="margin:0">Nothing saves until you press <b>Save prices</b></span>
     </div>`;
-  el.innerHTML = `<table><tr><th>Product</th><th class="num">Avg cost</th><th class="num" style="width:140px">Price (€)</th><th class="num">Margin</th></tr>${rows}</table>`;
+  let h = `<table><tr><th>Product</th><th class="num">Avg cost</th>`
+    + state.pos.map(p => `<th class="num">${esc(p.name)} (€)</th>`).join("") + `</tr>`;
+  for (const p of list) {
+    const c = productCalc(p);
+    h += `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtE(c.avgCost)}</td>`
+      + state.pos.map(pos => {
+          const key = pos.id + "|" + p.id;
+          const saved = priceFor(pos.id, p.id);
+          const val = priceDraft[key] !== undefined ? priceDraft[key] : (saved ?? "");
+          const changed = priceDraft[key] !== undefined;
+          const num = Number(val);
+          const m = val !== "" && num > 0 ? (num - c.avgCost) / num : null;
+          return `<td class="num"><input type="number" min="0" step="0.01" value="${val}" class="rin pl-in ${changed ? "chg" : ""}"
+            style="width:95px" data-cost="${c.avgCost}" data-pos="${pos.id}" placeholder="—"
+            oninput="priceEdit('${pos.id}','${p.id}',this)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();focusNextPrice(this)}">
+            <div class="pl-m" style="font-size:10px;color:var(--muted);margin-top:2px">${m == null ? "&nbsp;" : "margin " + fmtP(m)}</div></td>`;
+        }).join("") + `</tr>`;
+  }
+  el.innerHTML = h + "</table>";
 };
 window.priceEdit = (pos, prod, el) => {
   const key = pos + "|" + prod;
@@ -1149,14 +1150,15 @@ window.priceEdit = (pos, prod, el) => {
   const unchanged = val === "" ? true : (saved != null && isFinite(Number(val)) && Number(val) === Number(saved));
   if (unchanged) delete priceDraft[key]; else priceDraft[key] = val;
   el.classList.toggle("chg", priceDraft[key] !== undefined);
-  // live margin preview on this row
+  // live margin preview under this cell
   const cost = Number(el.dataset.cost), num = Number(val);
-  const cell = el.closest("tr").querySelector(".pl-margin");
-  if (cell) cell.textContent = fmtP(val !== "" && num > 0 ? (num - cost) / num : null);
+  const cell = el.parentElement.querySelector(".pl-m");
+  if (cell) cell.innerHTML = val !== "" && num > 0 ? "margin " + fmtP((num - cost) / num) : "&nbsp;";
   updatePlBar();
 };
 window.focusNextPrice = el => {
-  const inputs = [...document.querySelectorAll("#priceList input.pl-in")];
+  // Enter moves DOWN the same POS column, like a spreadsheet
+  const inputs = [...document.querySelectorAll("#priceList input.pl-in")].filter(i => i.dataset.pos === el.dataset.pos);
   const next = inputs[inputs.indexOf(el) + 1];
   if (next) { next.focus(); next.select(); } else el.blur();
 };
@@ -1239,8 +1241,8 @@ function refreshSelects() {
     sel.innerHTML = grouped; if (cur) sel.value = cur;
   }
   const posOpts = state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-  for (const id of ["pl_pos", "t_pos"]) {
-    const sel = document.getElementById(id); const cur = sel.value;
+  {
+    const sel = document.getElementById("t_pos"); const cur = sel.value;
     sel.innerHTML = posOpts; if (cur) sel.value = cur;
   }
   {
@@ -1553,12 +1555,20 @@ try {
   if (Array.isArray(d)) invDrafts = d;
   else if (d && d.counts) { invDrafts = [{ id: uid(), ...d }]; localStorage.removeItem("lanea-inv-draft"); }
 } catch {}
+// every sheet is now a matrix (product x location) — convert any pre-matrix draft
+for (const d of invDrafts) {
+  if (d.pos_id !== "ALL") {
+    const loc = d.pos_id || "wh";
+    d.counts = Object.fromEntries(Object.entries(d.counts || {}).map(([k, v]) => [k.includes("|") ? k : k + "|" + loc, v]));
+    d.pos_id = "ALL";
+  }
+}
 function saveInvDrafts() { localStorage.setItem(LS_INVDRAFT, JSON.stringify(invDrafts)); }
 const activeDraft = () => invDrafts.find(d => d.id === activeInv) || null;
 const invScopeName = posId => posId === "ALL" ? "All locations" : posId ? (posById(posId)?.name || "(deleted POS)") : "Warehouse";
 
 window.startInventory = () => {
-  const d = { id: uid(), date: gv("inv_date") || todayISO(), pos_id: gv("inv_scope") || null, counts: {} };
+  const d = { id: uid(), date: gv("inv_date") || todayISO(), pos_id: "ALL", counts: {} };
   invDrafts.push(d); saveInvDrafts();
   activeInv = d.id;
   renderInventory();
@@ -1572,12 +1582,6 @@ window.deleteInvDraft = id => {
   if (!confirm("Delete this DRAFT inventory? Its counts were never applied to stock.")) return;
   invDrafts = invDrafts.filter(d => d.id !== id);
   if (activeInv === id) activeInv = null;
-  saveInvDrafts(); renderInventory();
-};
-window.invCount = (pid, val) => {
-  const d = activeDraft(); if (!d) return;
-  if (val === "") delete d.counts[pid];
-  else d.counts[pid] = val;
   saveInvDrafts(); renderInventory();
 };
 window.invCountM = (pid, loc, val) => {
@@ -1612,51 +1616,30 @@ function renderInvTotals() {
     <span class="chip" style="background:${dValue >= 0 ? "#d9ecdd" : "#ffdad6"}">Value impact ${fmtE(dValue)}</span>`;
 }
 function renderInventory() {
-  const sel = document.getElementById("inv_scope");
-  { const cur = sel.value;
-    sel.innerHTML = '<option value="ALL">All locations — matrix</option><option value="">Warehouse only</option>'
-      + state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-    sel.value = cur || "ALL"; }
   const startEl = document.getElementById("invStart"), sheetEl = document.getElementById("invSheet");
   const invDraft = activeDraft();
   if (!invDraft) { startEl.style.display = ""; sheetEl.style.display = "none"; renderInvList(); return; }
   startEl.style.display = "none"; sheetEl.style.display = "";
   document.getElementById("invTitle").innerHTML =
-    `Fiche d'inventaire — ${esc(invScopeName(invDraft.pos_id))} — ${fmtD(invDraft.date)} <span class="chip" style="background:#fdeeca">DRAFT</span>`;
+    `Fiche d'inventaire — ${fmtD(invDraft.date)} <span class="chip" style="background:#fdeeca">DRAFT</span>`;
   const q = (gv("inv_search") || "").toLowerCase();
   const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q))
     .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  let h;
-  if (invDraft.pos_id === "ALL") {
-    // matrix sheet: rows = products, columns = warehouse + every POS
-    const locs = [{ key: "wh", name: "Warehouse" }, ...state.pos.map(p => ({ key: p.id, name: p.name }))];
-    h = `<table><tr><th>Product</th>` + locs.map(l => `<th class="num">${esc(l.name)}</th>`).join("") + `<th class="num">Diff</th></tr>`;
-    for (const p of list) {
-      let rowDiff = 0, any = false;
-      const cells = locs.map(l => {
-        const theo = l.key === "wh" ? warehouseOf(p) : posStockOf(p.id, l.key);
-        const v = invDraft.counts[p.id + "|" + l.key] ?? "";
-        if (v !== "" && isFinite(Number(v))) { rowDiff += Number(v) - theo; any = true; }
-        return `<td class="num"><input class="rin ${v !== "" ? "chg" : ""}" type="number" min="0" step="1" value="${v}" placeholder="—" style="width:68px"
-          onchange="invCountM('${p.id}','${l.key}',this.value)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
-          <div style="font-size:10px;color:var(--muted);margin-top:2px">theo ${fmtN(theo)}</div></td>`;
-      }).join("");
-      h += `<tr><td>${esc(p.name)}</td>${cells}<td class="num calc ${any && rowDiff !== 0 ? "neg" : ""}">${any ? (rowDiff > 0 ? "+" : "") + fmtN(rowDiff) : "—"}</td></tr>`;
-    }
-  } else {
-    const theoOf = p => invDraft.pos_id ? posStockOf(p.id, invDraft.pos_id) : warehouseOf(p);
-    h = `<table><tr><th>Product</th><th class="num">Theoretical</th><th class="num" style="width:130px">Counted (actual)</th><th class="num">Difference</th></tr>`;
-    for (const p of list) {
-      const theo = theoOf(p);
-      const v = invDraft.counts[p.id] ?? "";
-      const diff = v === "" ? null : Number(v) - theo;
-      h += `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtN(theo)}</td>
-        <td class="num"><input class="rin" type="number" min="0" step="1" value="${v}" placeholder="—" style="width:90px"
-          onchange="invCount('${p.id}',this.value)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"></td>
-        <td class="num calc ${diff != null && diff !== 0 ? "neg" : ""}">${diff == null ? "—" : (diff > 0 ? "+" : "") + fmtN(diff)}</td></tr>`;
-    }
+  // matrix sheet: rows = products, columns = warehouse + every POS
+  const locs = [{ key: "wh", name: "Warehouse" }, ...state.pos.map(p => ({ key: p.id, name: p.name }))];
+  let h = `<table><tr><th>Product</th>` + locs.map(l => `<th class="num">${esc(l.name)}</th>`).join("") + `<th class="num">Diff</th></tr>`;
+  for (const p of list) {
+    let rowDiff = 0, any = false;
+    const cells = locs.map(l => {
+      const theo = l.key === "wh" ? warehouseOf(p) : posStockOf(p.id, l.key);
+      const v = invDraft.counts[p.id + "|" + l.key] ?? "";
+      if (v !== "" && isFinite(Number(v))) { rowDiff += Number(v) - theo; any = true; }
+      return `<td class="num"><input class="rin ${v !== "" ? "chg" : ""}" type="number" min="0" step="1" value="${v}" placeholder="—" style="width:68px"
+        onchange="invCountM('${p.id}','${l.key}',this.value)"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">theo ${fmtN(theo)}</div></td>`;
+    }).join("");
+    h += `<tr><td>${esc(p.name)}</td>${cells}<td class="num calc ${any && rowDiff !== 0 ? "neg" : ""}">${any ? (rowDiff > 0 ? "+" : "") + fmtN(rowDiff) : "—"}</td></tr>`;
   }
   document.getElementById("invTable").innerHTML = h + "</table>";
   renderInvTotals();
