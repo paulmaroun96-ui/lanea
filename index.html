@@ -163,6 +163,18 @@
     .side-foot { display: none; }
     main { padding: 16px 14px 50px; }
   }
+  #authGate { position: fixed; inset: 0; background: var(--bg); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .auth-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow);
+    padding: 38px 34px; width: 100%; max-width: 390px; text-align: center; display: flex; flex-direction: column; gap: 10px;
+  }
+  .auth-card img { width: 96px; height: 96px; object-fit: contain; margin: 0 auto 2px; }
+  .auth-card .logo { font-size: 27px; letter-spacing: 6px; color: var(--gold); font-weight: 800; }
+  .auth-card .sub { font-size: 10px; letter-spacing: 2.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; margin-bottom: 12px; }
+  .auth-card input { padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--input-bg); font-family: inherit; font-size: 14px; }
+  .auth-card input:focus { outline: 2px solid var(--gold); border-color: var(--gold); }
+  .auth-card .btn { width: 100%; padding: 11px; font-size: 14px; }
+  .auth-link { background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; text-decoration: underline; margin-top: 8px; font-family: inherit; }
   @media print {
     aside, .no-print, form, .filters button { display: none !important; }
     body { background: #fff; } section.card { box-shadow: none; border: none; }
@@ -171,6 +183,21 @@
 </style>
 </head>
 <body>
+
+<div id="authGate" style="display:none">
+  <div class="auth-card">
+    <img src="logo.png" alt="" onerror="this.onerror=null;this.src='icon-192.png'">
+    <div class="logo">L&Acirc;NEA</div>
+    <div class="sub">Business Books</div>
+    <input id="auth_email" type="email" placeholder="Email" autocomplete="username">
+    <input id="auth_pass" type="password" placeholder="Password" autocomplete="current-password"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();gateSignIn()}">
+    <button class="btn gold" onclick="gateSignIn()">Sign in</button>
+    <button class="btn ghost" onclick="gateSignUp()">Create an account</button>
+    <div id="auth_note" style="min-height:18px;font-size:13px"></div>
+    <button class="auth-link" onclick="gateSkip()">Continue without an account — data stays in this browser only</button>
+  </div>
+</div>
 
 <aside>
   <div class="brand">
@@ -408,10 +435,16 @@
     <div class="scrollbox" id="priceList"></div>
   </section>
   <section class="card">
+    <h2>Sales log</h2>
+    <p class="hint">Every sale, with its total = quantity × selling price. Filter by POS, product or month — the summary follows the filters.</p>
     <div class="rowform no-print" style="margin-bottom:10px">
-      <label>Filter by POS<select id="sl_pos" onchange="renderSales()"><option value="">All</option></select></label>
+      <label>Point of sale<select id="sl_pos" onchange="renderSales()"><option value="">All</option></select></label>
+      <label>Product<select id="sl_prod" onchange="renderSales()"><option value="">All</option></select></label>
+      <label>Month<input type="month" id="sl_month" onchange="renderSales()"></label>
+      <button class="btn ghost small" type="button" onclick="document.getElementById('sl_month').value='';renderSales()">All months</button>
       <button class="btn ghost" onclick="exportSalesCSV()">Export CSV</button>
     </div>
+    <div id="salesSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
     <div class="scrollbox" id="salesTable"></div>
   </section>
   <section class="card"><h2>Gift log</h2><div class="scrollbox" id="giftsTable"></div></section>
@@ -1032,9 +1065,12 @@ function renderPos() {
     const units = sales.reduce((a, s) => a + Number(s.qty), 0);
     const priced = state.pos_prices.filter(r => r.pos_id === p.id).length;
     const held = state.products.reduce((a, pr) => a + posStockOf(pr.id, p.id), 0);
+    const ym = todayISO().slice(0, 7);
+    const monthRev = sales.filter(s => (s.date || "").slice(0, 7) === ym).reduce((a, s) => a + Number(s.qty) * Number(s.price_per_unit), 0);
+    const basket = sales.length ? rev / sales.length : 0;
     return `<div class="pos-tile">
       <div class="pos-name"><span class="ms">storefront</span>${esc(p.name)}</div>
-      <div class="pos-stats">${fmtE(rev)} · ${fmtN(units)} units · ${sales.length} sales<br>${priced} price${priced === 1 ? "" : "s"} set · <b>${fmtN(held)} units at POS</b></div>
+      <div class="pos-stats">${fmtE(rev)} total · ${fmtE(monthRev)} this month<br>${fmtN(units)} units · ${sales.length} sales · avg ${fmtE(basket)}/sale<br>${priced} price${priced === 1 ? "" : "s"} set · <b>${fmtN(held)} units at POS</b></div>
       <div class="no-print" style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn small ghost" onclick="openPriceList('${p.id}')">Price list</button>
         <button class="btn small ghost" onclick="renamePos('${p.id}')">Rename</button>
@@ -1080,10 +1116,24 @@ window.delPos = async id => {
 /* (sale & gift hints now live inside the daily report — see nrSaleSync / nrGiftSync) */
 function renderSales() {
   const posFilter = document.getElementById("sl_pos").value;
+  const prodFilter = gv("sl_prod"), month = gv("sl_month");
   const el = document.getElementById("salesTable");
-  const rows = state.sales.filter(s => !posFilter || s.pos_id === posFilter)
+  const rows = state.sales.filter(s => (!posFilter || s.pos_id === posFilter)
+      && (!prodFilter || s.product_id === prodFilter)
+      && (!month || (s.date || "").slice(0, 7) === month))
     .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  if (!rows.length) { el.innerHTML = '<p class="empty">No sales logged yet.</p>'; return; }
+  const sum = document.getElementById("salesSummary");
+  if (!rows.length) { sum.innerHTML = ""; el.innerHTML = '<p class="empty">No sales match these filters.</p>'; return; }
+  {
+    const units = rows.reduce((a, s) => a + Number(s.qty), 0);
+    const rev = rows.reduce((a, s) => a + Number(s.qty) * Number(s.price_per_unit), 0);
+    const cogs = rows.reduce((a, s) => a + Number(s.qty) * avgCostOf(s.product_id), 0);
+    sum.innerHTML =
+      `<span class="chip" style="background:#d9eaee">${fmtN(rows.length)} sale${rows.length === 1 ? "" : "s"}</span>` +
+      `<span class="chip" style="background:#d9ecdd">Revenue ${fmtE(rev)} · ${fmtN(units)} units</span>` +
+      `<span class="chip" style="background:#f3f4f6">COGS ${fmtE(cogs)}</span>` +
+      `<span class="chip" style="background:${rev - cogs >= 0 ? "#d9ecdd" : "#ffdad6"}">Gross ${fmtE(rev - cogs)} (${fmtP(rev > 0 ? (rev - cogs) / rev : null)})</span>`;
+  }
   let h = `<table><tr><th>Date</th><th>POS</th><th>Product</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th><th class="num">COGS</th><th class="num">Gross</th><th class="no-print"></th></tr>`;
   let tQ = 0, tT = 0, tC = 0;
   for (const s of rows) {
@@ -1250,7 +1300,7 @@ function refreshSelects() {
     sel.innerHTML = '<option value="wh">Overview (warehouse + all POS)</option>' + posOpts;
     if (cur) sel.value = cur;
   }
-  for (const [id, opts] of [["f_pos", posOpts], ["sl_pos", posOpts], ["f_prod", prodOpts]]) {
+  for (const [id, opts] of [["f_pos", posOpts], ["sl_pos", posOpts], ["f_prod", prodOpts], ["sl_prod", prodOpts]]) {
     const sel = document.getElementById(id); const cur = sel.value;
     sel.innerHTML = '<option value="">All</option>' + opts; sel.value = cur;
   }
@@ -2129,6 +2179,45 @@ function setBadge() {
 function showBanner(msg) { const b = document.getElementById("banner"); b.innerHTML = msg; b.style.display = ""; }
 function hideBanner() { document.getElementById("banner").style.display = "none"; }
 
+/* ================= login page ================= */
+function showGate() { document.getElementById("authGate").style.display = ""; }
+function hideGate() { document.getElementById("authGate").style.display = "none"; }
+window.gateSignIn = async () => {
+  const note = document.getElementById("auth_note");
+  if (!client) { note.innerHTML = '<span class="err-note">Cannot reach the cloud — check your connection and reload.</span>'; return; }
+  const email = gv("auth_email").trim(), password = document.getElementById("auth_pass").value;
+  if (!email || !password) { note.innerHTML = '<span class="err-note">Enter your email and password.</span>'; return; }
+  note.textContent = "Signing in…";
+  const { data, error } = await client.auth.signInWithPassword({ email, password });
+  if (error) { note.innerHTML = `<span class="err-note">${esc(error.message)}</span>`; return; }
+  note.textContent = "";
+  hideGate(); hideBanner();
+  await enterRemote(data.session);
+  toast("Signed in ✓ — cloud sync on");
+};
+window.gateSignUp = async () => {
+  const note = document.getElementById("auth_note");
+  if (!client) { note.innerHTML = '<span class="err-note">Cannot reach the cloud — check your connection and reload.</span>'; return; }
+  const email = gv("auth_email").trim(), password = document.getElementById("auth_pass").value;
+  if (!email || password.length < 6) { note.innerHTML = '<span class="err-note">Enter your email and a password of at least 6 characters.</span>'; return; }
+  note.textContent = "Creating your account…";
+  const { data, error } = await client.auth.signUp({ email, password });
+  if (error) { note.innerHTML = `<span class="err-note">${esc(error.message)}</span>`; return; }
+  if (data.session) {
+    note.textContent = "";
+    hideGate(); hideBanner();
+    await enterRemote(data.session);
+    toast("Account created ✓ — cloud sync on");
+  } else {
+    note.innerHTML = '<span class="ok-note">Account created ✓ — check your email for the confirmation link, then sign in here.</span>';
+  }
+};
+window.gateSkip = () => {
+  localStorage.setItem("lanea-skip-login", "1");
+  hideGate();
+  showBanner('You are signed out — data stays in this browser only. Sign in from the <b>Settings</b> tab to sync to the cloud.');
+};
+
 async function initSupabase() {
   const cfg = getCfg();
   const note = document.getElementById("sb_cfg_note");
@@ -2139,11 +2228,13 @@ async function initSupabase() {
     await loadSupabaseLib();
     client = window.supabase.createClient(cfg.url, cfg.key);
     const { data: { session } } = await client.auth.getSession();
-    if (session) await enterRemote(session);
+    if (session) { hideGate(); await enterRemote(session); }
     else {
       document.getElementById("sb_auth").style.display = "";
       note.innerHTML = '<span class="ok-note">Connected to Supabase — sign in below to sync.</span>';
-      showBanner('You are signed out — data stays in this browser only. Sign in from the <b>Settings</b> tab to sync to the cloud.');
+      if (localStorage.getItem("lanea-skip-login") === "1") {
+        showBanner('You are signed out — data stays in this browser only. Sign in from the <b>Settings</b> tab to sync to the cloud.');
+      } else showGate();
     }
   } catch (e) { note.innerHTML = `<span class="err-note">${esc(e.message)}</span>`; }
 }
@@ -2197,6 +2288,8 @@ window.signOut = async () => {
   document.getElementById("sb_auth").style.display = "";
   for (const k of KINDS) state[k] = [];
   loadLocal(); setBadge(); render();
+  localStorage.removeItem("lanea-skip-login");
+  showGate();
 };
 window.pushLocalToCloud = async () => {
   if (!remote) { alert("Sign in first."); return; }
