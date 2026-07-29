@@ -55,6 +55,9 @@
   .side-foot { padding: 14px 20px; border-top: 1px solid var(--line); font-size: 11.5px; }
   .conn { display: inline-block; padding: 4px 12px; border-radius: 999px; background: var(--input-bg); color: var(--muted); font-weight: 600; }
   .conn.remote { background: #d9f2e2; color: #156a3a; }
+  .curswitch { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .curswitch .curbtn { border: none; background: var(--panel); padding: 6px 11px; cursor: pointer; font-family: inherit; font-size: 12px; color: var(--muted); }
+  .curswitch .curbtn.on { background: var(--gold); color: #fff; font-weight: 700; }
 
   /* ---------- main ---------- */
   main { flex: 1; min-width: 0; padding: 26px 30px 60px; }
@@ -223,7 +226,14 @@
     <button data-tab="set"><span class="ms">settings</span>Settings</button>
     <button data-tab="help"><span class="ms">help</span>Guide</button>
   </nav>
-  <div class="side-foot"><span id="connBadge" class="conn">Local data</span></div>
+  <div class="side-foot">
+    <div class="curswitch no-print" style="margin-bottom:8px" title="Display currency">
+      <button class="curbtn" data-cur="native" onclick="setViewCur('native')" title="Mixed — sales in $, costs in €">$/€</button>
+      <button class="curbtn" data-cur="EUR" onclick="setViewCur('EUR')" title="Everything in euros">€</button>
+      <button class="curbtn" data-cur="USD" onclick="setViewCur('USD')" title="Everything in dollars">$</button>
+    </div>
+    <span id="connBadge" class="conn">Local data</span>
+  </div>
 </aside>
 
 <main>
@@ -237,6 +247,11 @@
     <button class="btn ghost small" onclick="setPeriod('this')">This month</button>
     <button class="btn ghost small" onclick="setPeriod('last')">Last month</button>
     <button class="btn ghost small" onclick="setPeriod('all')">All time</button>
+    <div class="curswitch" title="Display currency">
+      <button class="curbtn" data-cur="native" onclick="setViewCur('native')">$/€</button>
+      <button class="curbtn" data-cur="EUR" onclick="setViewCur('EUR')">€</button>
+      <button class="curbtn" data-cur="USD" onclick="setViewCur('USD')">$</button>
+    </div>
     <label>From month<input type="month" id="f_from"></label>
     <label>To month<input type="month" id="f_to"></label>
     <label>Point of sale<select id="f_pos"><option value="">All</option></select></label>
@@ -299,6 +314,7 @@
     <div class="rowform">
       <label>Date<input id="inv_date" type="date"></label>
       <button class="btn gold" type="button" onclick="startInventory()">Open inventory sheet</button>
+      <button class="btn ghost" type="button" onclick="startInventoryPrefilled()">Open sheet prefilled from LANEA master (Actual Inventory)</button>
     </div>
   </section>
   <section class="card" id="invSheet" style="display:none">
@@ -441,9 +457,10 @@
   </section>
   <section class="card">
     <h2>Initial inventory — bulk entry</h2>
-    <p class="hint">Type the stock you already had before tracking (and its cost per unit). Each change saves instantly; average cost blends it with the invoice purchases.</p>
+    <p class="hint"><b>Only for stock you owned BEFORE the imported invoices.</b> Do not type your current physical inventory here — that goes into a fiche d'inventaire (Inventory tab), otherwise units are counted twice. Each change saves instantly; average cost blends with the invoice purchases.</p>
     <div class="rowform no-print" style="margin-bottom:8px">
       <label>Search<input id="ii_search" oninput="renderInitInv()" placeholder="product…" style="min-width:220px"></label>
+      <button class="btn ghost" type="button" onclick="resetInitials()">Reset ALL initial stock to 0</button>
     </div>
     <div class="scrollbox" id="initInvTable"></div>
   </section>
@@ -570,7 +587,8 @@
     to reality — so stock = <b>last count + purchases − sales − gifts − losses since</b>. At all times: <b>Global stock = Warehouse + all points of sale</b>, and every product's value is carried at its
     <b>average cost</b> (invoice discounts and shipping included).</p>
     <p style="line-height:1.8"><b>Currencies:</b> you buy in <b>€</b> and sell in <b>$</b>. Selling prices, sale totals and revenue show in $;
-    costs, expenses, gross and net profit show in € — revenue is converted at the exchange rate set in Settings (default 1 € = $1.20).
+    costs, expenses, gross and net profit show in € — converted at the exchange rate set in Settings (default 1 € = $1.15).
+    The <b>$/€ · € · $ switch</b> (sidebar and dashboard) re-displays every amount in one single currency at that rate whenever you want a one-currency view.
     Gift items (testers, coffrets, samples) carry a $0 price and sort at the bottom of every product list.</p>
   </section>
   <section class="card">
@@ -755,8 +773,18 @@ const fmtE = v => v < 0 ? `(${eurF.format(Math.abs(v))})` : eurF.format(v);
 /* selling happens in USD, purchasing in EUR — revenue converts at USD_RATE for the P&L */
 const usdF = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const fmtU = v => v < 0 ? `(${usdF.format(Math.abs(v))})` : usdF.format(v);
-let USD_RATE = Number(localStorage.getItem("lanea-usd-rate") || 1.20);   // USD per 1 EUR
+let USD_RATE = Number(localStorage.getItem("lanea-usd-rate") || 1.15);   // USD per 1 EUR
 const toE = v => USD_RATE > 0 ? v / USD_RATE : v;
+/* display currency switch: native ($ sales / € costs), all-EUR or all-USD at USD_RATE */
+let VIEW_CUR = localStorage.getItem("lanea-view-cur") || "native";
+const showE = v => VIEW_CUR === "USD" ? fmtU(v * USD_RATE) : fmtE(v);   // EUR-stored amounts
+const showU = v => VIEW_CUR === "EUR" ? fmtE(v / USD_RATE) : fmtU(v);   // USD-stored amounts
+window.setViewCur = c => {
+  VIEW_CUR = c;
+  localStorage.setItem("lanea-view-cur", c);
+  document.querySelectorAll(".curbtn").forEach(b => b.classList.toggle("on", b.dataset.cur === c));
+  render();
+};
 const fmtP = v => (v == null || !isFinite(v)) ? "—" : (v * 100).toFixed(1) + "%";
 const fmtD = iso => { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; };
 const fmtN = v => Number(v).toLocaleString("en-IE");
@@ -970,13 +998,13 @@ function renderDash() {
     .filter(x => (x.c.iq + x.c.purQty) > 0 && x.c.stock <= LOW_STOCK)
     .sort((a, b) => a.c.stock - b.c.stock);
   const cards = [
-    ["payments", "Revenue", fmtU(revenue), `≈ ${fmtE(revEUR)} · ${fmtN(units)} units`, ""],
-    ["shopping_cart", "COGS", fmtE(cogs), "avg cost basis (€)", ""],
-    ["trending_up", "Gross profit", fmtE(gross), fmtP(revEUR > 0 ? gross / revEUR : null) + " margin", ""],
-    ["account_balance_wallet", "Expenses", fmtE(expTotal), `${expenses.length} entries`, ""],
-    ["report", "Losses", fmtE(lossVal), `${fmtN(lossUnits)} units written off`, lossVal > 0 ? "red" : ""],
-    ["savings", "Net profit", fmtE(net), fmtP(revEUR > 0 ? net / revEUR : null) + " net margin", ""],
-    ["inventory_2", "Stock on hand", fmtN(stockUnits), `${fmtE(stockValue)} at cost · ≈ ${fmtU(stockRetail)} at retail`, ""],
+    ["payments", "Revenue", showU(revenue), `≈ ${showE(revEUR)} · ${fmtN(units)} units`, ""],
+    ["shopping_cart", "COGS", showE(cogs), "avg cost basis (€)", ""],
+    ["trending_up", "Gross profit", showE(gross), fmtP(revEUR > 0 ? gross / revEUR : null) + " margin", ""],
+    ["account_balance_wallet", "Expenses", showE(expTotal), `${expenses.length} entries`, ""],
+    ["report", "Losses", showE(lossVal), `${fmtN(lossUnits)} units written off`, lossVal > 0 ? "red" : ""],
+    ["savings", "Net profit", showE(net), fmtP(revEUR > 0 ? net / revEUR : null) + " net margin", ""],
+    ["inventory_2", "Stock on hand", fmtN(stockUnits), `${showE(stockValue)} at cost · ≈ ${showU(stockRetail)} at retail`, ""],
     ["warning", "Low stock", fmtN(lowList.length), `products at ≤ ${LOW_STOCK} units`, lowList.length ? "red" : ""],
   ];
   document.getElementById("dashCards").innerHTML = cards.map(([ic, k, v, s, cls]) =>
@@ -1002,16 +1030,16 @@ function renderDash() {
     for (const [ym, v] of rows) {
       const rE = toE(v.revenue);
       const g = rE - v.cogs, n = g - v.expenses - v.losses; cum += n; tR += v.revenue; tC += v.cogs; tE += v.expenses; tL += v.losses;
-      h += `<tr><td>${monthLabel(ym)}</td><td class="num calc">${fmtU(v.revenue)}</td><td class="num calc">${fmtE(v.cogs)}</td>
-        <td class="num calc">${fmtE(g)}</td><td class="num calc">${fmtE(v.expenses)}</td>
-        <td class="num calc ${v.losses > 0 ? "neg" : ""}">${fmtE(v.losses)}</td>
-        <td class="num calc ${n < 0 ? "neg" : ""}">${fmtE(n)}</td><td class="num calc">${fmtP(rE > 0 ? n / rE : null)}</td>
-        <td class="num calc ${cum < 0 ? "neg" : ""}">${fmtE(cum)}</td></tr>`;
+      h += `<tr><td>${monthLabel(ym)}</td><td class="num calc">${showU(v.revenue)}</td><td class="num calc">${showE(v.cogs)}</td>
+        <td class="num calc">${showE(g)}</td><td class="num calc">${showE(v.expenses)}</td>
+        <td class="num calc ${v.losses > 0 ? "neg" : ""}">${showE(v.losses)}</td>
+        <td class="num calc ${n < 0 ? "neg" : ""}">${showE(n)}</td><td class="num calc">${fmtP(rE > 0 ? n / rE : null)}</td>
+        <td class="num calc ${cum < 0 ? "neg" : ""}">${showE(cum)}</td></tr>`;
     }
     const tG = toE(tR) - tC, tN = tG - tE - tL;
-    h += `<tr class="total"><td>TOTAL</td><td class="num">${fmtU(tR)}</td><td class="num">${fmtE(tC)}</td><td class="num">${fmtE(tG)}</td>
-      <td class="num">${fmtE(tE)}</td><td class="num ${tL > 0 ? "neg" : ""}">${fmtE(tL)}</td>
-      <td class="num ${tN < 0 ? "neg" : ""}">${fmtE(tN)}</td>
+    h += `<tr class="total"><td>TOTAL</td><td class="num">${showU(tR)}</td><td class="num">${showE(tC)}</td><td class="num">${showE(tG)}</td>
+      <td class="num">${showE(tE)}</td><td class="num ${tL > 0 ? "neg" : ""}">${showE(tL)}</td>
+      <td class="num ${tN < 0 ? "neg" : ""}">${showE(tN)}</td>
       <td class="num">${fmtP(toE(tR) > 0 ? tN / toE(tR) : null)}</td><td></td></tr></table>`;
     document.getElementById("dashMonthly").innerHTML = h;
   }
@@ -1028,8 +1056,8 @@ function renderDash() {
       posRows.map(([k, v]) => {
         const rE = toE(v.revenue), g = rE - v.cogs;
         return `<tr><td>${k === "none" ? "<i>No POS set</i>" : esc(posById(k)?.name || "(deleted)")}</td><td class="num calc">${fmtN(v.units)}</td>
-          <td class="num calc">${fmtU(v.revenue)}</td><td class="num calc">${fmtE(v.cogs)}</td>
-          <td class="num calc ${g < 0 ? "neg" : ""}">${fmtE(g)}</td><td class="num calc">${fmtP(rE > 0 ? g / rE : null)}</td></tr>`;
+          <td class="num calc">${showU(v.revenue)}</td><td class="num calc">${showE(v.cogs)}</td>
+          <td class="num calc ${g < 0 ? "neg" : ""}">${showE(g)}</td><td class="num calc">${fmtP(rE > 0 ? g / rE : null)}</td></tr>`;
       }).join("") + "</table>"
     : '<p class="empty">No sales in this selection.</p>';
 
@@ -1039,9 +1067,9 @@ function renderDash() {
   const catRows = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
   document.getElementById("dashCats").innerHTML = catRows.length
     ? "<table>" + catRows.map(([c, v]) =>
-        `<tr><td><span class="chip" style="background:${CAT_CHIPS[c] || "#f3f4f6"}">${esc(c)}</span></td><td class="num calc">${fmtE(v)}</td>
+        `<tr><td><span class="chip" style="background:${CAT_CHIPS[c] || "#f3f4f6"}">${esc(c)}</span></td><td class="num calc">${showE(v)}</td>
          <td class="num calc">${fmtP(expTotal > 0 ? v / expTotal : null)}</td></tr>`).join("") +
-      `<tr class="total"><td>TOTAL</td><td class="num">${fmtE(expTotal)}</td><td></td></tr></table>`
+      `<tr class="total"><td>TOTAL</td><td class="num">${showE(expTotal)}</td><td></td></tr></table>`
     : '<p class="empty">No expenses in this selection.</p>';
 
   // top products
@@ -1058,7 +1086,7 @@ function renderDash() {
       top.map(([id, v]) => {
         const rE = toE(v.revenue), g = rE - v.cogs;
         return `<tr><td>${prodLabelById(id)}</td><td class="num calc">${fmtN(v.units)}</td>
-          <td class="num calc">${fmtU(v.revenue)}</td><td class="num calc ${g < 0 ? "neg" : ""}">${fmtE(g)}</td>
+          <td class="num calc">${showU(v.revenue)}</td><td class="num calc ${g < 0 ? "neg" : ""}">${showE(g)}</td>
           <td class="num calc">${fmtP(rE > 0 ? g / rE : null)}</td></tr>`;
       }).join("") + "</table>"
     : '<p class="empty">No sales in this selection.</p>';
@@ -1120,14 +1148,14 @@ function renderProducts() {
       : c.stock <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
     h += `<tr><td>${prodLabel(p)}</td><td style="color:var(--muted)">${esc(p.ref || "")}</td>
       <td class="num">${fmtN(c.iq)}</td><td class="num calc">${fmtN(c.purQty)}</td>
-      <td class="num calc">${fmtE(c.avgCost)}</td><td class="num calc">${fmtN(c.sold)}</td>
+      <td class="num calc">${showE(c.avgCost)}</td><td class="num calc">${fmtN(c.sold)}</td>
       <td class="num calc">${fmtN(c.gifted)}</td><td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td>
-      <td>${st}</td><td class="num calc">${fmtE(c.stockValue)}</td>
+      <td>${st}</td><td class="num calc">${showE(c.stockValue)}</td>
       <td class="no-print"><button class="btn small ghost" onclick="editProduct('${p.id}')">Edit</button>
         <button class="btn small danger" onclick="delProduct('${p.id}')">Del</button></td></tr>`;
   }
   h += `<tr class="total"><td>TOTAL (${list.length})</td><td></td><td></td><td></td><td></td><td></td><td></td>
-    <td class="num">${fmtN(tStock)}</td><td></td><td class="num">${fmtE(tVal)}</td><td class="no-print"></td></tr></table>`;
+    <td class="num">${fmtN(tStock)}</td><td></td><td class="num">${showE(tVal)}</td><td class="no-print"></td></tr></table>`;
   el.innerHTML = h;
 }
 
@@ -1148,11 +1176,11 @@ function renderPurchases() {
     const date = lines[0].date;
     const rows = lines.map(l => `<tr><td>${prodLabelById(l.product_id)}</td>
       <td class="num">${fmtN(l.qty)}</td><td class="num">${eurF.format(Number(l.unit_cost))}</td>
-      <td class="num calc">${fmtE(Number(l.qty) * Number(l.unit_cost))}</td>
+      <td class="num calc">${showE(Number(l.qty) * Number(l.unit_cost))}</td>
       <td class="no-print"><button class="btn small danger" onclick="delRow('purchases','${l.id}')">Del</button></td></tr>`).join("");
     return `<details class="inv"><summary><span class="ref">${esc(ref)}</span>
       <span class="meta">${fmtD(date)}</span><span class="meta">${lines.length} lines</span>
-      <span class="meta">${fmtN(units)} units</span><span style="margin-left:auto;font-weight:700">${fmtE(total)}</span></summary>
+      <span class="meta">${fmtN(units)} units</span><span style="margin-left:auto;font-weight:700">${showE(total)}</span></summary>
       <div class="lines"><table><tr><th>Product</th><th class="num">Units</th><th class="num">Cost/unit</th><th class="num">Total</th><th class="no-print"></th></tr>${rows}</table></div></details>`;
   }).join("");
 }
@@ -1175,7 +1203,7 @@ function renderPos() {
     const basket = sales.length ? rev / sales.length : 0;
     return `<div class="pos-tile">
       <div class="pos-name"><span class="ms">storefront</span>${esc(p.name)}</div>
-      <div class="pos-stats">${fmtU(rev)} total · ${fmtU(monthRev)} this month<br>${fmtN(units)} units · ${sales.length} sales · avg ${fmtU(basket)}/sale<br>${priced} price${priced === 1 ? "" : "s"} set · <b>${fmtN(held)} units at POS</b></div>
+      <div class="pos-stats">${showU(rev)} total · ${showU(monthRev)} this month<br>${fmtN(units)} units · ${sales.length} sales · avg ${showU(basket)}/sale<br>${priced} price${priced === 1 ? "" : "s"} set · <b>${fmtN(held)} units at POS</b></div>
       <div class="no-print" style="display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn small ghost" onclick="openPriceList('${p.id}')">Price list</button>
         <button class="btn small ghost" onclick="renamePos('${p.id}')">Rename</button>
@@ -1236,9 +1264,9 @@ function renderSales() {
     const g = toE(rev) - cogs;
     sum.innerHTML =
       `<span class="chip" style="background:#d9eaee">${fmtN(rows.length)} sale${rows.length === 1 ? "" : "s"}</span>` +
-      `<span class="chip" style="background:#d9ecdd">Revenue ${fmtU(rev)} · ${fmtN(units)} units</span>` +
-      `<span class="chip" style="background:#f3f4f6">COGS ${fmtE(cogs)}</span>` +
-      `<span class="chip" style="background:${g >= 0 ? "#d9ecdd" : "#ffdad6"}">Gross ${fmtE(g)} (${fmtP(toE(rev) > 0 ? g / toE(rev) : null)})</span>`;
+      `<span class="chip" style="background:#d9ecdd">Revenue ${showU(rev)} · ${fmtN(units)} units</span>` +
+      `<span class="chip" style="background:#f3f4f6">COGS ${showE(cogs)}</span>` +
+      `<span class="chip" style="background:${g >= 0 ? "#d9ecdd" : "#ffdad6"}">Gross ${showE(g)} (${fmtP(toE(rev) > 0 ? g / toE(rev) : null)})</span>`;
   }
   let h = `<table><tr><th>Date</th><th>POS</th><th>Product</th><th class="num">Qty</th><th class="num">Price ($)</th><th class="num">Total ($)</th><th class="num">COGS (€)</th><th class="num">Gross (€)</th><th class="no-print"></th></tr>`;
   let tQ = 0, tT = 0, tC = 0;
@@ -1248,14 +1276,14 @@ function renderSales() {
     tQ += q; tT += total; tC += cogs;
     h += `<tr><td>${fmtD(s.date)}</td><td>${esc(posById(s.pos_id)?.name || "—")}</td><td>${prodLabelById(s.product_id)}</td>
       <td class="num">${q}</td><td class="num">${usdF.format(Number(s.price_per_unit))}</td>
-      <td class="num calc">${fmtU(total)}</td><td class="num calc">${fmtE(cogs)}</td>
-      <td class="num calc ${g < 0 ? "neg" : ""}">${fmtE(g)}</td>
+      <td class="num calc">${showU(total)}</td><td class="num calc">${showE(cogs)}</td>
+      <td class="num calc ${g < 0 ? "neg" : ""}">${showE(g)}</td>
       <td class="no-print"><button class="btn small ghost" onclick="editSale('${s.id}')">Edit</button>
         <button class="btn small danger" onclick="delRow('sales','${s.id}')">Del</button></td></tr>`;
   }
   const tG = toE(tT) - tC;
   h += `<tr class="total"><td>TOTAL</td><td></td><td></td><td class="num">${fmtN(tQ)}</td><td></td>
-    <td class="num">${fmtU(tT)}</td><td class="num">${fmtE(tC)}</td><td class="num ${tG < 0 ? "neg" : ""}">${fmtE(tG)}</td><td class="no-print"></td></tr></table>`;
+    <td class="num">${showU(tT)}</td><td class="num">${showE(tC)}</td><td class="num ${tG < 0 ? "neg" : ""}">${showE(tG)}</td><td class="no-print"></td></tr></table>`;
   el.innerHTML = h;
 }
 let priceDraft = {};   // "posId|prodId" -> typed value, until "Save prices"
@@ -1285,7 +1313,7 @@ window.renderPriceList = () => {
     + state.pos.map(p => `<th class="num">${esc(p.name)} ($)</th>`).join("") + `</tr>`;
   for (const p of list) {
     const c = productCalc(p);
-    h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtE(c.avgCost)}</td>`
+    h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${showE(c.avgCost)}</td>`
       + state.pos.map(pos => {
           const key = pos.id + "|" + p.id;
           const saved = priceFor(pos.id, p.id);
@@ -1362,7 +1390,7 @@ function renderGifts() {
   let h = `<table><tr><th>Date</th><th>Product</th><th class="num">Qty</th><th class="num">Cost value</th><th>Note</th><th class="no-print"></th></tr>`;
   for (const g of rows) {
     h += `<tr><td>${fmtD(g.date)}</td><td>${prodLabelById(g.product_id)}</td>
-      <td class="num">${g.qty}</td><td class="num calc">${fmtE(Number(g.qty) * avgCostOf(g.product_id))}</td><td>${esc(g.note)}</td>
+      <td class="num">${g.qty}</td><td class="num calc">${showE(Number(g.qty) * avgCostOf(g.product_id))}</td><td>${esc(g.note)}</td>
       <td class="no-print"><button class="btn small ghost" onclick="editGift('${g.id}')">Edit</button>
         <button class="btn small danger" onclick="delRow('gifts','${g.id}')">Del</button></td></tr>`;
   }
@@ -1383,11 +1411,11 @@ function renderExpenses() {
       t += Number(e.amount);
       h += `<tr><td>${fmtD(e.date)}</td><td>${esc(e.description)}</td>
         <td><span class="chip" style="background:${CAT_CHIPS[e.category] || "#f3f4f6"}">${esc(e.category)}</span></td>
-        <td class="num">${fmtE(Number(e.amount))}</td>
+        <td class="num">${showE(Number(e.amount))}</td>
         <td class="no-print"><button class="btn small ghost" onclick="editExpense('${e.id}')">Edit</button>
           <button class="btn small danger" onclick="delRow('expenses','${e.id}')">Del</button></td></tr>`;
     }
-    h += `<tr class="total"><td colspan="3">TOTAL</td><td class="num">${fmtE(t)}</td><td class="no-print"></td></tr></table>`;
+    h += `<tr class="total"><td colspan="3">TOTAL</td><td class="num">${showE(t)}</td><td class="no-print"></td></tr></table>`;
     el.innerHTML = h;
   }
   const byCat = {};
@@ -1395,8 +1423,8 @@ function renderExpenses() {
   const total = Object.values(byCat).reduce((a, v) => a + v, 0);
   document.getElementById("expenseCats").innerHTML = Object.keys(byCat).length
     ? "<table>" + Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([c, v]) =>
-        `<tr><td><span class="chip" style="background:${CAT_CHIPS[c] || "#f3f4f6"}">${esc(c)}</span></td><td class="num calc">${fmtE(v)}</td></tr>`).join("") +
-      `<tr class="total"><td>TOTAL</td><td class="num">${fmtE(total)}</td></tr></table>`
+        `<tr><td><span class="chip" style="background:${CAT_CHIPS[c] || "#f3f4f6"}">${esc(c)}</span></td><td class="num calc">${showE(v)}</td></tr>`).join("") +
+      `<tr class="total"><td>TOTAL</td><td class="num">${showE(total)}</td></tr></table>`
     : '<p class="empty">—</p>';
   const byMonth = {};
   for (const e of state.expenses) if (e.date) byMonth[e.date.slice(0, 7)] = (byMonth[e.date.slice(0, 7)] || 0) + Number(e.amount);
@@ -1404,7 +1432,7 @@ function renderExpenses() {
   let cum = 0;
   document.getElementById("expenseMonths").innerHTML = keys.length
     ? `<table><tr><th>Month</th><th class="num">Total</th><th class="num">Cumulative</th></tr>` +
-      keys.map(k => { cum += byMonth[k]; return `<tr><td>${monthLabel(k)}</td><td class="num calc">${fmtE(byMonth[k])}</td><td class="num calc">${fmtE(cum)}</td></tr>`; }).join("") + "</table>"
+      keys.map(k => { cum += byMonth[k]; return `<tr><td>${monthLabel(k)}</td><td class="num calc">${showE(byMonth[k])}</td><td class="num calc">${showE(cum)}</td></tr>`; }).join("") + "</table>"
     : '<p class="empty">—</p>';
 }
 
@@ -1506,19 +1534,19 @@ function renderDay() {
   const chip = (label, bg) => `<span class="chip" style="background:${bg};padding:6px 14px">${label}</span>`;
   const dayGrossE = toE(rev) - cogs;
   document.getElementById("daySummary").innerHTML =
-    chip(`Revenue ${fmtU(rev)} · ${fmtN(units)} units`, "#d9ecdd") +
-    chip(`Gross profit ${fmtE(dayGrossE)}`, "#d9eaee") +
+    chip(`Revenue ${showU(rev)} · ${fmtN(units)} units`, "#d9ecdd") +
+    chip(`Gross profit ${showE(dayGrossE)}`, "#d9eaee") +
     chip(`Gifts ${fmtN(dayGifts.reduce((a, g) => a + Number(g.qty), 0))} units`, "#fdeeca") +
-    chip(`Expenses ${fmtE(exp)}`, "#ffdad6") +
-    chip(`Day net ${fmtE(dayGrossE - exp)}`, dayGrossE - exp >= 0 ? "#d9ecdd" : "#ffdad6");
+    chip(`Expenses ${showE(exp)}`, "#ffdad6") +
+    chip(`Day net ${showE(dayGrossE - exp)}`, dayGrossE - exp >= 0 ? "#d9ecdd" : "#ffdad6");
   const rows = [];
   for (const s of daySales) rows.push({ kind: "sales", id: s.id, type: "Sale", bg: "#d9ecdd",
     desc: `${prodLabelById(s.product_id)} × ${s.qty} @ ${usdF.format(Number(s.price_per_unit))} — ${esc(posById(s.pos_id)?.name || "no POS")}`,
-    disp: fmtU(Number(s.qty) * Number(s.price_per_unit)), neg: false, fn: "editSale" });
+    disp: showU(Number(s.qty) * Number(s.price_per_unit)), neg: false, fn: "editSale" });
   for (const g of dayGifts) rows.push({ kind: "gifts", id: g.id, type: "Gift", bg: "#fdeeca",
     desc: `${prodLabelById(g.product_id)} × ${g.qty}${g.note ? " — " + esc(g.note) : ""}`, disp: "—", neg: false, fn: "editGift" });
   for (const e of dayExp) rows.push({ kind: "expenses", id: e.id, type: "Expense", bg: CAT_CHIPS[e.category] || "#f3f4f6",
-    desc: `${esc(e.description)} (${esc(e.category)})`, disp: fmtE(-Number(e.amount)), neg: true, fn: "editExpense" });
+    desc: `${esc(e.description)} (${esc(e.category)})`, disp: showE(-Number(e.amount)), neg: true, fn: "editExpense" });
   const el = document.getElementById("dayList");
   el.innerHTML = rows.length
     ? "<table>" + rows.map(r =>
@@ -1561,7 +1589,7 @@ function renderReport() {
       <td><select class="rin" onchange="updDraft('sales',${i},'product_id',this.value)">${prodOpt(d.product_id)}</select></td>
       <td class="num"><input class="rin" type="number" min="1" step="1" value="${d.qty}" style="width:72px" onchange="updDraft('sales',${i},'qty',this.value)"></td>
       <td class="num"><input class="rin" type="number" min="0" step="0.01" value="${d.price_per_unit}" style="width:95px" onchange="updDraft('sales',${i},'price_per_unit',this.value)"></td>
-      <td class="num calc">${fmtU(Number(d.qty) * Number(d.price_per_unit))}</td>
+      <td class="num calc">${showU(Number(d.qty) * Number(d.price_per_unit))}</td>
       <td><button class="btn small danger" title="Remove line" onclick="removeDraft('sales',${i})">✕</button></td></tr>`;
   });
   h += `<tr class="newrow">
@@ -1613,11 +1641,11 @@ function renderReport() {
   const giftU = draft.gifts.reduce((a, d) => a + Number(d.qty), 0);
   const repGrossE = toE(rev) - cogs;
   h += `<div class="rep-tot">
-    <span class="chip" style="background:#d9ecdd">Sales ${fmtU(rev)} · ${fmtN(units)} units</span>
-    <span class="chip" style="background:#d9eaee">Gross profit ${fmtE(repGrossE)}</span>
+    <span class="chip" style="background:#d9ecdd">Sales ${showU(rev)} · ${fmtN(units)} units</span>
+    <span class="chip" style="background:#d9eaee">Gross profit ${showE(repGrossE)}</span>
     <span class="chip" style="background:#fdeeca">Gifts ${fmtN(giftU)} units</span>
-    <span class="chip" style="background:#ffdad6">Expenses ${fmtE(exp)}</span>
-    <span class="chip" style="background:${repGrossE - exp >= 0 ? "#d9ecdd" : "#ffdad6"}">Report net ${fmtE(repGrossE - exp)}</span>
+    <span class="chip" style="background:#ffdad6">Expenses ${showE(exp)}</span>
+    <span class="chip" style="background:${repGrossE - exp >= 0 ? "#d9ecdd" : "#ffdad6"}">Report net ${showE(repGrossE - exp)}</span>
   </div>
   <div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap" class="no-print">
     <button class="btn gold" id="submitDayBtn" style="padding:12px 28px;font-size:14.5px" onclick="saveDay()"${n ? "" : " disabled"}>Submit daily report${n ? ` (${n} item${n === 1 ? "" : "s"})` : ""}</button>
@@ -1650,7 +1678,7 @@ window.nrSaleSync = (fillPrice = false) => {
       (p != null ? ` · price list: ${usdF.format(p)}` : (pos ? " · no price set yet at this POS — the price you enter is remembered" : ""));
   } else hint.textContent = "";
   const q = Number(gv("nr_s_qty")), pr = Number(gv("nr_s_price"));
-  document.getElementById("nr_s_total").textContent = q > 0 && pr > 0 ? fmtU(q * pr) : "—";
+  document.getElementById("nr_s_total").textContent = q > 0 && pr > 0 ? showU(q * pr) : "—";
 };
 window.nrGiftSync = () => {
   const el = document.getElementById("nr_g_prod");
@@ -1757,6 +1785,19 @@ window.startInventory = () => {
   activeInv = d.id;
   renderInventory();
 };
+window.startInventoryPrefilled = () => {
+  if (typeof HOME_COUNT === "undefined") { alert("Master-sheet counts not loaded — reload the page."); return; }
+  const d = { id: uid(), date: gv("inv_date") || todayISO(), pos_id: "ALL", counts: {} };
+  let n = 0;
+  for (const p of state.products) {
+    if (p.ref != null && HOME_COUNT[p.ref] !== undefined) { d.counts[p.id + "|wh"] = String(HOME_COUNT[p.ref]); n++; }
+  }
+  if (!n) { alert("No products matched the master sheet — import your invoices first."); return; }
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  renderInventory();
+  toast(`${n} warehouse counts prefilled from the master sheet — review, adjust, then Submit`);
+};
 window.openInvDraft = id => {
   activeInv = id; renderInventory();
   document.getElementById("invSheet").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1797,7 +1838,7 @@ function renderInvTotals() {
   el.innerHTML = `
     <span class="chip" style="background:#d9eaee">${fmtN(n)} product${n === 1 ? "" : "s"} counted</span>
     <span class="chip" style="background:${dUnits === 0 ? "#d9ecdd" : "#fdeeca"}">Difference ${dUnits > 0 ? "+" : ""}${fmtN(dUnits)} units</span>
-    <span class="chip" style="background:${dValue >= 0 ? "#d9ecdd" : "#ffdad6"}">Value impact ${fmtE(dValue)}</span>`;
+    <span class="chip" style="background:${dValue >= 0 ? "#d9ecdd" : "#ffdad6"}">Value impact ${showE(dValue)}</span>`;
 }
 function renderInventory() {
   const startEl = document.getElementById("invStart"), sheetEl = document.getElementById("invSheet");
@@ -1924,7 +1965,7 @@ function renderInvList() {
       <span class="chip" style="background:#d9ecdd">SUBMITTED</span>
       <span class="meta">${lines.length} counted</span>
       <span class="meta ${dU !== 0 ? "neg" : ""}">Δ ${dU > 0 ? "+" : ""}${fmtN(dU)} units</span>
-      <span style="margin-left:auto;font-weight:700" class="${dV < 0 ? "neg" : ""}">${fmtE(dV)}</span>
+      <span style="margin-left:auto;font-weight:700" class="${dV < 0 ? "neg" : ""}">${showE(dV)}</span>
       <button class="btn small danger no-print" style="margin-left:10px" onclick="event.preventDefault();delRow('inventories','${inv.id}')">Del</button></summary>
       <div class="lines"><table><tr><th>Product</th><th class="num">Theoretical</th><th class="num">Counted</th><th class="num">Difference</th></tr>${rows}</table></div></details>`;
   }).join("");
@@ -1959,11 +2000,11 @@ function renderVariance() {
       <td>${fmtD(r.last.date)} · ${esc(invScopeName(r.last.pos_id))}</td>
       <td class="num calc">${fmtN(r.last.counted)}</td><td class="num calc">${fmtN(r.last.theoretical)}</td>
       <td class="num calc ${r.varU !== 0 ? "neg" : ""}">${r.varU > 0 ? "+" : ""}${fmtN(r.varU)}</td>
-      <td class="num calc ${r.varV < 0 ? "neg" : ""}">${fmtE(r.varV)}</td></tr>`;
+      <td class="num calc ${r.varV < 0 ? "neg" : ""}">${showE(r.varV)}</td></tr>`;
   }
   h += `<tr class="total"><td>TOTAL</td><td></td><td></td><td></td><td></td>
     <td class="num ${tU !== 0 ? "neg" : ""}">${tU > 0 ? "+" : ""}${fmtN(tU)}</td>
-    <td class="num ${tV < 0 ? "neg" : ""}">${fmtE(tV)}</td></tr></table>`;
+    <td class="num ${tV < 0 ? "neg" : ""}">${showE(tV)}</td></tr></table>`;
   el.innerHTML = h;
 }
 
@@ -1989,11 +2030,11 @@ window.renderStocks = () => {
       <td class="num calc ${c.lost > 0 ? "neg" : ""}">${fmtN(c.lost)}</td>
       <td class="num calc ${adj !== 0 ? "neg" : ""}">${adj > 0 ? "+" : ""}${fmtN(adj)}</td>
       <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}"><b>${fmtN(c.stock)}</b></td>
-      <td>${st}</td><td class="num calc">${fmtE(c.stockValue)}</td></tr>`;
+      <td>${st}</td><td class="num calc">${showE(c.stockValue)}</td></tr>`;
   }
   h += `<tr class="total"><td>TOTAL (${list.length})</td><td class="num">${fmtN(tI)}</td><td class="num">${fmtN(tP)}</td>
     <td class="num">${fmtN(tS)}</td><td class="num">${fmtN(tG)}</td><td class="num ${tL > 0 ? "neg" : ""}">${fmtN(tL)}</td><td class="num">${tA > 0 ? "+" : ""}${fmtN(tA)}</td>
-    <td class="num">${fmtN(tSt)}</td><td></td><td class="num">${fmtE(tV)}</td></tr></table>`;
+    <td class="num">${fmtN(tSt)}</td><td></td><td class="num">${showE(tV)}</td></tr></table>`;
   el.innerHTML = h;
 };
 window.exportStocksCSV = () => {
@@ -2026,7 +2067,7 @@ document.getElementById("lossForm").addEventListener("submit", async ev => {
   const ok = await addRow("losses", { date: gv("l_date"), product_id, pos_id, qty, reason });
   if (ok) {
     document.getElementById("l_qty").value = ""; document.getElementById("l_note").value = "";
-    toast(`Loss recorded ✓ — ${fmtE(qty * avgCostOf(product_id))} written off`);
+    toast(`Loss recorded ✓ — ${showE(qty * avgCostOf(product_id))} written off`);
     render();
   }
 });
@@ -2045,12 +2086,12 @@ function renderLosses() {
     h += `<tr><td>${fmtD(l.date)}</td><td>${prodLabelById(l.product_id)}</td>
       <td>${l.pos_id ? esc(posById(l.pos_id)?.name || "(deleted)") : "Warehouse"}</td>
       <td class="num">${fmtN(l.qty)}</td><td>${esc(l.reason || "")}</td>
-      <td class="num calc neg">${fmtE(v)}</td>
+      <td class="num calc neg">${showE(v)}</td>
       <td class="no-print"><button class="btn small danger" onclick="delRow('losses','${l.id}')">Del</button></td></tr>`;
   }
-  h += `<tr class="total"><td>TOTAL</td><td></td><td></td><td class="num">${fmtN(tQ)}</td><td></td><td class="num neg">${fmtE(tV)}</td><td class="no-print"></td></tr></table>`;
+  h += `<tr class="total"><td>TOTAL</td><td></td><td></td><td class="num">${fmtN(tQ)}</td><td></td><td class="num neg">${showE(tV)}</td><td class="no-print"></td></tr></table>`;
   sum.innerHTML = Object.entries(byReason).map(([r, v]) =>
-    `<span class="chip" style="background:#ffdad6">${esc(r)} ${fmtE(v)}</span>`).join("");
+    `<span class="chip" style="background:#ffdad6">${esc(r)} ${showE(v)}</span>`).join("");
   el.innerHTML = h;
 }
 
@@ -2159,14 +2200,14 @@ window.renderCatalog = () => {
       const st = (c.iq + c.purQty) <= 0 ? "—" : c.stock <= 0 ? '<span class="st st-out">OUT</span>'
         : c.stock <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
       return `<tr><td>${prodLabel(p)}</td><td style="color:var(--muted)">${esc(p.ref || "")}</td>
-        <td class="num calc">${fmtE(c.avgCost)}</td><td class="num calc">${fmtN(c.sold)}</td>
+        <td class="num calc">${showE(c.avgCost)}</td><td class="num calc">${fmtN(c.sold)}</td>
         <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td><td>${st}</td>
-        <td class="num calc">${fmtE(c.stockValue)}</td></tr>`;
+        <td class="num calc">${showE(c.stockValue)}</td></tr>`;
     }).join("");
     return `<details class="inv" open><summary><span class="ref">${esc(cat)}</span>
       <span class="meta">${items.length} product${items.length === 1 ? "" : "s"}</span>
       <span class="meta">${fmtN(sold)} sold</span><span class="meta">${fmtN(units)} in stock</span>
-      <span style="margin-left:auto;font-weight:700">${fmtE(val)}</span></summary>
+      <span style="margin-left:auto;font-weight:700">${showE(val)}</span></summary>
       <div class="lines"><table><tr><th>Product</th><th>Ref</th><th class="num">Avg cost</th><th class="num">Sold</th><th class="num">Stock</th><th>Status</th><th class="num">Stock value</th></tr>${rows}</table></div></details>`;
   }).join("");
 };
@@ -2193,6 +2234,16 @@ window.renderInitInv = () => {
         <td class="num calc">${fmtN(c.purQty)}</td>
         <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td></tr>`;
     }).join("") + "</table>";
+};
+window.resetInitials = async () => {
+  const affected = state.products.filter(p => Number(p.initial_qty || 0) !== 0 || Number(p.initial_cost || 0) !== 0);
+  if (!affected.length) { toast("All initial stock is already 0 ✓"); return; }
+  if (!confirm(`Set initial stock and initial cost to 0 for ${affected.length} product${affected.length === 1 ? "" : "s"}?\n\nUse this if you typed your current physical inventory there by mistake — the real count belongs in a fiche d'inventaire.`)) return;
+  for (const p of affected) {
+    if (!(await updateRow("products", p.id, { initial_qty: 0, initial_cost: 0 }))) return;
+  }
+  toast(`Initial stock reset to 0 for ${affected.length} products ✓`);
+  render();
 };
 window.setInitial = async (id, field, val) => {
   const v = Number(val);
@@ -2560,6 +2611,7 @@ document.getElementById("inv_date").value = todayISO();
 document.getElementById("l_date").value = todayISO();
 document.getElementById("set_low").value = LOW_STOCK;
 document.getElementById("set_rate").value = USD_RATE;
+document.querySelectorAll(".curbtn").forEach(b => b.classList.toggle("on", b.dataset.cur === VIEW_CUR));
 window.saveRate = () => {
   const v = Number(gv("set_rate"));
   if (!(v > 0)) return;
