@@ -625,7 +625,24 @@ const isFreebie = p => {
   const r = (typeof RETAIL_USD !== "undefined" && p.ref) ? RETAIL_USD[p.ref] : undefined;
   return r === 0;
 };
-const prodSort = (a, b) => (isFreebie(a) - isFreebie(b)) || (a.name || "").localeCompare(b.name || "");
+/* short display names from the LANEA master sheet: "Base · Variant Size" — the
+   variant (after the ·) renders in bold so same-family products scan easily */
+function prodShort(p) {
+  return (p && p.ref && typeof NICE_NAMES !== "undefined" && NICE_NAMES[p.ref]) || (p && p.name) || "";
+}
+function prodLabel(p) {
+  const n = prodShort(p);
+  const i = n.indexOf("·");
+  if (i < 0) return esc(n);
+  let rest = n.slice(i + 1).trim(), size = "";
+  const m = rest.match(/\s?(\d+\s?(?:ml|g|gr|grs|l))$/i);
+  if (m) { size = m[1]; rest = rest.slice(0, rest.length - m[0].length).trim(); }
+  return `${esc(n.slice(0, i).trim())} · <b>${esc(rest)}</b>${size ? " " + esc(size) : ""}`;
+}
+const prodLabelById = id => { const p = prodById(id); return p ? prodLabel(p) : "(deleted)"; };
+const prodMatch = (p, q) => !q || prodShort(p).toLowerCase().includes(q)
+  || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q);
+const prodSort = (a, b) => (isFreebie(a) - isFreebie(b)) || prodShort(a).localeCompare(prodShort(b));
 
 /* product <option>s grouped by category — easier picking among 100+ products */
 function prodOptionsGrouped(sel) {
@@ -634,7 +651,7 @@ function prodOptionsGrouped(sel) {
   const order = PRODUCT_CATS.filter(c => groups[c]).concat(Object.keys(groups).filter(c => !PRODUCT_CATS.includes(c)).sort());
   return order.map(c => `<optgroup label="${esc(c)}">` +
     groups[c].sort(prodSort)
-      .map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(p.name)}</option>`).join("") +
+      .map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(prodShort(p))}</option>`).join("") +
     "</optgroup>").join("");
 }
 
@@ -905,7 +922,7 @@ function renderDash() {
     `<div class="stat"><div class="ich ${cls}"><span class="ms">${ic}</span></div><div class="k">${k}</div><div class="v ${String(v).startsWith("(") ? "neg" : ""}">${v}</div><div class="s">${s}</div></div>`).join("");
   document.getElementById("dashLow").innerHTML = lowList.length
     ? "<table><tr><th>Product</th><th class='num'>Stock</th><th></th></tr>" + lowList.slice(0, 12).map(x =>
-        `<tr><td>${esc(x.p.name)}</td><td class="num calc">${fmtN(x.c.stock)}</td>
+        `<tr><td>${prodLabel(x.p)}</td><td class="num calc">${fmtN(x.c.stock)}</td>
          <td>${x.c.stock <= 0 ? '<span class="st st-out">OUT</span>' : '<span class="st st-low">LOW</span>'}</td></tr>`).join("") +
       (lowList.length > 12 ? `<tr><td colspan="3" class="empty">+ ${lowList.length - 12} more in the Inventory tab…</td></tr>` : "") + "</table>"
     : `<p class="empty">All good — no tracked product at or below ${LOW_STOCK} units.</p>`;
@@ -976,7 +993,7 @@ function renderDash() {
     ? `<table><tr><th>Product</th><th class="num">Units</th><th class="num">Revenue ($)</th><th class="num">Gross profit (€)</th><th class="num">Margin</th></tr>` +
       top.map(([id, v]) => {
         const rE = toE(v.revenue), g = rE - v.cogs;
-        return `<tr><td>${esc(prodById(id)?.name || "(deleted)")}</td><td class="num calc">${fmtN(v.units)}</td>
+        return `<tr><td>${prodLabelById(id)}</td><td class="num calc">${fmtN(v.units)}</td>
           <td class="num calc">${fmtU(v.revenue)}</td><td class="num calc ${g < 0 ? "neg" : ""}">${fmtE(g)}</td>
           <td class="num calc">${fmtP(rE > 0 ? g / rE : null)}</td></tr>`;
       }).join("") + "</table>"
@@ -1024,7 +1041,7 @@ function renderSetup() {
 function renderProducts() {
   const q = (document.getElementById("p_search").value || "").toLowerCase();
   const list = state.products
-    .filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q))
+    .filter(p => prodMatch(p, q))
     .sort(prodSort);
   const el = document.getElementById("productsTable");
   if (!list.length) { el.innerHTML = '<p class="empty">No products yet — add one above or import your invoices from the Purchases tab.</p>'; return; }
@@ -1037,7 +1054,7 @@ function renderProducts() {
     const tracked = (c.iq + c.purQty) > 0;
     const st = !tracked ? "—" : c.stock <= 0 ? '<span class="st st-out">OUT</span>'
       : c.stock <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
-    h += `<tr><td><b>${esc(p.name)}</b></td><td style="color:var(--muted)">${esc(p.ref || "")}</td>
+    h += `<tr><td>${prodLabel(p)}</td><td style="color:var(--muted)">${esc(p.ref || "")}</td>
       <td class="num">${fmtN(c.iq)}</td><td class="num calc">${fmtN(c.purQty)}</td>
       <td class="num calc">${fmtE(c.avgCost)}</td><td class="num calc">${fmtN(c.sold)}</td>
       <td class="num calc">${fmtN(c.gifted)}</td><td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td>
@@ -1065,7 +1082,7 @@ function renderPurchases() {
     const units = lines.reduce((a, l) => a + Number(l.qty), 0);
     const total = lines.reduce((a, l) => a + Number(l.qty) * Number(l.unit_cost), 0);
     const date = lines[0].date;
-    const rows = lines.map(l => `<tr><td>${esc(prodById(l.product_id)?.name || "(deleted)")}</td>
+    const rows = lines.map(l => `<tr><td>${prodLabelById(l.product_id)}</td>
       <td class="num">${fmtN(l.qty)}</td><td class="num">${eurF.format(Number(l.unit_cost))}</td>
       <td class="num calc">${fmtE(Number(l.qty) * Number(l.unit_cost))}</td>
       <td class="no-print"><button class="btn small danger" onclick="delRow('purchases','${l.id}')">Del</button></td></tr>`).join("");
@@ -1165,7 +1182,7 @@ function renderSales() {
     const q = Number(s.qty), total = q * Number(s.price_per_unit), cogs = q * avgCostOf(s.product_id);
     const g = toE(total) - cogs;
     tQ += q; tT += total; tC += cogs;
-    h += `<tr><td>${fmtD(s.date)}</td><td>${esc(posById(s.pos_id)?.name || "—")}</td><td>${esc(prodById(s.product_id)?.name || "(deleted)")}</td>
+    h += `<tr><td>${fmtD(s.date)}</td><td>${esc(posById(s.pos_id)?.name || "—")}</td><td>${prodLabelById(s.product_id)}</td>
       <td class="num">${q}</td><td class="num">${usdF.format(Number(s.price_per_unit))}</td>
       <td class="num calc">${fmtU(total)}</td><td class="num calc">${fmtE(cogs)}</td>
       <td class="num calc ${g < 0 ? "neg" : ""}">${fmtE(g)}</td>
@@ -1191,7 +1208,7 @@ window.renderPriceList = () => {
   const el = document.getElementById("priceList");
   const bar = document.getElementById("plBar");
   if (!state.pos.length) { bar.innerHTML = ""; el.innerHTML = '<p class="empty">Create a point of sale above first — its price column appears here.</p>'; return; }
-  const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q))
+  const list = state.products.filter(p => prodMatch(p, q))
     .sort(prodSort);
   const n = plChangedCount();
   bar.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -1204,7 +1221,7 @@ window.renderPriceList = () => {
     + state.pos.map(p => `<th class="num">${esc(p.name)} ($)</th>`).join("") + `</tr>`;
   for (const p of list) {
     const c = productCalc(p);
-    h += `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtE(c.avgCost)}</td>`
+    h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtE(c.avgCost)}</td>`
       + state.pos.map(pos => {
           const key = pos.id + "|" + p.id;
           const saved = priceFor(pos.id, p.id);
@@ -1280,7 +1297,7 @@ function renderGifts() {
   if (!rows.length) { el.innerHTML = '<p class="empty">No gifts logged yet.</p>'; return; }
   let h = `<table><tr><th>Date</th><th>Product</th><th class="num">Qty</th><th class="num">Cost value</th><th>Note</th><th class="no-print"></th></tr>`;
   for (const g of rows) {
-    h += `<tr><td>${fmtD(g.date)}</td><td>${esc(prodById(g.product_id)?.name || "(deleted)")}</td>
+    h += `<tr><td>${fmtD(g.date)}</td><td>${prodLabelById(g.product_id)}</td>
       <td class="num">${g.qty}</td><td class="num calc">${fmtE(Number(g.qty) * avgCostOf(g.product_id))}</td><td>${esc(g.note)}</td>
       <td class="no-print"><button class="btn small ghost" onclick="editGift('${g.id}')">Edit</button>
         <button class="btn small danger" onclick="delRow('gifts','${g.id}')">Del</button></td></tr>`;
@@ -1330,7 +1347,7 @@ function renderExpenses() {
 /* ================= selects & render root ================= */
 function refreshSelects() {
   const prods = [...state.products].sort(prodSort);
-  const prodOpts = prods.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  const prodOpts = prods.map(p => `<option value="${p.id}">${esc(prodShort(p))}</option>`).join("");
   const grouped = prodOptionsGrouped("");
   for (const id of ["pu_product", "t_product"]) {
     const sel = document.getElementById(id); const cur = sel.value;
@@ -1427,16 +1444,16 @@ function renderDay() {
     chip(`Day net ${fmtE(dayGrossE - exp)}`, dayGrossE - exp >= 0 ? "#d9ecdd" : "#ffdad6");
   const rows = [];
   for (const s of daySales) rows.push({ kind: "sales", id: s.id, type: "Sale", bg: "#d9ecdd",
-    desc: `${prodById(s.product_id)?.name || "(deleted)"} × ${s.qty} @ ${usdF.format(Number(s.price_per_unit))} — ${posById(s.pos_id)?.name || "no POS"}`,
+    desc: `${prodLabelById(s.product_id)} × ${s.qty} @ ${usdF.format(Number(s.price_per_unit))} — ${esc(posById(s.pos_id)?.name || "no POS")}`,
     disp: fmtU(Number(s.qty) * Number(s.price_per_unit)), neg: false, fn: "editSale" });
   for (const g of dayGifts) rows.push({ kind: "gifts", id: g.id, type: "Gift", bg: "#fdeeca",
-    desc: `${prodById(g.product_id)?.name || "(deleted)"} × ${g.qty}${g.note ? " — " + g.note : ""}`, disp: "—", neg: false, fn: "editGift" });
+    desc: `${prodLabelById(g.product_id)} × ${g.qty}${g.note ? " — " + esc(g.note) : ""}`, disp: "—", neg: false, fn: "editGift" });
   for (const e of dayExp) rows.push({ kind: "expenses", id: e.id, type: "Expense", bg: CAT_CHIPS[e.category] || "#f3f4f6",
-    desc: `${e.description} (${e.category})`, disp: fmtE(-Number(e.amount)), neg: true, fn: "editExpense" });
+    desc: `${esc(e.description)} (${esc(e.category)})`, disp: fmtE(-Number(e.amount)), neg: true, fn: "editExpense" });
   const el = document.getElementById("dayList");
   el.innerHTML = rows.length
     ? "<table>" + rows.map(r =>
-        `<tr><td><span class="chip" style="background:${r.bg}">${r.type}</span></td><td>${esc(r.desc)}</td>
+        `<tr><td><span class="chip" style="background:${r.bg}">${r.type}</span></td><td>${r.desc}</td>
          <td class="num calc ${r.neg ? "neg" : ""}">${r.disp}</td>
          <td class="no-print"><button class="btn small ghost" onclick="${r.fn}('${r.id}')">Edit</button>
          <button class="btn small danger" onclick="delRow('${r.kind}','${r.id}')">Del</button></td></tr>`).join("") + "</table>"
@@ -1721,7 +1738,7 @@ function renderInventory() {
   document.getElementById("invTitle").innerHTML =
     `Fiche d'inventaire — ${fmtD(invDraft.date)} <span class="chip" style="background:#fdeeca">DRAFT</span>`;
   const q = (gv("inv_search") || "").toLowerCase();
-  const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q))
+  const list = state.products.filter(p => prodMatch(p, q))
     .sort(prodSort);
   // matrix sheet: rows = products, columns = warehouse + every POS
   const locs = [{ key: "wh", name: "Warehouse" }, ...state.pos.map(p => ({ key: p.id, name: p.name }))];
@@ -1737,7 +1754,7 @@ function renderInventory() {
         onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
         <div style="font-size:10px;color:var(--muted);margin-top:2px">theo ${fmtN(theo)}</div></td>`;
     }).join("");
-    h += `<tr><td>${esc(p.name)}</td>${cells}<td class="num calc ${any && rowDiff !== 0 ? "neg" : ""}">${any ? (rowDiff > 0 ? "+" : "") + fmtN(rowDiff) : "—"}</td></tr>`;
+    h += `<tr><td>${prodLabel(p)}</td>${cells}<td class="num calc ${any && rowDiff !== 0 ? "neg" : ""}">${any ? (rowDiff > 0 ? "+" : "") + fmtN(rowDiff) : "—"}</td></tr>`;
   }
   document.getElementById("invTable").innerHTML = h + "</table>";
   renderInvTotals();
@@ -1829,7 +1846,7 @@ function renderInvList() {
     const rows = lines.map(l => {
       const diff = Number(l.counted) - Number(l.theoretical);
       dU += diff; dV += diff * avgCostOf(l.product_id);
-      return `<tr><td>${esc(prodById(l.product_id)?.name || "(deleted)")}</td>
+      return `<tr><td>${prodLabelById(l.product_id)}</td>
         <td class="num calc">${fmtN(Number(l.theoretical))}</td><td class="num calc">${fmtN(Number(l.counted))}</td>
         <td class="num calc ${diff !== 0 ? "neg" : ""}">${diff > 0 ? "+" : ""}${fmtN(diff)}</td></tr>`;
     }).join("");
@@ -1848,7 +1865,7 @@ function renderInvList() {
 window.renderStocks = () => {
   const q = (gv("st_search") || "").toLowerCase();
   const el = document.getElementById("stocksTable");
-  const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q))
+  const list = state.products.filter(p => prodMatch(p, q))
     .sort(prodSort);
   if (!list.length) { el.innerHTML = '<p class="empty">No products yet — import your invoices from the Purchases tab.</p>'; return; }
   let h = `<table><tr><th>Product</th><th class="num">Initial</th><th class="num">+ Purchased</th><th class="num">− Sold</th>
@@ -1861,7 +1878,7 @@ window.renderStocks = () => {
     const tracked = (c.iq + c.purQty) > 0;
     const st = !tracked ? "—" : c.stock <= 0 ? '<span class="st st-out">OUT</span>'
       : c.stock <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
-    h += `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtN(c.iq)}</td><td class="num calc">${fmtN(c.purQty)}</td>
+    h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtN(c.iq)}</td><td class="num calc">${fmtN(c.purQty)}</td>
       <td class="num calc">${fmtN(c.sold)}</td><td class="num calc">${fmtN(c.gifted)}</td>
       <td class="num calc ${adj !== 0 ? "neg" : ""}">${adj > 0 ? "+" : ""}${fmtN(adj)}</td>
       <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}"><b>${fmtN(c.stock)}</b></td>
@@ -1876,7 +1893,7 @@ window.exportStocksCSV = () => {
   const rows = [["Product", "Ref", "Initial", "Purchased", "Sold", "Gifted", "Inventory adj.", "Stock", "Avg cost", "Value at cost"]];
   for (const p of [...state.products].sort(prodSort)) {
     const c = productCalc(p);
-    rows.push([p.name, p.ref || "", c.iq, c.purQty, c.sold, c.gifted, invDelta(p.id, "all"), c.stock, c.avgCost.toFixed(4), c.stockValue.toFixed(2)]);
+    rows.push([prodShort(p), p.ref || "", c.iq, c.purQty, c.sold, c.gifted, invDelta(p.id, "all"), c.stock, c.avgCost.toFixed(4), c.stockValue.toFixed(2)]);
   }
   downloadFile("lanea-stocks.csv", "text/csv", toCSV(rows));
 };
@@ -1916,7 +1933,7 @@ window.renderPosStock = () => {
   const view = gv("sp_pos");
   const q = (gv("sp_search") || "").toLowerCase();
   const el = document.getElementById("posStockTable");
-  const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q))
+  const list = state.products.filter(p => prodMatch(p, q))
     .sort(prodSort);
   if (!list.length) { el.innerHTML = '<p class="empty">No products.</p>'; return; }
   if (view === "" || view === "wh") {
@@ -1930,7 +1947,7 @@ window.renderPosStock = () => {
       if ((c.iq + c.purQty) <= 0) continue;
       any = true;
       const wh = warehouseOf(p);
-      h += `<tr><td>${esc(p.name)}</td><td class="num calc ${wh < 0 ? "stock-neg" : ""}">${fmtN(wh)}</td>`
+      h += `<tr><td>${prodLabel(p)}</td><td class="num calc ${wh < 0 ? "stock-neg" : ""}">${fmtN(wh)}</td>`
         + state.pos.map(pos => { const v = posStockOf(p.id, pos.id);
             return `<td class="num calc ${v < 0 ? "stock-neg" : ""}">${v === 0 ? "·" : fmtN(v)}</td>`; }).join("")
         + `<td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td></tr>`;
@@ -1946,7 +1963,7 @@ window.renderPosStock = () => {
       any = true;
       const now = alloc - sold;
       tAlloc += alloc; tSold += sold; tNow += now;
-      h += `<tr><td>${esc(p.name)}</td><td class="num calc">${fmtN(alloc)}</td><td class="num calc">${fmtN(sold)}</td>
+      h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtN(alloc)}</td><td class="num calc">${fmtN(sold)}</td>
         <td class="num calc ${now < 0 ? "stock-neg" : ""}">${fmtN(now)}</td>
         <td class="num calc">${fmtN(warehouseOf(p))}</td></tr>`;
     }
@@ -1957,7 +1974,7 @@ window.renderPosStock = () => {
   const log = [...state.transfers].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 40);
   document.getElementById("transferCount").textContent = `${state.transfers.length} transfer${state.transfers.length === 1 ? "" : "s"}`;
   document.getElementById("transfersLog").innerHTML = log.length
-    ? "<table>" + log.map(t => `<tr><td>${fmtD(t.date)}</td><td>${esc(prodById(t.product_id)?.name || "(deleted)")}</td>
+    ? "<table>" + log.map(t => `<tr><td>${fmtD(t.date)}</td><td>${prodLabelById(t.product_id)}</td>
         <td>${esc(posById(t.pos_id)?.name || "(deleted)")}</td>
         <td class="num calc ${Number(t.qty) < 0 ? "neg" : ""}">${Number(t.qty) > 0 ? "→ POS " : "→ warehouse "}${fmtN(Math.abs(Number(t.qty)))}</td>
         <td class="no-print"><button class="btn small danger" onclick="delRow('transfers','${t.id}')">Del</button></td></tr>`).join("") + "</table>"
@@ -1985,7 +2002,7 @@ window.renderCatalog = () => {
       units += Math.max(c.stock, 0); val += c.stockValue; sold += c.sold;
       const st = (c.iq + c.purQty) <= 0 ? "—" : c.stock <= 0 ? '<span class="st st-out">OUT</span>'
         : c.stock <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
-      return `<tr><td>${esc(p.name)}</td><td style="color:var(--muted)">${esc(p.ref || "")}</td>
+      return `<tr><td>${prodLabel(p)}</td><td style="color:var(--muted)">${esc(p.ref || "")}</td>
         <td class="num calc">${fmtE(c.avgCost)}</td><td class="num calc">${fmtN(c.sold)}</td>
         <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td><td>${st}</td>
         <td class="num calc">${fmtE(c.stockValue)}</td></tr>`;
@@ -2002,7 +2019,7 @@ window.renderCatalog = () => {
 window.renderInitInv = () => {
   const q = (document.getElementById("ii_search").value || "").toLowerCase();
   const el = document.getElementById("initInvTable");
-  const list = state.products.filter(p => !q || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q))
+  const list = state.products.filter(p => prodMatch(p, q))
     .sort(prodSort);
   if (!list.length) { el.innerHTML = '<p class="empty">No products yet — add one above or import your invoices below.</p>'; return; }
   const inputStyle = "padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--input-bg)";
@@ -2010,7 +2027,7 @@ window.renderInitInv = () => {
     <th class="num" style="width:150px">Initial cost / unit (€)</th><th class="num">From invoices</th><th class="num">Current stock</th></tr>` +
     list.map(p => {
       const c = productCalc(p);
-      return `<tr><td>${esc(p.name)}</td>
+      return `<tr><td>${prodLabel(p)}</td>
         <td class="num"><input type="number" min="0" step="1" value="${Number(p.initial_qty || 0)}" style="width:85px;${inputStyle}"
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"
           onchange="setInitial('${p.id}','initial_qty',this.value)"></td>
@@ -2166,7 +2183,7 @@ window.exportProductsCSV = () => {
   const rows = [["Product", "Ref", "Supplier", "Initial qty", "Initial cost", "Purchased qty", "Avg cost", "Sold", "Gifted", "Stock", "Stock value"]];
   for (const p of [...state.products].sort(prodSort)) {
     const c = productCalc(p);
-    rows.push([p.name, p.ref || "", p.supplier || "", c.iq, p.initial_cost || 0, c.purQty, c.avgCost.toFixed(4), c.sold, c.gifted, c.stock, c.stockValue.toFixed(2)]);
+    rows.push([prodShort(p), p.ref || "", p.supplier || "", c.iq, p.initial_cost || 0, c.purQty, c.avgCost.toFixed(4), c.sold, c.gifted, c.stock, c.stockValue.toFixed(2)]);
   }
   downloadFile("lanea-products.csv", "text/csv", toCSV(rows));
 };
@@ -2174,7 +2191,7 @@ window.exportSalesCSV = () => {
   const rows = [["Date", "POS", "Product", "Qty", "Price/unit ($)", "Total ($)", "COGS (EUR)", "Gross (EUR)"]];
   for (const s of [...state.sales].sort((a, b) => (a.date || "").localeCompare(b.date || ""))) {
     const total = Number(s.qty) * Number(s.price_per_unit), cogs = Number(s.qty) * avgCostOf(s.product_id);
-    rows.push([s.date, posById(s.pos_id)?.name || "", prodById(s.product_id)?.name || "", s.qty, s.price_per_unit, total.toFixed(2), cogs.toFixed(2), (toE(total) - cogs).toFixed(2)]);
+    rows.push([s.date, posById(s.pos_id)?.name || "", prodById(s.product_id) ? prodShort(prodById(s.product_id)) : "", s.qty, s.price_per_unit, total.toFixed(2), cogs.toFixed(2), (toE(total) - cogs).toFixed(2)]);
   }
   downloadFile("lanea-sales.csv", "text/csv", toCSV(rows));
 };
