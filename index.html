@@ -55,7 +55,10 @@
   .side-foot { padding: 14px 20px; border-top: 1px solid var(--line); font-size: 11.5px; }
   .conn { display: inline-block; padding: 4px 12px; border-radius: 999px; background: var(--input-bg); color: var(--muted); font-weight: 600; }
   .conn.remote { background: #d9f2e2; color: #156a3a; }
-  .curswitch { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  #topbar { position: sticky; top: 0; z-index: 60; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 6px 0 10px; background: var(--bg); }
+  #draftWarn { margin-right: auto; }
+  #draftWarn .chip { background: #fdeeca; border: 1.5px dashed #d8a53f; padding: 6px 12px; font-weight: 600; }
+  .curswitch { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
   .curswitch .curbtn { border: none; background: var(--panel); padding: 6px 11px; cursor: pointer; font-family: inherit; font-size: 12px; color: var(--muted); }
   .curswitch .curbtn.on { background: var(--gold); color: #fff; font-weight: 700; }
 
@@ -237,6 +240,14 @@
 </aside>
 
 <main>
+<div id="topbar" class="no-print">
+  <span id="draftWarn"></span>
+  <div class="curswitch" title="Display currency — every amount converts at the rate in Settings">
+    <button class="curbtn" data-cur="native" onclick="setViewCur('native')" title="Mixed — sales in $, costs in €">$/€</button>
+    <button class="curbtn" data-cur="EUR" onclick="setViewCur('EUR')" title="Everything in euros">€</button>
+    <button class="curbtn" data-cur="USD" onclick="setViewCur('USD')" title="Everything in dollars">$</button>
+  </div>
+</div>
 <div id="banner" class="banner" style="display:none"></div>
 
 <!-- ================= DASHBOARD ================= -->
@@ -247,11 +258,6 @@
     <button class="btn ghost small" onclick="setPeriod('this')">This month</button>
     <button class="btn ghost small" onclick="setPeriod('last')">Last month</button>
     <button class="btn ghost small" onclick="setPeriod('all')">All time</button>
-    <div class="curswitch" title="Display currency">
-      <button class="curbtn" data-cur="native" onclick="setViewCur('native')">$/€</button>
-      <button class="curbtn" data-cur="EUR" onclick="setViewCur('EUR')">€</button>
-      <button class="curbtn" data-cur="USD" onclick="setViewCur('USD')">$</button>
-    </div>
     <label>From month<input type="month" id="f_from"></label>
     <label>To month<input type="month" id="f_to"></label>
     <label>Point of sale<select id="f_pos"><option value="">All</option></select></label>
@@ -1469,6 +1475,11 @@ function refreshSelects() {
   elc.innerHTML = '<option value="">All</option>' + catOpts; elc.value = curc;
 }
 function render() {
+  const dw = document.getElementById("draftWarn");
+  if (dw) dw.innerHTML = invDrafts.length
+    ? `<span class="chip">⚠ Unsubmitted inventory sheet — stock does NOT change until you submit it
+       <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
+    : "";
   refreshSelects();
   renderDash(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderVariance(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
 }
@@ -1787,16 +1798,20 @@ window.startInventory = () => {
 };
 window.startInventoryPrefilled = () => {
   if (typeof HOME_COUNT === "undefined") { alert("Master-sheet counts not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
   const d = { id: uid(), date: gv("inv_date") || todayISO(), pos_id: "ALL", counts: {} };
   let n = 0;
   for (const p of state.products) {
-    if (p.ref != null && HOME_COUNT[p.ref] !== undefined) { d.counts[p.id + "|wh"] = String(HOME_COUNT[p.ref]); n++; }
+    // products absent from the master sheet count as 0 at the warehouse, so
+    // submitting this sheet makes total stock exactly match the sheet
+    const v = (p.ref != null && HOME_COUNT[p.ref] !== undefined) ? HOME_COUNT[p.ref] : 0;
+    d.counts[p.id + "|wh"] = String(v);
+    if (v > 0) n++;
   }
-  if (!n) { alert("No products matched the master sheet — import your invoices first."); return; }
   invDrafts.push(d); saveInvDrafts();
   activeInv = d.id;
   renderInventory();
-  toast(`${n} warehouse counts prefilled from the master sheet — review, adjust, then Submit`);
+  toast(`Full warehouse count prefilled (${n} products from the sheet, the rest at 0) — review, then SUBMIT to apply`);
 };
 window.openInvDraft = id => {
   activeInv = id; renderInventory();
