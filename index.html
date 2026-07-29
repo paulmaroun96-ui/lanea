@@ -50,6 +50,8 @@
   nav button:hover { background: var(--input-bg); color: var(--gold-dark); }
   nav button.active { background: var(--gold-light); color: var(--side-active); font-weight: 700; box-shadow: inset 4px 0 0 var(--gold); }
   nav button .ms { width: 22px; text-align: center; color: inherit; }
+  nav .nav-sec { font-size: 10px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: #9aa7ab; padding: 12px 14px 4px; }
+  nav .nav-sec:first-child { padding-top: 2px; }
   .side-foot { padding: 14px 20px; border-top: 1px solid var(--line); font-size: 11.5px; }
   .conn { display: inline-block; padding: 4px 12px; border-radius: 999px; background: var(--input-bg); color: var(--muted); font-weight: 600; }
   .conn.remote { background: #d9f2e2; color: #156a3a; }
@@ -160,6 +162,7 @@
     aside { width: 100%; height: auto; position: static; min-height: 0; }
     nav { flex-direction: row; overflow-x: auto; padding: 6px 10px; }
     nav button { white-space: nowrap; width: auto; }
+    nav .nav-sec { display: none; }
     .side-foot { display: none; }
     main { padding: 16px 14px 50px; }
   }
@@ -206,6 +209,7 @@
     <div class="sub">Business Books</div>
   </div>
   <nav id="nav">
+    <div class="nav-sec">Operations</div>
     <button data-tab="dash" class="active"><span class="ms">dashboard</span>Dashboard</button>
     <button data-tab="pur"><span class="ms">receipt_long</span>Purchases</button>
     <button data-tab="day"><span class="ms">edit_square</span>Daily report</button>
@@ -214,6 +218,7 @@
     <button data-tab="los"><span class="ms">report</span>Losses</button>
     <button data-tab="exp"><span class="ms">account_balance_wallet</span>Expenses</button>
     <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
+    <div class="nav-sec">Setup &amp; help</div>
     <button data-tab="cat"><span class="ms">category</span>Catalog</button>
     <button data-tab="set"><span class="ms">settings</span>Settings</button>
     <button data-tab="help"><span class="ms">help</span>Guide</button>
@@ -314,6 +319,12 @@
     <p class="hint">Every inventory with its status — continue a draft anytime; submitted sheets show their theoretical vs actual differences.</p>
     <div id="invHistory"></div>
   </section>
+  <section class="card">
+    <h2>Variance analysis — écarts d'inventaire</h2>
+    <p class="hint">Each submitted count is compared to the theoretical stock at that moment (last count + purchases − sales − gifts − losses since).
+    <b>Negative variance = units missing</b> — a possible unrecorded sale, gift, loss or theft; positive = more found than expected. Valued at average cost, worst first.</p>
+    <div class="scrollbox" id="varianceTable"></div>
+  </section>
 </div>
 
 <!-- ================= STOCKS ================= -->
@@ -332,7 +343,9 @@
   </section>
   <section class="card">
     <h2>Stock by point of sale</h2>
-    <p class="hint">Your purchases sit in the <b>warehouse</b>. Send stock to a point of sale when you supply it — sales at that POS then consume its stock, and you can return leftovers. Negative POS stock means sales were logged there without sending stock first.</p>
+    <p class="hint"><b>Warehouse = everything not sent to a POS</b> (purchases + initial − gifts − losses − transfers out, corrected by your warehouse counts).
+    Send stock to a point of sale when you supply it — sales at that POS then consume its stock, and you can return leftovers.
+    If you don't use transfers, your whole stock simply shows as Warehouse. Negative POS stock means sales were logged there without sending stock first.</p>
     <form class="rowform no-print" id="transferForm">
       <label>Date<input id="t_date" type="date" required></label>
       <label>Product<select id="t_product" required onchange="transferHint()"></select></label>
@@ -1425,7 +1438,7 @@ function refreshSelects() {
 }
 function render() {
   refreshSelects();
-  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
+  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderVariance(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
 }
 
 /* ================= daily log & calendar ================= */
@@ -1911,6 +1924,43 @@ function renderInvList() {
       <button class="btn small danger no-print" style="margin-left:10px" onclick="event.preventDefault();delRow('inventories','${inv.id}')">Del</button></summary>
       <div class="lines"><table><tr><th>Product</th><th class="num">Theoretical</th><th class="num">Counted</th><th class="num">Difference</th></tr>${rows}</table></div></details>`;
   }).join("");
+}
+
+/* ================= variance analysis (écarts d'inventaire) ================= */
+function renderVariance() {
+  const el = document.getElementById("varianceTable");
+  if (!el) return;
+  if (!state.inventory_lines.length) {
+    el.innerHTML = '<p class="empty">No inventory submitted yet — variances appear after your first count.</p>';
+    return;
+  }
+  const byProd = {};
+  for (const l of state.inventory_lines) {
+    const inv = state.inventories.find(i => i.id === l.inventory_id);
+    if (!inv) continue;
+    const b = byProd[l.product_id] ??= { n: 0, varU: 0, last: null };
+    b.n++;
+    b.varU += Number(l.counted) - Number(l.theoretical);
+    if (!b.last || (inv.date || "") > (b.last.date || ""))
+      b.last = { date: inv.date, pos_id: inv.pos_id, counted: Number(l.counted), theoretical: Number(l.theoretical) };
+  }
+  const rows = Object.entries(byProd)
+    .map(([pid, b]) => ({ pid, ...b, varV: b.varU * avgCostOf(pid) }))
+    .sort((a, b) => a.varV - b.varV);
+  let tU = 0, tV = 0;
+  let h = `<table><tr><th>Product</th><th class="num">Counts</th><th>Last count</th><th class="num">Counted</th><th class="num">Theoretical then</th><th class="num">Total variance</th><th class="num">Value (€)</th></tr>`;
+  for (const r of rows) {
+    tU += r.varU; tV += r.varV;
+    h += `<tr><td>${prodLabelById(r.pid)}</td><td class="num calc">${r.n}</td>
+      <td>${fmtD(r.last.date)} · ${esc(invScopeName(r.last.pos_id))}</td>
+      <td class="num calc">${fmtN(r.last.counted)}</td><td class="num calc">${fmtN(r.last.theoretical)}</td>
+      <td class="num calc ${r.varU !== 0 ? "neg" : ""}">${r.varU > 0 ? "+" : ""}${fmtN(r.varU)}</td>
+      <td class="num calc ${r.varV < 0 ? "neg" : ""}">${fmtE(r.varV)}</td></tr>`;
+  }
+  h += `<tr class="total"><td>TOTAL</td><td></td><td></td><td></td><td></td>
+    <td class="num ${tU !== 0 ? "neg" : ""}">${tU > 0 ? "+" : ""}${fmtN(tU)}</td>
+    <td class="num ${tV < 0 ? "neg" : ""}">${fmtE(tV)}</td></tr></table>`;
+  el.innerHTML = h;
 }
 
 /* ================= stock statement ================= */
