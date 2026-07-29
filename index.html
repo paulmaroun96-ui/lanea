@@ -2259,6 +2259,21 @@ async function enterRemote(session) {
   remote = true;
   hideBanner();
   setBadge(); render();
+  maybeOfferLocalUpload();
+}
+/* after signing in: if the cloud account is empty but this browser holds data
+   saved while signed out, offer to bring it into the account (nothing is lost) */
+function maybeOfferLocalUpload() {
+  try {
+    const local = JSON.parse(localStorage.getItem(LS_DATA) || "null");
+    if (!local) return;
+    const localCount = KINDS.reduce((a, k) => a + (local[k] || []).length, 0);
+    const cloudCount = KINDS.reduce((a, k) => a + state[k].length, 0);
+    if (localCount > 0 && cloudCount === 0) {
+      showBanner(`Your account is empty, but this browser holds <b>${localCount} entries</b> saved before you signed in (products, invoices, reports, prices…). They are safe. ` +
+        `<button class="btn small gold" onclick="pushLocalToCloud()">Upload them to my account</button>`);
+    }
+  } catch {}
 }
 window.saveSupabaseConfig = async () => {
   const url = document.getElementById("sb_url").value.trim().replace(/\/+$/, "");
@@ -2295,15 +2310,19 @@ window.pushLocalToCloud = async () => {
   if (!remote) { alert("Sign in first."); return; }
   const local = JSON.parse(localStorage.getItem(LS_DATA) || "null");
   if (!local) { alert("No local data found in this browser."); return; }
-  if (!confirm("Upload the data stored in this browser to the cloud? Existing cloud rows are kept; local rows are added.")) return;
+  if (!confirm("Upload the data stored in this browser to your account? Existing cloud rows are kept; local rows are added.")) return;
+  let uploaded = 0;
   for (const k of KINDS) {
     const rows = (local[k] || []).filter(row => !state[k].some(r => r.id === row.id));
     if (!rows.length) continue;
     const { data, error } = await client.from(k).insert(rows).select();
-    if (error) { alert(`Upload stopped at ${k}: ` + error.message); return; }
+    if (error) { alert(`Upload stopped at ${k}: ` + error.message + "\nAlready-uploaded data was kept — you can retry."); render(); return; }
     state[k].push(...data);
+    uploaded += data.length;
   }
-  render(); alert("Local data uploaded.");
+  hideBanner();
+  render();
+  toast(`Uploaded ${uploaded} entries to your account ✓`);
 };
 
 /* ================= boot ================= */
