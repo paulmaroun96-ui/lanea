@@ -211,6 +211,7 @@
     <button data-tab="day"><span class="ms">edit_square</span>Daily report</button>
     <button data-tab="inv"><span class="ms">fact_check</span>Inventory</button>
     <button data-tab="stk"><span class="ms">warehouse</span>Stocks</button>
+    <button data-tab="los"><span class="ms">report</span>Losses</button>
     <button data-tab="exp"><span class="ms">account_balance_wallet</span>Expenses</button>
     <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
     <button data-tab="cat"><span class="ms">category</span>Catalog</button>
@@ -320,6 +321,9 @@
   <div class="pagehead"><h1>Stocks</h1><p>Your actual stock levels — initial + purchased − sold − gifted ± inventory adjustments — globally and per location.</p></div>
   <section class="card">
     <h2>Stock statement</h2>
+    <p class="hint"><b>How stock is calculated:</b> Stock = your <b>last submitted inventory count</b> (per location)
+    <b>+ purchases − sales − gifts − losses</b> since that count. Before any count it starts from initial stock + purchases.
+    Each column below shows one component, so every number can be traced to its tab.</p>
     <div class="rowform no-print" style="margin-bottom:10px">
       <label>Search<input id="st_search" oninput="renderStocks()" placeholder="product…" style="min-width:220px"></label>
       <button class="btn ghost" onclick="exportStocksCSV()">Export CSV</button>
@@ -345,6 +349,31 @@
     <div class="scrollbox" id="posStockTable"></div>
     <details class="inv" style="margin-top:12px"><summary><span class="ref">Transfer history</span><span class="meta" id="transferCount"></span></summary>
       <div class="lines" id="transfersLog"></div></details>
+  </section>
+</div>
+
+<!-- ================= LOSSES ================= -->
+<div class="tab" id="tab-los" style="display:none">
+  <div class="pagehead"><h1>Losses</h1><p>Damaged products, expired DLC, theft… A loss removes the units from their location and its cost value (€) counts against your profit on the dashboard.</p></div>
+  <section class="card no-print">
+    <h2>Record a loss</h2>
+    <form class="rowform" id="lossForm">
+      <label>Date<input id="l_date" type="date" required></label>
+      <label>Product<select id="l_product" required onchange="lossHint()"></select></label>
+      <label>Location<select id="l_pos" onchange="lossHint()"></select></label>
+      <label>Qty<input id="l_qty" type="number" min="1" step="1" required style="width:90px"></label>
+      <label>Reason<select id="l_reason">
+        <option>Damaged</option><option>Expired (DLC)</option><option>Theft</option><option>Other</option>
+      </select></label>
+      <label>Note<input id="l_note" placeholder="optional" style="min-width:180px"></label>
+      <button class="btn gold" type="submit">Save loss</button>
+    </form>
+    <p class="hint" id="l_hint"></p>
+  </section>
+  <section class="card">
+    <h2>Loss log</h2>
+    <div id="lossSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+    <div class="scrollbox" id="lossesTable"></div>
   </section>
 </div>
 
@@ -523,8 +552,9 @@
     <h2>The stock model</h2>
     <p style="line-height:1.8">Everything you buy (<b>Purchases</b>) and your <b>initial inventory</b> (Catalog) enters the <b>Warehouse</b>.
     From the <b>Stocks</b> tab you <b>transfer</b> stock to a point of sale when you supply it. A <b>sale</b> in the Daily report
-    consumes that POS's stock; a <b>gift</b> consumes the warehouse. A submitted <b>inventory count</b> corrects the counted location
-    to reality. At all times: <b>Global stock = Warehouse + all points of sale</b>, and every product's value is carried at its
+    consumes that POS's stock; a <b>gift</b> consumes the warehouse; a <b>loss</b> (Losses tab — damaged, expired DLC, theft)
+    consumes its location and its cost value counts against profit. A submitted <b>inventory count</b> corrects the counted location
+    to reality — so stock = <b>last count + purchases − sales − gifts − losses since</b>. At all times: <b>Global stock = Warehouse + all points of sale</b>, and every product's value is carried at its
     <b>average cost</b> (invoice discounts and shipping included).</p>
     <p style="line-height:1.8"><b>Currencies:</b> you buy in <b>€</b> and sell in <b>$</b>. Selling prices, sale totals and revenue show in $;
     costs, expenses, gross and net profit show in € — revenue is converted at the exchange rate set in Settings (default 1 € = $1.20).
@@ -574,7 +604,7 @@ const CAT_CHIPS = {
   // legacy categories from v1 keep a chip
   "Monthly Operating": "#dbeafe", "Exhibition / Event": "#ede9fe", "Shipping": "#d1fae5"
 };
-const KINDS = ["products", "purchases", "pos", "pos_prices", "transfers", "inventories", "inventory_lines", "sales", "gifts", "expenses"];
+const KINDS = ["products", "purchases", "pos", "pos_prices", "transfers", "losses", "inventories", "inventory_lines", "sales", "gifts", "expenses"];
 const LS_DATA = "lanea-books-data";
 const LS_CFG = "lanea-books-supabase";
 let LOW_STOCK = Number(localStorage.getItem("lanea-low-stock") || 5);   // low-stock threshold, editable in Settings
@@ -655,7 +685,7 @@ function prodOptionsGrouped(sel) {
     "</optgroup>").join("");
 }
 
-let state = { products: [], purchases: [], pos: [], pos_prices: [], transfers: [], inventories: [], inventory_lines: [], sales: [], gifts: [], expenses: [] };
+let state = { products: [], purchases: [], pos: [], pos_prices: [], transfers: [], losses: [], inventories: [], inventory_lines: [], sales: [], gifts: [], expenses: [] };
 let client = null, remote = false;
 let filters = { from: "", to: "", pos: "", prod: "" };
 
@@ -675,7 +705,7 @@ function loadLocal() {
 function repairMissingProducts() {
   const have = new Set(state.products.map(p => p.id));
   const orphanIds = new Set();
-  for (const k of ["purchases", "sales", "gifts", "transfers", "pos_prices", "inventory_lines"])
+  for (const k of ["purchases", "sales", "gifts", "transfers", "pos_prices", "inventory_lines", "losses"])
     for (const r of (state[k] || [])) if (r.product_id && !have.has(r.product_id)) orphanIds.add(r.product_id);
   if (!orphanIds.size) return 0;
   const lineByKey = {};
@@ -731,8 +761,10 @@ function productCalc(p) {
   let sold = 0, revenue = 0, gifted = 0;
   for (const s of state.sales) if (s.product_id === p.id) { sold += Number(s.qty); revenue += Number(s.qty) * Number(s.price_per_unit); }
   for (const g of state.gifts) if (g.product_id === p.id) gifted += Number(g.qty);
-  const stock = totQty - sold - gifted + invDelta(p.id, "all");
-  return { iq, purQty, avgCost, sold, revenue, gifted, stock, cogs: sold * avgCost, stockValue: stock * avgCost, totCost };
+  let lost = 0;
+  for (const l of state.losses) if (l.product_id === p.id) lost += Number(l.qty);
+  const stock = totQty - sold - gifted - lost + invDelta(p.id, "all");
+  return { iq, purQty, avgCost, sold, revenue, gifted, lost, stock, cogs: sold * avgCost, stockValue: stock * avgCost, totCost };
 }
 const prodById = id => state.products.find(p => p.id === id);
 const posById = id => state.pos.find(p => p.id === id);
@@ -744,11 +776,13 @@ const transferredTo = (pid, posId) => state.transfers.filter(t => t.product_id =
   .reduce((a, t) => a + Number(t.qty), 0);
 const soldAtPos = (pid, posId) => state.sales.filter(s => s.product_id === pid && s.pos_id === posId)
   .reduce((a, s) => a + Number(s.qty), 0);
-const posStockOf = (pid, posId) => transferredTo(pid, posId) - soldAtPos(pid, posId) + invDelta(pid, posId);
+const lostAt = (pid, posId) => state.losses.filter(l => l.product_id === pid && (l.pos_id || null) === posId)
+  .reduce((a, l) => a + Number(l.qty), 0);
+const posStockOf = (pid, posId) => transferredTo(pid, posId) - soldAtPos(pid, posId) - lostAt(pid, posId) + invDelta(pid, posId);
 function warehouseOf(p) {
   const c = productCalc(p);
   const out = state.transfers.filter(t => t.product_id === p.id).reduce((a, t) => a + Number(t.qty), 0);
-  return c.iq + c.purQty - c.gifted - out + invDelta(p.id, null);
+  return c.iq + c.purQty - c.gifted - out - lostAt(p.id, null) + invDelta(p.id, null);
 }
 /* stock corrections from submitted inventory counts: delta = counted - theoretical
    scope: "all" (any location) | null (warehouse) | a POS id */
@@ -778,6 +812,11 @@ function filteredSales() {
     && (!filters.prod || s.product_id === filters.prod));
 }
 function filteredExpenses() { return state.expenses.filter(e => inPeriod(e.date)); }
+function filteredLosses() {
+  return state.losses.filter(l => inPeriod(l.date)
+    && (!filters.pos || l.pos_id === filters.pos)
+    && (!filters.prod || l.product_id === filters.prod));
+}
 
 /* ================= CRUD ================= */
 async function addRow(kind, row) {
@@ -803,11 +842,12 @@ async function deleteRow(kind, id) {
   }
   state[kind] = state[kind].filter(r => r.id !== id);
   if (kind === "products") {
-    for (const k of ["purchases", "sales", "gifts", "pos_prices", "transfers", "inventory_lines"]) state[k] = state[k].filter(r => r.product_id !== id);
+    for (const k of ["purchases", "sales", "gifts", "pos_prices", "transfers", "inventory_lines", "losses"]) state[k] = state[k].filter(r => r.product_id !== id);
   }
   if (kind === "pos") {
     state.pos_prices = state.pos_prices.filter(r => r.pos_id !== id);
     state.transfers = state.transfers.filter(r => r.pos_id !== id);
+    state.losses = state.losses.filter(r => r.pos_id !== id);
     const deadInv = state.inventories.filter(i => i.pos_id === id).map(i => i.id);
     state.inventories = state.inventories.filter(i => i.pos_id !== id);
     state.inventory_lines = state.inventory_lines.filter(l => !deadInv.includes(l.inventory_id));
@@ -902,8 +942,11 @@ function renderDash() {
   let revenue = 0, units = 0, cogs = 0;
   for (const s of sales) { const q = Number(s.qty); units += q; revenue += q * Number(s.price_per_unit); cogs += q * avgCostOf(s.product_id); }
   const expTotal = expenses.reduce((a, e) => a + Number(e.amount), 0);
+  const lossRows = filteredLosses();
+  const lossVal = lossRows.reduce((a, l) => a + Number(l.qty) * avgCostOf(l.product_id), 0);
+  const lossUnits = lossRows.reduce((a, l) => a + Number(l.qty), 0);
   const revEUR = toE(revenue);
-  const gross = revEUR - cogs, net = gross - expTotal;
+  const gross = revEUR - cogs, net = gross - expTotal - lossVal;
   let stockValue = 0, stockUnits = 0;
   for (const p of state.products) { const c = productCalc(p); stockValue += c.stockValue; stockUnits += Math.max(c.stock, 0); }
   const lowList = state.products.map(p => ({ p, c: productCalc(p) }))
@@ -914,6 +957,7 @@ function renderDash() {
     ["shopping_cart", "COGS", fmtE(cogs), "avg cost basis (€)", ""],
     ["trending_up", "Gross profit", fmtE(gross), fmtP(revEUR > 0 ? gross / revEUR : null) + " margin", ""],
     ["account_balance_wallet", "Expenses", fmtE(expTotal), `${expenses.length} entries`, ""],
+    ["report", "Losses", fmtE(lossVal), `${fmtN(lossUnits)} units written off`, lossVal > 0 ? "red" : ""],
     ["savings", "Net profit", fmtE(net), fmtP(revEUR > 0 ? net / revEUR : null) + " net margin", ""],
     ["inventory_2", "Stock on hand", fmtN(stockUnits), fmtE(stockValue) + " at cost", ""],
     ["warning", "Low stock", fmtN(lowList.length), `products at ≤ ${LOW_STOCK} units`, lowList.length ? "red" : ""],
@@ -929,25 +973,28 @@ function renderDash() {
 
   // monthly table
   const months = {};
-  const bucket = ym => months[ym] ??= { revenue: 0, cogs: 0, expenses: 0 };
+  const bucket = ym => months[ym] ??= { revenue: 0, cogs: 0, expenses: 0, losses: 0 };
   for (const s of sales) { const b = bucket(s.date.slice(0, 7)); const q = Number(s.qty); b.revenue += q * Number(s.price_per_unit); b.cogs += q * avgCostOf(s.product_id); }
   for (const e of expenses) bucket(e.date.slice(0, 7)).expenses += Number(e.amount);
+  for (const l of lossRows) if (l.date) bucket(l.date.slice(0, 7)).losses += Number(l.qty) * avgCostOf(l.product_id);
   const rows = Object.entries(months).sort(([a], [b]) => a.localeCompare(b));
   if (!rows.length) document.getElementById("dashMonthly").innerHTML = '<p class="empty">No activity in this selection yet.</p>';
   else {
-    let h = `<table><tr><th>Month</th><th class="num">Revenue ($)</th><th class="num">COGS (€)</th><th class="num">Gross profit (€)</th><th class="num">Expenses (€)</th><th class="num">Net (€)</th><th class="num">Net margin</th><th class="num">Cumulative net (€)</th></tr>`;
-    let cum = 0, tR = 0, tC = 0, tE = 0;
+    let h = `<table><tr><th>Month</th><th class="num">Revenue ($)</th><th class="num">COGS (€)</th><th class="num">Gross profit (€)</th><th class="num">Expenses (€)</th><th class="num">Losses (€)</th><th class="num">Net (€)</th><th class="num">Net margin</th><th class="num">Cumulative net (€)</th></tr>`;
+    let cum = 0, tR = 0, tC = 0, tE = 0, tL = 0;
     for (const [ym, v] of rows) {
       const rE = toE(v.revenue);
-      const g = rE - v.cogs, n = g - v.expenses; cum += n; tR += v.revenue; tC += v.cogs; tE += v.expenses;
+      const g = rE - v.cogs, n = g - v.expenses - v.losses; cum += n; tR += v.revenue; tC += v.cogs; tE += v.expenses; tL += v.losses;
       h += `<tr><td>${monthLabel(ym)}</td><td class="num calc">${fmtU(v.revenue)}</td><td class="num calc">${fmtE(v.cogs)}</td>
         <td class="num calc">${fmtE(g)}</td><td class="num calc">${fmtE(v.expenses)}</td>
+        <td class="num calc ${v.losses > 0 ? "neg" : ""}">${fmtE(v.losses)}</td>
         <td class="num calc ${n < 0 ? "neg" : ""}">${fmtE(n)}</td><td class="num calc">${fmtP(rE > 0 ? n / rE : null)}</td>
         <td class="num calc ${cum < 0 ? "neg" : ""}">${fmtE(cum)}</td></tr>`;
     }
-    const tG = toE(tR) - tC, tN = tG - tE;
+    const tG = toE(tR) - tC, tN = tG - tE - tL;
     h += `<tr class="total"><td>TOTAL</td><td class="num">${fmtU(tR)}</td><td class="num">${fmtE(tC)}</td><td class="num">${fmtE(tG)}</td>
-      <td class="num">${fmtE(tE)}</td><td class="num ${tN < 0 ? "neg" : ""}">${fmtE(tN)}</td>
+      <td class="num">${fmtE(tE)}</td><td class="num ${tL > 0 ? "neg" : ""}">${fmtE(tL)}</td>
+      <td class="num ${tN < 0 ? "neg" : ""}">${fmtE(tN)}</td>
       <td class="num">${fmtP(toE(tR) > 0 ? tN / toE(tR) : null)}</td><td></td></tr></table>`;
     document.getElementById("dashMonthly").innerHTML = h;
   }
@@ -1349,9 +1396,14 @@ function refreshSelects() {
   const prods = [...state.products].sort(prodSort);
   const prodOpts = prods.map(p => `<option value="${p.id}">${esc(prodShort(p))}</option>`).join("");
   const grouped = prodOptionsGrouped("");
-  for (const id of ["pu_product", "t_product"]) {
+  for (const id of ["pu_product", "t_product", "l_product"]) {
     const sel = document.getElementById(id); const cur = sel.value;
     sel.innerHTML = grouped; if (cur) sel.value = cur;
+  }
+  {
+    const sel = document.getElementById("l_pos"); const cur = sel.value;
+    sel.innerHTML = '<option value="">Warehouse</option>' + state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+    sel.value = cur;
   }
   const posOpts = state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
   {
@@ -1373,7 +1425,7 @@ function refreshSelects() {
 }
 function render() {
   refreshSelects();
-  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderStocks(); renderPosStock(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
+  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
 }
 
 /* ================= daily log & calendar ================= */
@@ -1869,34 +1921,84 @@ window.renderStocks = () => {
     .sort(prodSort);
   if (!list.length) { el.innerHTML = '<p class="empty">No products yet — import your invoices from the Purchases tab.</p>'; return; }
   let h = `<table><tr><th>Product</th><th class="num">Initial</th><th class="num">+ Purchased</th><th class="num">− Sold</th>
-    <th class="num">− Gifted</th><th class="num">± Inventory adj.</th><th class="num">= Stock</th><th>Status</th><th class="num">Value at cost</th></tr>`;
-  let tI = 0, tP = 0, tS = 0, tG = 0, tA = 0, tSt = 0, tV = 0;
+    <th class="num">− Gifted</th><th class="num">− Losses</th><th class="num">± Inventory adj.</th><th class="num">= Stock</th><th>Status</th><th class="num">Value at cost</th></tr>`;
+  let tI = 0, tP = 0, tS = 0, tG = 0, tL = 0, tA = 0, tSt = 0, tV = 0;
   for (const p of list) {
     const c = productCalc(p);
     const adj = invDelta(p.id, "all");
-    tI += c.iq; tP += c.purQty; tS += c.sold; tG += c.gifted; tA += adj; tSt += c.stock; tV += c.stockValue;
+    tI += c.iq; tP += c.purQty; tS += c.sold; tG += c.gifted; tL += c.lost; tA += adj; tSt += c.stock; tV += c.stockValue;
     const tracked = (c.iq + c.purQty) > 0;
     const st = !tracked ? "—" : c.stock <= 0 ? '<span class="st st-out">OUT</span>'
       : c.stock <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
     h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtN(c.iq)}</td><td class="num calc">${fmtN(c.purQty)}</td>
       <td class="num calc">${fmtN(c.sold)}</td><td class="num calc">${fmtN(c.gifted)}</td>
+      <td class="num calc ${c.lost > 0 ? "neg" : ""}">${fmtN(c.lost)}</td>
       <td class="num calc ${adj !== 0 ? "neg" : ""}">${adj > 0 ? "+" : ""}${fmtN(adj)}</td>
       <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}"><b>${fmtN(c.stock)}</b></td>
       <td>${st}</td><td class="num calc">${fmtE(c.stockValue)}</td></tr>`;
   }
   h += `<tr class="total"><td>TOTAL (${list.length})</td><td class="num">${fmtN(tI)}</td><td class="num">${fmtN(tP)}</td>
-    <td class="num">${fmtN(tS)}</td><td class="num">${fmtN(tG)}</td><td class="num">${tA > 0 ? "+" : ""}${fmtN(tA)}</td>
+    <td class="num">${fmtN(tS)}</td><td class="num">${fmtN(tG)}</td><td class="num ${tL > 0 ? "neg" : ""}">${fmtN(tL)}</td><td class="num">${tA > 0 ? "+" : ""}${fmtN(tA)}</td>
     <td class="num">${fmtN(tSt)}</td><td></td><td class="num">${fmtE(tV)}</td></tr></table>`;
   el.innerHTML = h;
 };
 window.exportStocksCSV = () => {
-  const rows = [["Product", "Ref", "Initial", "Purchased", "Sold", "Gifted", "Inventory adj.", "Stock", "Avg cost", "Value at cost"]];
+  const rows = [["Product", "Ref", "Initial", "Purchased", "Sold", "Gifted", "Lost", "Inventory adj.", "Stock", "Avg cost", "Value at cost"]];
   for (const p of [...state.products].sort(prodSort)) {
     const c = productCalc(p);
-    rows.push([prodShort(p), p.ref || "", c.iq, c.purQty, c.sold, c.gifted, invDelta(p.id, "all"), c.stock, c.avgCost.toFixed(4), c.stockValue.toFixed(2)]);
+    rows.push([prodShort(p), p.ref || "", c.iq, c.purQty, c.sold, c.gifted, c.lost, invDelta(p.id, "all"), c.stock, c.avgCost.toFixed(4), c.stockValue.toFixed(2)]);
   }
   downloadFile("lanea-stocks.csv", "text/csv", toCSV(rows));
 };
+
+/* ================= losses (damaged / expired / theft) ================= */
+window.lossHint = () => {
+  const pid = gv("l_product"), posId = gv("l_pos") || null;
+  const hint = document.getElementById("l_hint");
+  if (!pid) { hint.textContent = ""; return; }
+  const p = prodById(pid);
+  const at = posId ? posStockOf(pid, posId) : warehouseOf(p);
+  hint.textContent = `At ${posId ? (posById(posId)?.name || "") : "Warehouse"}: ${fmtN(at)} in stock · cost value ${eurF.format(productCalc(p).avgCost)}/unit`;
+};
+document.getElementById("lossForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  if (!state.products.length) { alert("Add products first (Catalog tab)."); return; }
+  const product_id = gv("l_product"), pos_id = gv("l_pos") || null;
+  const qty = Number(gv("l_qty"));
+  if (!(qty > 0)) return;
+  const at = pos_id ? posStockOf(product_id, pos_id) : warehouseOf(prodById(product_id));
+  if (qty > at && !confirm(`Only ${fmtN(at)} in stock at ${pos_id ? (posById(pos_id)?.name || "this POS") : "the warehouse"} — record this loss anyway?`)) return;
+  const reason = gv("l_reason") + (gv("l_note").trim() ? " — " + gv("l_note").trim() : "");
+  const ok = await addRow("losses", { date: gv("l_date"), product_id, pos_id, qty, reason });
+  if (ok) {
+    document.getElementById("l_qty").value = ""; document.getElementById("l_note").value = "";
+    toast(`Loss recorded ✓ — ${fmtE(qty * avgCostOf(product_id))} written off`);
+    render();
+  }
+});
+function renderLosses() {
+  const el = document.getElementById("lossesTable"), sum = document.getElementById("lossSummary");
+  if (!state.losses.length) { sum.innerHTML = ""; el.innerHTML = '<p class="empty">No losses recorded yet.</p>'; return; }
+  const rows = [...state.losses].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  let tQ = 0, tV = 0;
+  const byReason = {};
+  let h = `<table><tr><th>Date</th><th>Product</th><th>Location</th><th class="num">Qty</th><th>Reason</th><th class="num">Value (€)</th><th class="no-print"></th></tr>`;
+  for (const l of rows) {
+    const v = Number(l.qty) * avgCostOf(l.product_id);
+    tQ += Number(l.qty); tV += v;
+    const r0 = (l.reason || "Other").split(" — ")[0];
+    byReason[r0] = (byReason[r0] || 0) + v;
+    h += `<tr><td>${fmtD(l.date)}</td><td>${prodLabelById(l.product_id)}</td>
+      <td>${l.pos_id ? esc(posById(l.pos_id)?.name || "(deleted)") : "Warehouse"}</td>
+      <td class="num">${fmtN(l.qty)}</td><td>${esc(l.reason || "")}</td>
+      <td class="num calc neg">${fmtE(v)}</td>
+      <td class="no-print"><button class="btn small danger" onclick="delRow('losses','${l.id}')">Del</button></td></tr>`;
+  }
+  h += `<tr class="total"><td>TOTAL</td><td></td><td></td><td class="num">${fmtN(tQ)}</td><td></td><td class="num neg">${fmtE(tV)}</td><td class="no-print"></td></tr></table>`;
+  sum.innerHTML = Object.entries(byReason).map(([r, v]) =>
+    `<span class="chip" style="background:#ffdad6">${esc(r)} ${fmtE(v)}</span>`).join("");
+  el.innerHTML = h;
+}
 
 /* ================= stock by point of sale ================= */
 window.transferHint = () => {
@@ -2310,9 +2412,16 @@ async function enterRemote(session) {
   // fetch EVERYTHING into a temporary object first — state is only replaced
   // when the whole load succeeds, so a missing table can never corrupt local data
   const fetched = {};
+  let pendingBanner = null;
   for (const k of KINDS) {
     const { data, error } = await client.from(k).select("*").order("created_at", { ascending: true });
     if (error) {
+      if (error.code === "PGRST205" && k === "losses") {
+        // optional newer table — app works without it until the migration runs
+        fetched[k] = [];
+        pendingBanner = 'To enable the new <b>Losses</b> tab in the cloud, run <b>supabase/migration-v3-losses.sql</b> (from the GitHub repo) in your SQL Editor once. Everything else works meanwhile.';
+        continue;
+      }
       if (error.code === "PGRST205") {
         showBanner(`Your database is missing the <b>${k}</b> table — open Supabase &rarr; SQL Editor and run <b>supabase/migration-v2.sql</b> from the repo, then reload this page. Meanwhile your data stays safely in this browser.`);
       } else alert("Could not load " + k + ": " + error.message);
@@ -2322,7 +2431,7 @@ async function enterRemote(session) {
   }
   for (const k of KINDS) state[k] = fetched[k];
   remote = true;
-  hideBanner();
+  if (pendingBanner) showBanner(pendingBanner); else hideBanner();
   setBadge(); render();
   maybeOfferLocalUpload();
 }
@@ -2394,6 +2503,7 @@ window.pushLocalToCloud = async () => {
 document.getElementById("pu_date").value = todayISO();
 document.getElementById("t_date").value = todayISO();
 document.getElementById("inv_date").value = todayISO();
+document.getElementById("l_date").value = todayISO();
 document.getElementById("set_low").value = LOW_STOCK;
 document.getElementById("set_rate").value = USD_RATE;
 window.saveRate = () => {
