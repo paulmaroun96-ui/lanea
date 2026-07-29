@@ -960,8 +960,12 @@ function renderDash() {
   const lossUnits = lossRows.reduce((a, l) => a + Number(l.qty), 0);
   const revEUR = toE(revenue);
   const gross = revEUR - cogs, net = gross - expTotal - lossVal;
-  let stockValue = 0, stockUnits = 0;
-  for (const p of state.products) { const c = productCalc(p); stockValue += c.stockValue; stockUnits += Math.max(c.stock, 0); }
+  let stockValue = 0, stockUnits = 0, stockRetail = 0;
+  for (const p of state.products) {
+    const c = productCalc(p);
+    stockValue += c.stockValue; stockUnits += Math.max(c.stock, 0);
+    stockRetail += Math.max(c.stock, 0) * ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0);
+  }
   const lowList = state.products.map(p => ({ p, c: productCalc(p) }))
     .filter(x => (x.c.iq + x.c.purQty) > 0 && x.c.stock <= LOW_STOCK)
     .sort((a, b) => a.c.stock - b.c.stock);
@@ -972,7 +976,7 @@ function renderDash() {
     ["account_balance_wallet", "Expenses", fmtE(expTotal), `${expenses.length} entries`, ""],
     ["report", "Losses", fmtE(lossVal), `${fmtN(lossUnits)} units written off`, lossVal > 0 ? "red" : ""],
     ["savings", "Net profit", fmtE(net), fmtP(revEUR > 0 ? net / revEUR : null) + " net margin", ""],
-    ["inventory_2", "Stock on hand", fmtN(stockUnits), fmtE(stockValue) + " at cost", ""],
+    ["inventory_2", "Stock on hand", fmtN(stockUnits), `${fmtE(stockValue)} at cost · ≈ ${fmtU(stockRetail)} at retail`, ""],
     ["warning", "Low stock", fmtN(lowList.length), `products at ≤ ${LOW_STOCK} units`, lowList.length ? "red" : ""],
   ];
   document.getElementById("dashCards").innerHTML = cards.map(([ic, k, v, s, cls]) =>
