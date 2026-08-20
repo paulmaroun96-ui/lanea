@@ -2053,7 +2053,7 @@ window.renderStocks = () => {
   el.innerHTML = h;
 };
 window.exportStocksCSV = () => {
-  const rows = [["Product", "Ref", "Initial", "Purchased", "Sold", "Gifted", "Lost", "Inventory adj.", "Stock", "Avg cost", "Value at cost"]];
+  const rows = [["Product", "Ref", "Initial", "Purchased", "Sold", "Gifted", "Lost", "Inventory adj.", "Stock", "Avg cost (EUR)", "Value at cost (EUR)"]];
   for (const p of [...state.products].sort(prodSort)) {
     const c = productCalc(p);
     rows.push([prodShort(p), p.ref || "", c.iq, c.purQty, c.sold, c.gifted, c.lost, invDelta(p.id, "all"), c.stock, c.avgCost.toFixed(4), c.stockValue.toFixed(2)]);
@@ -2402,7 +2402,7 @@ window.exportDashboardCSV = () => {
   downloadFile("lanea-dashboard.csv", "text/csv", toCSV(rows));
 };
 window.exportProductsCSV = () => {
-  const rows = [["Product", "Ref", "Supplier", "Initial qty", "Initial cost", "Purchased qty", "Avg cost", "Sold", "Gifted", "Stock", "Stock value"]];
+  const rows = [["Product", "Ref", "Supplier", "Initial qty", "Initial cost (EUR)", "Purchased qty", "Avg cost (EUR)", "Sold", "Gifted", "Stock", "Stock value (EUR)"]];
   for (const p of [...state.products].sort(prodSort)) {
     const c = productCalc(p);
     rows.push([prodShort(p), p.ref || "", p.supplier || "", c.iq, p.initial_cost || 0, c.purQty, c.avgCost.toFixed(4), c.sold, c.gifted, c.stock, c.stockValue.toFixed(2)]);
