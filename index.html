@@ -221,6 +221,7 @@
     <button data-tab="day"><span class="ms">edit_square</span>Daily report</button>
     <button data-tab="inv"><span class="ms">fact_check</span>Inventory</button>
     <button data-tab="stk"><span class="ms">warehouse</span>Stocks</button>
+    <button data-tab="trf"><span class="ms">sync_alt</span>Transfers</button>
     <button data-tab="los"><span class="ms">report</span>Losses</button>
     <button data-tab="exp"><span class="ms">account_balance_wallet</span>Expenses</button>
     <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
@@ -306,7 +307,12 @@
       <h2 style="margin:0">Daily report — <span id="repDate"></span></h2>
       <span id="repStatus"></span>
     </div>
-    <p class="hint">Add each item below — the report builds up live. Nothing is saved until you press <b>Submit daily report</b>.</p>
+    <p class="hint">Type the day's quantities in the sales grid (rows = products, columns = points of sale — price from your price list), add gifts and expenses below, then press <b>Submit daily report</b>. Nothing is saved before that.</p>
+    <div class="rowform no-print" style="margin-bottom:4px">
+      <label>Search product<input id="rep_search" oninput="renderReport()" placeholder="product…" style="min-width:200px"></label>
+      <label style="flex-direction:row;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:12.5px;color:var(--muted)">
+        <input type="checkbox" id="rep_all" onchange="renderReport()" style="width:auto">show products without a price</label>
+    </div>
     <div id="reportBody"></div>
   </section>
 </div>
@@ -363,20 +369,27 @@
     </div>
     <div class="scrollbox" style="max-height:460px" id="stocksTable"></div>
   </section>
-  <section class="card">
-    <h2>Stock by point of sale</h2>
-    <p class="hint"><b>Warehouse = everything not sent to a POS</b> (purchases + initial − gifts − losses − transfers out, corrected by your warehouse counts).
-    Send stock to a point of sale when you supply it — sales at that POS then consume its stock, and you can return leftovers.
-    If you don't use transfers, your whole stock simply shows as Warehouse. Negative POS stock means sales were logged there without sending stock first.</p>
-    <form class="rowform no-print" id="transferForm">
+</div>
+
+<!-- ================= TRANSFERS ================= -->
+<div class="tab" id="tab-trf" style="display:none">
+  <div class="pagehead"><h1>Transfers</h1><p>Allocate stock between locations — Warehouse to a POS, POS back to the Warehouse, or POS to POS.</p></div>
+  <section class="card no-print">
+    <h2>Move stock</h2>
+    <form class="rowform" id="transferForm">
       <label>Date<input id="t_date" type="date" required></label>
       <label>Product<select id="t_product" required onchange="transferHint()"></select></label>
-      <label>Point of sale<select id="t_pos" required onchange="transferHint()"></select></label>
+      <label>From<select id="t_from" onchange="transferHint()"></select></label>
+      <label>To<select id="t_to" onchange="transferHint()"></select></label>
       <label>Qty<input id="t_qty" type="number" min="1" step="1" required style="width:90px"></label>
-      <button class="btn gold" type="submit">Send to POS</button>
-      <button class="btn ghost" type="button" onclick="returnTransfer()">Return to warehouse</button>
+      <button class="btn gold" type="submit">Transfer</button>
     </form>
     <p class="hint" id="t_hint"></p>
+  </section>
+  <section class="card">
+    <h2>Stock by location</h2>
+    <p class="hint"><b>Warehouse = everything not sent to a POS</b> (purchases + initial − gifts − losses − transfers out, corrected by your warehouse counts).
+    Sales at a POS consume that POS's stock. Negative POS stock means sales were logged there without allocating stock first.</p>
     <div class="rowform no-print" style="margin-top:6px">
       <label>View<select id="sp_pos" onchange="renderPosStock()"></select></label>
       <label>Search<input id="sp_search" oninput="renderPosStock()" placeholder="product…" style="min-width:200px"></label>
@@ -429,6 +442,7 @@
       <label>Product<select id="pu_product" required></select></label>
       <label>Qty (units)<input id="pu_qty" type="number" min="1" step="1" required style="width:100px"></label>
       <label>Cost / unit (€)<input id="pu_cost" type="number" min="0" step="0.0001" required style="width:120px"></label>
+      <label>Deliver to<select id="pu_pos"></select></label>
       <button class="btn gold" type="submit">Save purchase</button>
     </form>
   </section>
@@ -1457,9 +1471,10 @@ function refreshSelects() {
     sel.value = cur;
   }
   const posOpts = state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-  {
-    const sel = document.getElementById("t_pos"); const cur = sel.value;
-    sel.innerHTML = posOpts; if (cur) sel.value = cur;
+  for (const id of ["t_from", "t_to", "pu_pos"]) {
+    const sel = document.getElementById(id); const cur = sel.value;
+    sel.innerHTML = '<option value="">Warehouse</option>' + posOpts;
+    sel.value = cur;
   }
   {
     const sel = document.getElementById("sp_pos"); const cur = sel.value;
@@ -1570,7 +1585,7 @@ function renderDay() {
 
 /* ================= interactive daily report ================= */
 const gv = id => { const el = document.getElementById(id); return el ? el.value : ""; };
-const NR_IDS = ["nr_s_pos", "nr_s_prod", "nr_s_qty", "nr_s_price", "nr_g_prod", "nr_g_qty", "nr_g_note", "nr_e_desc", "nr_e_cat", "nr_e_amt"];
+const NR_IDS = ["nr_g_prod", "nr_g_qty", "nr_g_note", "nr_e_desc", "nr_e_cat", "nr_e_amt"];
 function renderReport() {
   document.getElementById("repDate").textContent = fmtD(selectedDay);
   const n = draftCount();
@@ -1592,26 +1607,48 @@ function renderReport() {
   const catOpt = sel => CATEGORIES.map(c => `<option${c === sel ? " selected" : ""}>${c}</option>`).join("");
   const enter = fn => `onkeydown="if(event.key==='Enter'){event.preventDefault();${fn}()}"`;
 
-  let h = '<div class="rep-sec">Sales</div><div style="overflow-x:auto"><table>';
-  h += `<tr><th style="min-width:150px">Point of sale</th><th style="min-width:230px">Product</th><th class="num">Qty</th><th class="num">Price / unit ($)</th><th class="num">Total ($)</th><th></th></tr>`;
-  draft.sales.forEach((d, i) => {
-    h += `<tr>
-      <td><select class="rin" onchange="updDraft('sales',${i},'pos_id',this.value)">${posOpt(d.pos_id)}</select></td>
-      <td><select class="rin" onchange="updDraft('sales',${i},'product_id',this.value)">${prodOpt(d.product_id)}</select></td>
-      <td class="num"><input class="rin" type="number" min="1" step="1" value="${d.qty}" style="width:72px" onchange="updDraft('sales',${i},'qty',this.value)"></td>
-      <td class="num"><input class="rin" type="number" min="0" step="0.01" value="${d.price_per_unit}" style="width:95px" onchange="updDraft('sales',${i},'price_per_unit',this.value)"></td>
-      <td class="num calc">${showU(Number(d.qty) * Number(d.price_per_unit))}</td>
-      <td><button class="btn small danger" title="Remove line" onclick="removeDraft('sales',${i})">✕</button></td></tr>`;
-  });
-  h += `<tr class="newrow">
-    <td style="white-space:nowrap"><select class="rin" id="nr_s_pos" onchange="nrSaleSync(true)">${posOpt("")}</select>
-      <button class="btn ghost small" type="button" onclick="quickAddPos()" title="New point of sale">+</button></td>
-    <td><select class="rin" id="nr_s_prod" onchange="nrSaleSync(true)"><option value=""></option>${prodOpt("")}</select></td>
-    <td class="num"><input class="rin" id="nr_s_qty" type="number" min="1" step="1" placeholder="qty" style="width:72px" oninput="nrSaleSync()" ${enter("addReportSale")}></td>
-    <td class="num"><input class="rin" id="nr_s_price" type="number" min="0" step="0.01" placeholder="price" style="width:95px" oninput="nrSaleSync()" ${enter("addReportSale")}></td>
-    <td class="num calc" id="nr_s_total">—</td>
-    <td><button class="btn small gold" onclick="addReportSale()">+ Add</button></td></tr>`;
-  h += `</table></div><p class="hint" id="nr_s_hint" style="margin-top:4px"></p>`;
+  let h = '<div class="rep-sec">Sales — quantity per point of sale</div>';
+  if (!state.pos.length) {
+    h += '<p class="hint">Create your points of sale first (Sales &amp; prices tab) — each becomes a column of this grid.</p>';
+  } else {
+    const rq = (gv("rep_search") || "").toLowerCase();
+    const showAll = !!document.getElementById("rep_all")?.checked;
+    // saved-today quantities per product|pos, shown under the cells
+    const savedQ = {};
+    for (const s of state.sales) if (s.date === selectedDay) {
+      const k = s.product_id + "|" + s.pos_id;
+      savedQ[k] = (savedQ[k] || 0) + Number(s.qty);
+    }
+    const lineOf = (pid, posId) => draft.sales.find(l => l.product_id === pid && l.pos_id === posId && l.date === selectedDay);
+    const rowsP = state.products.filter(p => {
+      if (!prodMatch(p, rq)) return false;
+      if (showAll) return true;
+      return state.pos.some(pos => (priceFor(pos.id, p.id) ?? 0) > 0)
+        || state.pos.some(pos => lineOf(p.id, pos.id) || savedQ[p.id + "|" + pos.id]);
+    }).sort(prodSort);
+    h += '<div style="overflow-x:auto"><table><tr><th>Product</th>'
+      + state.pos.map(p => `<th class="num">${esc(p.name)}</th>`).join("")
+      + '<th class="num">Total ($)</th></tr>';
+    for (const p of rowsP) {
+      let rowTot = 0;
+      const cells = state.pos.map(pos => {
+        const line = lineOf(p.id, pos.id);
+        const price = line ? Number(line.price_per_unit) : priceFor(pos.id, p.id);
+        const qty = line ? line.qty : "";
+        if (line) rowTot += Number(line.qty) * Number(line.price_per_unit);
+        const saved = savedQ[p.id + "|" + pos.id];
+        const noPrice = price == null;
+        return `<td class="num"><input class="rin ${line ? "chg" : ""}" type="number" min="0" step="1" value="${qty}" placeholder="—" style="width:62px"
+            ${noPrice && !line ? 'disabled title="Set a price first (Sales & prices tab)"' : ""}
+            onchange="repQty('${p.id}','${pos.id}',this.value)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+          <div style="font-size:10px;color:var(--muted);margin-top:2px;cursor:pointer" title="Click to set a special price for this cell"
+            onclick="repPrice('${p.id}','${pos.id}')">${noPrice ? "no price" : usdF.format(price)}${saved ? " · saved " + fmtN(saved) : ""}</div></td>`;
+      }).join("");
+      h += `<tr><td>${prodLabel(p)}</td>${cells}<td class="num calc">${rowTot > 0 ? showU(rowTot) : "—"}</td></tr>`;
+    }
+    h += "</table></div><p class='hint' style='margin-top:4px'>Type quantities — the price under each cell comes from your price list (click it for a special price). \"saved N\" = already submitted today.</p>";
+  }
 
   h += '<div class="rep-sec">Gifts</div><div style="overflow-x:auto"><table>';
   h += `<tr><th style="min-width:230px">Product</th><th class="num">Qty</th><th style="min-width:200px">Note</th><th></th></tr>`;
@@ -1668,28 +1705,35 @@ function renderReport() {
     const el = document.getElementById(id);
     if (el && v) el.value = v;
   }
-  if (!keep.nr_s_pos) {
-    const last = localStorage.getItem(LS_LASTPOS);
-    const el = document.getElementById("nr_s_pos");
-    if (el && last && state.pos.some(p => p.id === last)) el.value = last;
-  }
-  nrSaleSync(); nrGiftSync();
+  nrGiftSync();
 }
-window.nrSaleSync = (fillPrice = false) => {
-  const posEl = document.getElementById("nr_s_pos");
-  if (!posEl) return;
-  const pos = posEl.value, prod = gv("nr_s_prod");
-  const hint = document.getElementById("nr_s_hint");
-  if (prod) {
-    const p = pos ? priceFor(pos, prod) : null;
-    if (fillPrice && p != null) document.getElementById("nr_s_price").value = p;
-    const c = productCalc(prodById(prod));
-    const atPos = pos ? ` · at ${posById(pos)?.name || "POS"}: ${fmtN(posStockOf(prod, pos))}` : "";
-    hint.textContent = `Global stock: ${fmtN(c.stock - pendingOut(prod))}${atPos} · avg cost ${eurF.format(c.avgCost)}` +
-      (p != null ? ` · price list: ${usdF.format(p)}` : (pos ? " · no price set yet at this POS — the price you enter is remembered" : ""));
-  } else hint.textContent = "";
-  const q = Number(gv("nr_s_qty")), pr = Number(gv("nr_s_price"));
-  document.getElementById("nr_s_total").textContent = q > 0 && pr > 0 ? showU(q * pr) : "—";
+/* sales grid: one qty cell per product x POS, priced from the price list */
+window.repQty = (pid, posId, val) => {
+  const q = Number(val);
+  const i = draft.sales.findIndex(l => l.product_id === pid && l.pos_id === posId && l.date === selectedDay);
+  if (!(q > 0)) {
+    if (i >= 0) { draft.sales.splice(i, 1); saveDraft(); renderDay(); }
+    return;
+  }
+  if (i >= 0) draft.sales[i].qty = q;
+  else {
+    const p = priceFor(posId, pid);
+    draft.sales.push({ date: selectedDay, pos_id: posId, product_id: pid, qty: q, price_per_unit: p != null ? Number(p) : 0 });
+  }
+  const at = posStockOf(pid, posId);
+  if (q > at) toast(`⚠ ${fmtN(q)} > stock at ${posById(posId)?.name || "this POS"} (${fmtN(at)}) — check your transfers`);
+  saveDraft(); renderDay();
+};
+window.repPrice = (pid, posId) => {
+  const line = draft.sales.find(l => l.product_id === pid && l.pos_id === posId && l.date === selectedDay);
+  const cur = line ? line.price_per_unit : (priceFor(posId, pid) ?? "");
+  const v = prompt("Special price ($) for this product at this POS — this report only:", cur);
+  if (v === null) return;
+  const price = Number(v);
+  if (!isFinite(price) || price < 0) return;
+  if (line) line.price_per_unit = price;
+  else draft.sales.push({ date: selectedDay, pos_id: posId, product_id: pid, qty: 1, price_per_unit: price });
+  saveDraft(); renderDay();
 };
 window.nrGiftSync = () => {
   const el = document.getElementById("nr_g_prod");
@@ -1704,20 +1748,7 @@ window.updDraft = (kind, i, field, val) => {
   d[field] = ["qty", "price_per_unit", "amount"].includes(field) ? Number(val) : val;
   saveDraft(); renderDay();
 };
-window.addReportSale = () => {
-  const pos_id = gv("nr_s_pos"), product_id = gv("nr_s_prod");
-  const qty = Number(gv("nr_s_qty")), price = Number(gv("nr_s_price"));
-  if (!pos_id) { alert("Create a point of sale first — use the + button next to the POS field."); return; }
-  if (!product_id) { alert("Pick a product."); return; }
-  if (!(qty > 0)) { alert("Enter the quantity sold."); return; }
-  if (gv("nr_s_price") === "" || !(price >= 0)) { alert("Enter the price per unit."); return; }
-  const available = productCalc(prodById(product_id)).stock - pendingOut(product_id);
-  if (qty > available && !confirm(`Only ${fmtN(available)} in stock (counting report lines) — add anyway?`)) return;
-  draft.sales.push({ date: selectedDay, pos_id, product_id, qty, price_per_unit: price });
-  saveDraft(); localStorage.setItem(LS_LASTPOS, pos_id);
-  renderDay();
-  const el = document.getElementById("nr_s_prod"); if (el) el.focus();
-};
+/* (single-line sale entry replaced by the product x POS sales grid above) */
 window.addReportGift = () => {
   const product_id = gv("nr_g_prod"), qty = Number(gv("nr_g_qty"));
   if (!product_id) { alert("Pick a product."); return; }
@@ -2112,35 +2143,35 @@ function renderLosses() {
 
 /* ================= stock by point of sale ================= */
 window.transferHint = () => {
-  const pid = gv("t_product"), posId = gv("t_pos");
+  const pid = gv("t_product");
   const hint = document.getElementById("t_hint");
   if (!pid) { hint.textContent = ""; return; }
   const p = prodById(pid);
-  const parts = [`Warehouse: ${fmtN(warehouseOf(p))}`];
-  if (posId) parts.push(`At ${posById(posId)?.name || ""}: ${fmtN(posStockOf(pid, posId))}`);
-  hint.textContent = parts.join("   ·   ");
+  const from = gv("t_from") || null, to = gv("t_to") || null;
+  const at = loc => loc ? posStockOf(pid, loc) : warehouseOf(p);
+  const nm = loc => loc ? (posById(loc)?.name || "?") : "Warehouse";
+  hint.textContent = `${nm(from)}: ${fmtN(at(from))} in stock   →   ${nm(to)}: ${fmtN(at(to))} in stock`;
 };
 document.getElementById("transferForm").addEventListener("submit", async ev => {
   ev.preventDefault();
-  if (!state.pos.length) { alert("Create a point of sale first (Sales & prices tab)."); return; }
-  const product_id = gv("t_product"), pos_id = gv("t_pos");
+  if (!state.products.length) { alert("Add products first (Purchases or Catalog tab)."); return; }
+  const product_id = gv("t_product");
+  const from = gv("t_from") || null, to = gv("t_to") || null;
   const qty = Number(gv("t_qty"));
   if (!(qty > 0)) return;
-  const wh = warehouseOf(prodById(product_id));
-  if (qty > wh && !confirm(`Warehouse only has ${fmtN(wh)} of this product — send anyway?`)) return;
-  const ok = await addRow("transfers", { date: gv("t_date"), product_id, pos_id, qty });
-  if (ok) { document.getElementById("t_qty").value = ""; toast(`Sent ${fmtN(qty)} to ${posById(pos_id)?.name || ""} ✓`); render(); }
+  if (from === to) { alert("Choose two different locations."); return; }
+  const p = prodById(product_id);
+  const avail = from ? posStockOf(product_id, from) : warehouseOf(p);
+  const fromName = from ? (posById(from)?.name || "this POS") : "the warehouse";
+  const toName = to ? (posById(to)?.name || "this POS") : "the warehouse";
+  if (qty > avail && !confirm(`${fromName} only holds ${fmtN(avail)} of this product — transfer anyway?`)) return;
+  const date = gv("t_date");
+  if (from) { if (!(await addRow("transfers", { date, product_id, pos_id: from, qty: -qty }))) return; }
+  if (to) { if (!(await addRow("transfers", { date, product_id, pos_id: to, qty }))) return; }
+  document.getElementById("t_qty").value = "";
+  toast(`Transferred ${fmtN(qty)}: ${fromName} → ${toName} ✓`);
+  render();
 });
-window.returnTransfer = async () => {
-  if (!state.pos.length) { alert("Create a point of sale first (Sales & prices tab)."); return; }
-  const product_id = gv("t_product"), pos_id = gv("t_pos");
-  const qty = Number(gv("t_qty"));
-  if (!(qty > 0)) { alert("Enter the quantity to return."); return; }
-  const atPos = posStockOf(product_id, pos_id);
-  if (qty > atPos && !confirm(`${posById(pos_id)?.name || "This POS"} only holds ${fmtN(atPos)} of this product — return anyway?`)) return;
-  const ok = await addRow("transfers", { date: gv("t_date"), product_id, pos_id, qty: -qty });
-  if (ok) { document.getElementById("t_qty").value = ""; toast(`Returned ${fmtN(qty)} to the warehouse ✓`); render(); }
-};
 window.renderPosStock = () => {
   const view = gv("sp_pos");
   const q = (gv("sp_search") || "").toLowerCase();
@@ -2315,14 +2346,25 @@ document.getElementById("p_cancel").addEventListener("click", () => { resetForm(
 document.getElementById("purchaseForm").addEventListener("submit", async ev => {
   ev.preventDefault();
   if (!state.products.length) { alert("Add a product first."); return; }
+  const date = document.getElementById("pu_date").value;
+  const product_id = document.getElementById("pu_product").value;
+  const qty = Number(document.getElementById("pu_qty").value);
+  const pos_id = gv("pu_pos") || null;
   const ok = await addRow("purchases", {
-    date: document.getElementById("pu_date").value,
+    date,
     invoice_ref: document.getElementById("pu_ref").value.trim() || null,
-    product_id: document.getElementById("pu_product").value,
-    qty: Number(document.getElementById("pu_qty").value),
+    product_id,
+    qty,
     unit_cost: Number(document.getElementById("pu_cost").value),
   });
-  if (ok) { document.getElementById("purchaseForm").reset(); document.getElementById("pu_date").value = todayISO(); toast("Purchase added ✓"); render(); }
+  if (ok) {
+    // delivered straight to a POS: book the automatic transfer as well
+    if (pos_id) await addRow("transfers", { date, product_id, pos_id, qty });
+    document.getElementById("purchaseForm").reset();
+    document.getElementById("pu_date").value = todayISO();
+    toast(pos_id ? `Purchase added & delivered to ${posById(pos_id)?.name || "POS"} ✓` : "Purchase added ✓");
+    render();
+  }
 });
 
 /* editing a saved entry moves it back into the daily report */
