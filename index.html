@@ -103,6 +103,14 @@
   .scrollbox { max-height: 430px; overflow-y: auto; }
   .st { font-size: 10.5px; padding: 2px 9px; border-radius: 999px; font-weight: 700; letter-spacing: .5px; }
   .st-ok { background: #d9ecdd; color: #1e5c2a; } .st-low { background: #fdeeca; color: #8a5a06; } .st-out { background: var(--red-soft); color: var(--red); }
+  .modal-ov { position: fixed; inset: 0; background: rgba(25,28,30,.45); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal { background: var(--panel); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.3); padding: 24px 26px; width: 100%; max-width: 400px; }
+  .modal h3 { margin: 0 0 8px; font-size: 16px; }
+  .modal p { margin: 0 0 18px; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+  .modal-btns { display: flex; gap: 10px; justify-content: flex-end; }
+  .btn.danger2 { background: var(--red); color: #fff; border: none; }
+  .row-deleted td { opacity: .5; text-decoration: line-through; }
+  .st-del { background: #e5e7eb; color: #6b7280; }
   #toast { position: fixed; bottom: 24px; right: 24px; background: var(--ink); color: #fff; padding: 11px 20px; border-radius: 10px; font-size: 13.5px; box-shadow: 0 8px 24px rgba(0,0,0,.3); opacity: 0; transform: translateY(10px); transition: all .25s; pointer-events: none; z-index: 99; }
   #toast.show { opacity: 1; transform: none; }
   .cal-head { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
@@ -823,7 +831,7 @@ function productCalc(p) {
   for (const s of state.sales) if (s.product_id === p.id) { sold += Number(s.qty); revenue += Number(s.qty) * Number(s.price_per_unit); }
   for (const g of state.gifts) if (g.product_id === p.id) gifted += Number(g.qty);
   let lost = 0;
-  for (const l of state.losses) if (l.product_id === p.id) lost += Number(l.qty);
+  for (const l of state.losses) if (l.product_id === p.id && !l.deleted) lost += Number(l.qty);
   const stock = totQty - sold - gifted - lost + invDelta(p.id, "all");
   return { iq, purQty, avgCost, sold, revenue, gifted, lost, stock, cogs: sold * avgCost, stockValue: stock * avgCost, totCost };
 }
@@ -837,7 +845,7 @@ const transferredTo = (pid, posId) => state.transfers.filter(t => t.product_id =
   .reduce((a, t) => a + Number(t.qty), 0);
 const soldAtPos = (pid, posId) => state.sales.filter(s => s.product_id === pid && s.pos_id === posId)
   .reduce((a, s) => a + Number(s.qty), 0);
-const lostAt = (pid, posId) => state.losses.filter(l => l.product_id === pid && (l.pos_id || null) === posId)
+const lostAt = (pid, posId) => state.losses.filter(l => l.product_id === pid && (l.pos_id || null) === posId && !l.deleted)
   .reduce((a, l) => a + Number(l.qty), 0);
 const posStockOf = (pid, posId) => transferredTo(pid, posId) - soldAtPos(pid, posId) - lostAt(pid, posId) + invDelta(pid, posId);
 function warehouseOf(p) {
@@ -851,10 +859,9 @@ function invDelta(pid, scope) {
   let d = 0;
   for (const l of state.inventory_lines) {
     if (l.product_id !== pid) continue;
-    if (scope !== "all") {
-      const inv = state.inventories.find(i => i.id === l.inventory_id);
-      if (!inv || (inv.pos_id || null) !== scope) continue;
-    }
+    const inv = state.inventories.find(i => i.id === l.inventory_id);
+    if (!inv || inv.deleted) continue;   // deleted inventories stay visible but inactive
+    if (scope !== "all" && (inv.pos_id || null) !== scope) continue;
     d += Number(l.counted) - Number(l.theoretical);
   }
   return d;
@@ -874,7 +881,7 @@ function filteredSales() {
 }
 function filteredExpenses() { return state.expenses.filter(e => inPeriod(e.date)); }
 function filteredLosses() {
-  return state.losses.filter(l => inPeriod(l.date)
+  return state.losses.filter(l => !l.deleted && inPeriod(l.date)
     && (!filters.pos || l.pos_id === filters.pos)
     && (!filters.prod || l.product_id === filters.prod));
 }
@@ -1849,8 +1856,8 @@ window.openInvDraft = id => {
   document.getElementById("invSheet").scrollIntoView({ behavior: "smooth", block: "start" });
 };
 window.closeInvSheet = () => { activeInv = null; renderInventory(); };
-window.deleteInvDraft = id => {
-  if (!confirm("Delete this DRAFT inventory? Its counts were never applied to stock.")) return;
+window.deleteInvDraft = async id => {
+  if (!(await niceConfirm("Delete this draft?", "Its counts were never applied to stock.", "Delete"))) return;
   invDrafts = invDrafts.filter(d => d.id !== id);
   if (activeInv === id) activeInv = null;
   saveInvDrafts(); renderInventory();
@@ -1997,6 +2004,7 @@ function renderInvList() {
       </div>`;
     }
     const inv = it.obj;
+    const del = !!inv.deleted;
     const lines = state.inventory_lines.filter(l => l.inventory_id === inv.id);
     let dU = 0, dV = 0;
     const rows = lines.map(l => {
@@ -2006,16 +2014,45 @@ function renderInvList() {
         <td class="num calc">${fmtN(Number(l.theoretical))}</td><td class="num calc">${fmtN(Number(l.counted))}</td>
         <td class="num calc ${diff !== 0 ? "neg" : ""}">${diff > 0 ? "+" : ""}${fmtN(diff)}</td></tr>`;
     }).join("");
-    return `<details class="inv"><summary><span class="ref">${esc(invScopeName(inv.pos_id))}</span>
+    return `<details class="inv" style="${del ? "opacity:.55" : ""}"><summary><span class="ref">${esc(invScopeName(inv.pos_id))}</span>
       <span class="meta">${fmtD(inv.date)}</span>
-      <span class="chip" style="background:#d9ecdd">SUBMITTED</span>
+      <span class="chip" style="background:${del ? "#e5e7eb" : "#d9ecdd"}">${del ? "DELETED" : "SUBMITTED"}</span>
       <span class="meta">${lines.length} counted</span>
       <span class="meta ${dU !== 0 ? "neg" : ""}">Δ ${dU > 0 ? "+" : ""}${fmtN(dU)} units</span>
       <span style="margin-left:auto;font-weight:700" class="${dV < 0 ? "neg" : ""}">${showE(dV)}</span>
-      <button class="btn small danger no-print" style="margin-left:10px" onclick="event.preventDefault();delRow('inventories','${inv.id}')">Del</button></summary>
+      ${del
+        ? `<button class="btn small ghost no-print" style="margin-left:10px" onclick="event.preventDefault();restoreInv('${inv.id}')">Restore</button>`
+        : `<button class="btn small ghost no-print" style="margin-left:10px" onclick="event.preventDefault();reopenInventory('${inv.id}')">Reopen as draft</button>
+           <button class="btn small danger no-print" onclick="event.preventDefault();softDelInv('${inv.id}')">Del</button>`}
+      </summary>
       <div class="lines"><table><tr><th>Product</th><th class="num">Theoretical</th><th class="num">Counted</th><th class="num">Difference</th></tr>${rows}</table></div></details>`;
   }).join("");
 }
+/* soft delete: the inventory stays listed as DELETED and stops affecting stock */
+window.softDelInv = async id => {
+  if (!(await niceConfirm("Delete this inventory?",
+    "It stays in the list marked DELETED and no longer affects stock. You can restore it anytime.", "Delete"))) return;
+  if (await updateRow("inventories", id, { deleted: true })) { toast("Inventory deleted — kept in the list, stock unaffected"); render(); }
+};
+window.restoreInv = async id => {
+  if (await updateRow("inventories", id, { deleted: false })) { toast("Inventory restored ✓ — its adjustments apply again"); render(); }
+};
+/* a submitted inventory can go back to draft: its effect is removed until re-submitted */
+window.reopenInventory = async id => {
+  const inv = state.inventories.find(i => i.id === id); if (!inv) return;
+  if (!(await niceConfirm("Reopen as draft?",
+    "This inventory goes back to DRAFT with all its counts — its stock adjustments are removed until you submit it again. When re-submitted, the counts apply as a fresh count on that day (they override any movements made in between).", "Reopen"))) return;
+  const lines = state.inventory_lines.filter(l => l.inventory_id === id);
+  const loc = inv.pos_id || "wh";
+  const d = { id: uid(), date: inv.date, pos_id: "ALL", counts: {} };
+  for (const l of lines) d.counts[l.product_id + "|" + loc] = String(Number(l.counted));
+  invDrafts.push(d); saveInvDrafts();
+  await deleteRow("inventories", id);
+  activeInv = d.id;
+  showTab("inv");
+  render();
+  toast("Inventory reopened as draft — edit and submit it again when ready");
+};
 
 /* ================= variance analysis (écarts d'inventaire) ================= */
 function renderVariance() {
@@ -2028,7 +2065,7 @@ function renderVariance() {
   const byProd = {};
   for (const l of state.inventory_lines) {
     const inv = state.inventories.find(i => i.id === l.inventory_id);
-    if (!inv) continue;
+    if (!inv || inv.deleted) continue;
     const b = byProd[l.product_id] ??= { n: 0, varU: 0, last: null };
     b.n++;
     b.varU += Number(l.counted) - Number(l.theoretical);
@@ -2126,20 +2163,33 @@ function renderLosses() {
   let h = `<table><tr><th>Date</th><th>Product</th><th>Location</th><th class="num">Qty</th><th>Reason</th><th class="num">Value (€)</th><th class="no-print"></th></tr>`;
   for (const l of rows) {
     const v = Number(l.qty) * avgCostOf(l.product_id);
-    tQ += Number(l.qty); tV += v;
-    const r0 = (l.reason || "Other").split(" — ")[0];
-    byReason[r0] = (byReason[r0] || 0) + v;
-    h += `<tr><td>${fmtD(l.date)}</td><td>${prodLabelById(l.product_id)}</td>
+    const del = !!l.deleted;
+    if (!del) {
+      tQ += Number(l.qty); tV += v;
+      const r0 = (l.reason || "Other").split(" — ")[0];
+      byReason[r0] = (byReason[r0] || 0) + v;
+    }
+    h += `<tr class="${del ? "row-deleted" : ""}"><td>${fmtD(l.date)}</td><td>${prodLabelById(l.product_id)}</td>
       <td>${l.pos_id ? esc(posById(l.pos_id)?.name || "(deleted)") : "Warehouse"}</td>
-      <td class="num">${fmtN(l.qty)}</td><td>${esc(l.reason || "")}</td>
-      <td class="num calc neg">${showE(v)}</td>
-      <td class="no-print"><button class="btn small danger" onclick="delRow('losses','${l.id}')">Del</button></td></tr>`;
+      <td class="num">${fmtN(l.qty)}</td><td>${esc(l.reason || "")} ${del ? '<span class="st st-del" style="text-decoration:none">DELETED</span>' : ""}</td>
+      <td class="num calc ${del ? "" : "neg"}">${showE(v)}</td>
+      <td class="no-print">${del
+        ? `<button class="btn small ghost" onclick="restoreLoss('${l.id}')">Restore</button>`
+        : `<button class="btn small danger" onclick="softDelLoss('${l.id}')">Del</button>`}</td></tr>`;
   }
-  h += `<tr class="total"><td>TOTAL</td><td></td><td></td><td class="num">${fmtN(tQ)}</td><td></td><td class="num neg">${showE(tV)}</td><td class="no-print"></td></tr></table>`;
+  h += `<tr class="total"><td>TOTAL (active)</td><td></td><td></td><td class="num">${fmtN(tQ)}</td><td></td><td class="num neg">${showE(tV)}</td><td class="no-print"></td></tr></table>`;
   sum.innerHTML = Object.entries(byReason).map(([r, v]) =>
     `<span class="chip" style="background:#ffdad6">${esc(r)} ${showE(v)}</span>`).join("");
   el.innerHTML = h;
 }
+window.softDelLoss = async id => {
+  if (!(await niceConfirm("Delete this loss?",
+    "It stays in the log marked DELETED and no longer affects stock or profit. You can restore it anytime.", "Delete"))) return;
+  if (await updateRow("losses", id, { deleted: true })) { toast("Loss deleted — kept in the log, stock restored"); render(); }
+};
+window.restoreLoss = async id => {
+  if (await updateRow("losses", id, { deleted: false })) { toast("Loss restored ✓ — it affects stock and profit again"); render(); }
+};
 
 /* ================= stock by point of sale ================= */
 window.transferHint = () => {
@@ -2338,7 +2388,7 @@ window.editProduct = id => {
 window.delProduct = async id => {
   const n = state.sales.filter(s => s.product_id === id).length + state.gifts.filter(g => g.product_id === id).length
     + state.purchases.filter(u => u.product_id === id).length;
-  if (!confirm(`Delete this product${n ? ` and its ${n} purchase/sale/gift lines` : ""}? This cannot be undone.`)) return;
+  if (!(await niceConfirm("Delete this product?", `${n ? `Its ${n} purchase/sale/gift lines are deleted too. ` : ""}This cannot be undone.`, "Delete"))) return;
   await deleteRow("products", id); render();
 };
 document.getElementById("p_cancel").addEventListener("click", () => { resetForm("p", "productForm", "Save product"); document.getElementById("prodFormTitle").textContent = "Add product"; });
@@ -2396,7 +2446,7 @@ window.editExpense = async id => {
 };
 
 window.delRow = async (kind, id) => {
-  if (!confirm("Delete this entry? This cannot be undone.")) return;
+  if (!(await niceConfirm("Delete this entry?", "This cannot be undone.", "Delete"))) return;
   await deleteRow(kind, id); render();
 };
 
@@ -2507,6 +2557,19 @@ function setBadge() {
 }
 function showBanner(msg) { const b = document.getElementById("banner"); b.innerHTML = msg; b.style.display = ""; }
 function hideBanner() { document.getElementById("banner").style.display = "none"; }
+
+/* ================= nice confirm modal ================= */
+window.niceConfirm = (title, msg, okLabel = "Delete") => new Promise(res => {
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `<div class="modal"><h3>${title}</h3><p>${msg}</p>
+    <div class="modal-btns"><button class="btn ghost" data-m="c">Cancel</button>
+    <button class="btn danger2" data-m="o">${okLabel}</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('[data-m="c"]').onclick = () => { ov.remove(); res(false); };
+  ov.querySelector('[data-m="o"]').onclick = () => { ov.remove(); res(true); };
+  ov.onclick = e => { if (e.target === ov) { ov.remove(); res(false); } };
+});
 
 /* ================= login page ================= */
 function showGate() { document.getElementById("authGate").style.display = ""; }
