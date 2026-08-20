@@ -539,7 +539,20 @@
 
 <!-- ================= EXPENSES ================= -->
 <div class="tab" id="tab-exp" style="display:none">
-  <div class="pagehead"><h1>Expenses</h1><p>All business costs in EUR. Log daily expenses in the Daily entry tab — review and analyse them here.</p></div>
+  <div class="pagehead"><h1>Expenses</h1><p>All business costs in EUR. Log daily expenses in the Daily report tab — review, analyse and automate them here.</p></div>
+  <section class="card no-print">
+    <h2>Recurring expenses</h2>
+    <p class="hint">Rent, subscriptions, phone… added to the log automatically on their day each month, from the start month until today. Pause or delete a rule anytime (already-created entries stay in the log).</p>
+    <form class="rowform" id="recForm">
+      <label>Description<input id="rc_desc" required style="min-width:220px" placeholder="e.g. Rent + utilities"></label>
+      <label>Category<select id="rc_cat"></select></label>
+      <label>Amount (€)<input id="rc_amount" type="number" min="0.01" step="0.01" required style="width:110px"></label>
+      <label>Day of month<input id="rc_day" type="number" min="1" max="31" value="1" style="width:80px"></label>
+      <label>Starts<input id="rc_start" type="month"></label>
+      <button class="btn gold" type="submit">Add recurring expense</button>
+    </form>
+    <div id="recurringList"></div>
+  </section>
   <div class="grid2">
     <section class="card">
       <div class="rowform no-print" style="margin-bottom:8px">
@@ -610,7 +623,8 @@
     <h2>The stock model</h2>
     <p style="line-height:1.8">Everything you buy (<b>Purchases</b>) and your <b>initial inventory</b> (Catalog) enters the <b>Warehouse</b>.
     From the <b>Stocks</b> tab you <b>transfer</b> stock to a point of sale when you supply it. A <b>sale</b> in the Daily report
-    consumes that POS's stock; a <b>gift</b> consumes the warehouse; a <b>loss</b> (Losses tab — damaged, expired DLC, theft)
+    consumes that POS's stock; a <b>gift</b> consumes the warehouse and its <b>cost value is deducted from net profit</b>
+    (not from COGS — so your sales margins stay true; note the person's name in the gift line); a <b>loss</b> (Losses tab — damaged, expired DLC, theft)
     consumes its location and its cost value counts against profit. A submitted <b>inventory count</b> corrects the counted location
     to reality — so stock = <b>last count + purchases − sales − gifts − losses since</b>. At all times: <b>Global stock = Warehouse + all points of sale</b>, and every product's value is carried at its
     <b>average cost</b> (invoice discounts and shipping included).</p>
@@ -637,7 +651,9 @@
   </section>
   <section class="card">
     <h2>Reading the business</h2>
-    <p style="line-height:1.8"><b>Dashboard</b>: revenue, COGS, gross, expenses, net, stock value, low stock — filter by period, POS or product.
+    <p style="line-height:1.8"><b>Dashboard</b>: revenue, COGS, gross, expenses, losses, gifts (at cost), net, stock value, low stock — filter by period, POS or product.
+    Net profit = gross − expenses − losses − gifts at cost.
+    <b>Recurring expenses</b> (rent, subscriptions…) are set once in the Expenses tab and added automatically each month on the day you choose.
     <b>Stocks</b>: the per-product statement (initial + purchased − sold − gifted ± adjustments = stock) and the warehouse/POS matrix.
     <b>Sales &amp; prices</b>: each POS's performance and its price list (bulk edit + Save prices).
     <b>Catalog</b>: products by category. Everything exports to CSV; the dashboard prints to PDF.</p>
@@ -663,7 +679,9 @@ const CAT_CHIPS = {
   // legacy categories from v1 keep a chip
   "Monthly Operating": "#dbeafe", "Exhibition / Event": "#ede9fe", "Shipping": "#d1fae5"
 };
-const KINDS = ["products", "purchases", "pos", "pos_prices", "transfers", "losses", "inventories", "inventory_lines", "sales", "gifts", "expenses"];
+const KINDS = ["products", "purchases", "pos", "pos_prices", "transfers", "losses", "inventories", "inventory_lines", "sales", "gifts", "expenses", "recurring_expenses"];
+/* newer tables the app tolerates missing (until their migration runs) */
+const OPTIONAL_KINDS = { losses: "migration-v3-losses.sql", recurring_expenses: "migration-v5-recurring.sql" };
 const LS_DATA = "lanea-books-data";
 const LS_CFG = "lanea-books-supabase";
 let LOW_STOCK = Number(localStorage.getItem("lanea-low-stock") || 5);   // low-stock threshold, editable in Settings
@@ -744,7 +762,7 @@ function prodOptionsGrouped(sel) {
     "</optgroup>").join("");
 }
 
-let state = { products: [], purchases: [], pos: [], pos_prices: [], transfers: [], losses: [], inventories: [], inventory_lines: [], sales: [], gifts: [], expenses: [] };
+let state = { products: [], purchases: [], pos: [], pos_prices: [], transfers: [], losses: [], inventories: [], inventory_lines: [], sales: [], gifts: [], expenses: [], recurring_expenses: [] };
 let client = null, remote = false;
 let filters = { from: "", to: "", pos: "", prod: "" };
 
@@ -1013,8 +1031,12 @@ function renderDash() {
   const lossRows = filteredLosses();
   const lossVal = lossRows.reduce((a, l) => a + Number(l.qty) * avgCostOf(l.product_id), 0);
   const lossUnits = lossRows.reduce((a, l) => a + Number(l.qty), 0);
+  // gifts count against net profit at their cost value (promo expense, not COGS)
+  const giftRows = state.gifts.filter(g => inPeriod(g.date) && (!filters.prod || g.product_id === filters.prod));
+  const giftCost = giftRows.reduce((a, g) => a + Number(g.qty) * avgCostOf(g.product_id), 0);
+  const giftUnits = giftRows.reduce((a, g) => a + Number(g.qty), 0);
   const revEUR = toE(revenue);
-  const gross = revEUR - cogs, net = gross - expTotal - lossVal;
+  const gross = revEUR - cogs, net = gross - expTotal - lossVal - giftCost;
   let stockValue = 0, stockUnits = 0, stockRetail = 0;
   for (const p of state.products) {
     const c = productCalc(p);
@@ -1030,6 +1052,7 @@ function renderDash() {
     ["trending_up", "Gross profit", showE(gross), fmtP(revEUR > 0 ? gross / revEUR : null) + " margin", ""],
     ["account_balance_wallet", "Expenses", showE(expTotal), `${expenses.length} entries`, ""],
     ["report", "Losses", showE(lossVal), `${fmtN(lossUnits)} units written off`, lossVal > 0 ? "red" : ""],
+    ["volunteer_activism", "Gifts (at cost)", showE(giftCost), `${fmtN(giftUnits)} units given`, giftCost > 0 ? "red" : ""],
     ["savings", "Net profit", showE(net), fmtP(revEUR > 0 ? net / revEUR : null) + " net margin", ""],
     ["inventory_2", "Stock on hand", fmtN(stockUnits), `${showE(stockValue)} at cost · ≈ ${showU(stockRetail)} at retail`, ""],
     ["warning", "Low stock", fmtN(lowList.length), `products at ≤ ${LOW_STOCK} units`, lowList.length ? "red" : ""],
@@ -1045,27 +1068,31 @@ function renderDash() {
 
   // monthly table
   const months = {};
-  const bucket = ym => months[ym] ??= { revenue: 0, cogs: 0, expenses: 0, losses: 0 };
+  const bucket = ym => months[ym] ??= { revenue: 0, cogs: 0, expenses: 0, losses: 0, gifts: 0 };
   for (const s of sales) { const b = bucket(s.date.slice(0, 7)); const q = Number(s.qty); b.revenue += q * Number(s.price_per_unit); b.cogs += q * avgCostOf(s.product_id); }
   for (const e of expenses) bucket(e.date.slice(0, 7)).expenses += Number(e.amount);
   for (const l of lossRows) if (l.date) bucket(l.date.slice(0, 7)).losses += Number(l.qty) * avgCostOf(l.product_id);
+  for (const g of giftRows) if (g.date) bucket(g.date.slice(0, 7)).gifts += Number(g.qty) * avgCostOf(g.product_id);
   const rows = Object.entries(months).sort(([a], [b]) => a.localeCompare(b));
   if (!rows.length) document.getElementById("dashMonthly").innerHTML = '<p class="empty">No activity in this selection yet.</p>';
   else {
-    let h = `<table><tr><th>Month</th><th class="num">Revenue ($)</th><th class="num">COGS (€)</th><th class="num">Gross profit (€)</th><th class="num">Expenses (€)</th><th class="num">Losses (€)</th><th class="num">Net (€)</th><th class="num">Net margin</th><th class="num">Cumulative net (€)</th></tr>`;
-    let cum = 0, tR = 0, tC = 0, tE = 0, tL = 0;
+    let h = `<table><tr><th>Month</th><th class="num">Revenue ($)</th><th class="num">COGS (€)</th><th class="num">Gross profit (€)</th><th class="num">Expenses (€)</th><th class="num">Losses (€)</th><th class="num">Gifts (€)</th><th class="num">Net (€)</th><th class="num">Net margin</th><th class="num">Cumulative net (€)</th></tr>`;
+    let cum = 0, tR = 0, tC = 0, tE = 0, tL = 0, tGf = 0;
     for (const [ym, v] of rows) {
       const rE = toE(v.revenue);
-      const g = rE - v.cogs, n = g - v.expenses - v.losses; cum += n; tR += v.revenue; tC += v.cogs; tE += v.expenses; tL += v.losses;
+      const g = rE - v.cogs, n = g - v.expenses - v.losses - v.gifts;
+      cum += n; tR += v.revenue; tC += v.cogs; tE += v.expenses; tL += v.losses; tGf += v.gifts;
       h += `<tr><td>${monthLabel(ym)}</td><td class="num calc">${showU(v.revenue)}</td><td class="num calc">${showE(v.cogs)}</td>
         <td class="num calc">${showE(g)}</td><td class="num calc">${showE(v.expenses)}</td>
         <td class="num calc ${v.losses > 0 ? "neg" : ""}">${showE(v.losses)}</td>
+        <td class="num calc ${v.gifts > 0 ? "neg" : ""}">${showE(v.gifts)}</td>
         <td class="num calc ${n < 0 ? "neg" : ""}">${showE(n)}</td><td class="num calc">${fmtP(rE > 0 ? n / rE : null)}</td>
         <td class="num calc ${cum < 0 ? "neg" : ""}">${showE(cum)}</td></tr>`;
     }
-    const tG = toE(tR) - tC, tN = tG - tE - tL;
+    const tG = toE(tR) - tC, tN = tG - tE - tL - tGf;
     h += `<tr class="total"><td>TOTAL</td><td class="num">${showU(tR)}</td><td class="num">${showE(tC)}</td><td class="num">${showE(tG)}</td>
       <td class="num">${showE(tE)}</td><td class="num ${tL > 0 ? "neg" : ""}">${showE(tL)}</td>
+      <td class="num ${tGf > 0 ? "neg" : ""}">${showE(tGf)}</td>
       <td class="num ${tN < 0 ? "neg" : ""}">${showE(tN)}</td>
       <td class="num">${fmtP(toE(tR) > 0 ? tN / toE(tR) : null)}</td><td></td></tr></table>`;
     document.getElementById("dashMonthly").innerHTML = h;
@@ -1414,7 +1441,7 @@ function renderGifts() {
   const el = document.getElementById("giftsTable");
   const rows = [...state.gifts].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   if (!rows.length) { el.innerHTML = '<p class="empty">No gifts logged yet.</p>'; return; }
-  let h = `<table><tr><th>Date</th><th>Product</th><th class="num">Qty</th><th class="num">Cost value</th><th>Note</th><th class="no-print"></th></tr>`;
+  let h = `<table><tr><th>Date</th><th>Product</th><th class="num">Qty</th><th class="num">Cost value</th><th>Person / note</th><th class="no-print"></th></tr>`;
   for (const g of rows) {
     h += `<tr><td>${fmtD(g.date)}</td><td>${prodLabelById(g.product_id)}</td>
       <td class="num">${g.qty}</td><td class="num calc">${showE(Number(g.qty) * avgCostOf(g.product_id))}</td><td>${esc(g.note)}</td>
@@ -1423,6 +1450,85 @@ function renderGifts() {
   }
   el.innerHTML = h + "</table>";
 }
+
+/* ================= recurring expenses ================= */
+let recRunning = false;
+async function ensureRecurring() {
+  if (recRunning) return 0;
+  recRunning = true;
+  let created = 0;
+  try {
+    const today = todayISO();
+    const [cy, cm] = today.slice(0, 7).split("-").map(Number);
+    for (const r of state.recurring_expenses) {
+      if (r.active === false) continue;
+      const start = (r.start_date || today).slice(0, 10);
+      let [y, m] = start.slice(0, 7).split("-").map(Number);
+      let guard = 0;
+      while ((y < cy || (y === cy && m <= cm)) && guard++ < 600) {
+        const dim = new Date(y, m, 0).getDate();
+        const day = Math.min(Math.max(1, Number(r.day_of_month || 1)), dim);
+        const date = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        if (date >= start && date <= today) {
+          const exists = state.expenses.some(e => e.date === date && e.description === r.description
+            && Number(e.amount) === Number(r.amount) && e.category === r.category);
+          if (!exists && await addRow("expenses", { date, description: r.description, category: r.category, amount: Number(r.amount) })) created++;
+        }
+        m++; if (m > 12) { m = 1; y++; }
+      }
+    }
+  } finally { recRunning = false; }
+  if (created) { toast(`${created} recurring expense${created === 1 ? "" : "s"} added automatically`); render(); }
+  return created;
+}
+document.getElementById("recForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const start = (gv("rc_start") || todayISO().slice(0, 7)) + "-01";
+  const ok = await addRow("recurring_expenses", {
+    description: gv("rc_desc").trim(),
+    category: gv("rc_cat"),
+    amount: Number(gv("rc_amount")),
+    day_of_month: Number(gv("rc_day") || 1),
+    start_date: start,
+    active: true,
+  });
+  if (ok) {
+    document.getElementById("recForm").reset();
+    document.getElementById("rc_day").value = 1;
+    toast("Recurring expense saved ✓");
+    await ensureRecurring();
+    render();
+  }
+});
+function renderRecurring() {
+  const el = document.getElementById("recurringList");
+  if (!state.recurring_expenses.length) { el.innerHTML = '<p class="empty">No recurring expenses yet — e.g. your ~€1,000/month operating costs.</p>'; return; }
+  el.innerHTML = "<table><tr><th>Description</th><th>Category</th><th class='num'>Amount (€)</th><th class='num'>Day</th><th>Status</th><th class='no-print'></th></tr>" +
+    state.recurring_expenses.map(r => `<tr class="${r.active === false ? "row-deleted" : ""}">
+      <td>${esc(r.description)}</td>
+      <td><span class="chip" style="background:${CAT_CHIPS[r.category] || "#f3f4f6"}">${esc(r.category)}</span></td>
+      <td class="num">${showE(Number(r.amount))}</td>
+      <td class="num">${fmtN(r.day_of_month || 1)}</td>
+      <td>${r.active === false ? '<span class="st st-del" style="text-decoration:none">PAUSED</span>' : '<span class="st st-ok">ACTIVE</span>'}</td>
+      <td class="no-print">
+        <button class="btn small ghost" onclick="toggleRecurring('${r.id}')">${r.active === false ? "Resume" : "Pause"}</button>
+        <button class="btn small danger" onclick="delRecurring('${r.id}')">Del</button>
+      </td></tr>`).join("") + "</table>";
+}
+window.toggleRecurring = async id => {
+  const r = state.recurring_expenses.find(x => x.id === id); if (!r) return;
+  if (await updateRow("recurring_expenses", id, { active: r.active === false })) {
+    toast(r.active === false ? "Rule resumed ✓" : "Rule paused — no new entries until resumed");
+    await ensureRecurring();
+    render();
+  }
+};
+window.delRecurring = async id => {
+  if (!(await niceConfirm("Delete this recurring rule?", "Future months stop being added. Entries already in the expense log stay there.", "Delete"))) return;
+  await deleteRow("recurring_expenses", id);
+  toast("Recurring rule deleted");
+  render();
+};
 
 /* ================= rendering: expenses ================= */
 function renderExpenses() {
@@ -1495,6 +1601,10 @@ function refreshSelects() {
   const catOpts = CATEGORIES.map(c => `<option>${c}</option>`).join("");
   const elc = document.getElementById("el_cat"); const curc = elc.value;
   elc.innerHTML = '<option value="">All</option>' + catOpts; elc.value = curc;
+  {
+    const sel = document.getElementById("rc_cat"); const cur = sel.value;
+    sel.innerHTML = catOpts; if (cur) sel.value = cur;
+  }
 }
 function render() {
   const dw = document.getElementById("draftWarn");
@@ -1503,7 +1613,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderVariance(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses();
+  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderVariance(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
@@ -1566,12 +1676,14 @@ function renderDay() {
   const exp = dayExp.reduce((a, e) => a + Number(e.amount), 0);
   const chip = (label, bg) => `<span class="chip" style="background:${bg};padding:6px 14px">${label}</span>`;
   const dayGrossE = toE(rev) - cogs;
+  const dayGiftC = dayGifts.reduce((a, g) => a + Number(g.qty) * avgCostOf(g.product_id), 0);
+  const dayNet = dayGrossE - exp - dayGiftC;
   document.getElementById("daySummary").innerHTML =
     chip(`Revenue ${showU(rev)} · ${fmtN(units)} units`, "#d9ecdd") +
     chip(`Gross profit ${showE(dayGrossE)}`, "#d9eaee") +
-    chip(`Gifts ${fmtN(dayGifts.reduce((a, g) => a + Number(g.qty), 0))} units`, "#fdeeca") +
+    chip(`Gifts ${fmtN(dayGifts.reduce((a, g) => a + Number(g.qty), 0))} units (${showE(dayGiftC)})`, "#fdeeca") +
     chip(`Expenses ${showE(exp)}`, "#ffdad6") +
-    chip(`Day net ${showE(dayGrossE - exp)}`, dayGrossE - exp >= 0 ? "#d9ecdd" : "#ffdad6");
+    chip(`Day net ${showE(dayNet)}`, dayNet >= 0 ? "#d9ecdd" : "#ffdad6");
   const rows = [];
   for (const s of daySales) rows.push({ kind: "sales", id: s.id, type: "Sale", bg: "#d9ecdd",
     desc: `${prodLabelById(s.product_id)} × ${s.qty} @ ${usdF.format(Number(s.price_per_unit))} — ${esc(posById(s.pos_id)?.name || "no POS")}`,
@@ -1658,7 +1770,7 @@ function renderReport() {
   }
 
   h += '<div class="rep-sec">Gifts</div><div style="overflow-x:auto"><table>';
-  h += `<tr><th style="min-width:230px">Product</th><th class="num">Qty</th><th style="min-width:200px">Note</th><th></th></tr>`;
+  h += `<tr><th style="min-width:230px">Product</th><th class="num">Qty</th><th style="min-width:200px">Person / comment</th><th></th></tr>`;
   draft.gifts.forEach((d, i) => {
     h += `<tr>
       <td><select class="rin" onchange="updDraft('gifts',${i},'product_id',this.value)">${prodOpt(d.product_id)}</select></td>
@@ -1669,7 +1781,7 @@ function renderReport() {
   h += `<tr class="newrow">
     <td><select class="rin" id="nr_g_prod" onchange="nrGiftSync()"><option value=""></option>${prodOpt("")}</select></td>
     <td class="num"><input class="rin" id="nr_g_qty" type="number" min="1" step="1" placeholder="qty" style="width:72px" ${enter("addReportGift")}></td>
-    <td><input class="rin" id="nr_g_note" placeholder="e.g. PR gift — influencer" ${enter("addReportGift")}></td>
+    <td><input class="rin" id="nr_g_note" placeholder="Person / comment — e.g. Marie (PR)" ${enter("addReportGift")}></td>
     <td><button class="btn small gold" onclick="addReportGift()">+ Add</button></td></tr>`;
   h += `</table></div><p class="hint" id="nr_g_hint" style="margin-top:4px"></p>`;
 
@@ -1695,12 +1807,14 @@ function renderReport() {
   const exp = draft.expenses.reduce((a, d) => a + Number(d.amount), 0);
   const giftU = draft.gifts.reduce((a, d) => a + Number(d.qty), 0);
   const repGrossE = toE(rev) - cogs;
+  const giftC = draft.gifts.reduce((a, d) => a + Number(d.qty) * avgCostOf(d.product_id), 0);
+  const repNet = repGrossE - exp - giftC;
   h += `<div class="rep-tot">
     <span class="chip" style="background:#d9ecdd">Sales ${showU(rev)} · ${fmtN(units)} units</span>
     <span class="chip" style="background:#d9eaee">Gross profit ${showE(repGrossE)}</span>
-    <span class="chip" style="background:#fdeeca">Gifts ${fmtN(giftU)} units</span>
+    <span class="chip" style="background:#fdeeca">Gifts ${fmtN(giftU)} units (${showE(giftC)})</span>
     <span class="chip" style="background:#ffdad6">Expenses ${showE(exp)}</span>
-    <span class="chip" style="background:${repGrossE - exp >= 0 ? "#d9ecdd" : "#ffdad6"}">Report net ${showE(repGrossE - exp)}</span>
+    <span class="chip" style="background:${repNet >= 0 ? "#d9ecdd" : "#ffdad6"}">Report net ${showE(repNet)}</span>
   </div>
   <div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap" class="no-print">
     <button class="btn gold" id="submitDayBtn" style="padding:12px 28px;font-size:14.5px" onclick="saveDay()"${n ? "" : " disabled"}>Submit daily report${n ? ` (${n} item${n === 1 ? "" : "s"})` : ""}</button>
@@ -2490,7 +2604,7 @@ window.exportDashboardCSV = () => {
   const rows = [["LANEA — Dashboard export"], [`Filters: ${filters.from || "start"} → ${filters.to || "now"}${filters.pos ? " | POS: " + (posById(filters.pos)?.name || "") : ""}${filters.prod ? " | Product: " + (prodById(filters.prod)?.name || "") : ""} | rate: 1 EUR = ${USD_RATE} USD`], [],
     ["Month", "Revenue (USD)", "Revenue (EUR)", "COGS (EUR)", "Gross profit (EUR)", "Expenses (EUR)", "Net (EUR)"]];
   for (const [ym, v] of Object.entries(months).sort(([a], [b]) => a.localeCompare(b)))
-    rows.push([ym, v.revenue.toFixed(2), toE(v.revenue).toFixed(2), v.cogs.toFixed(2), (toE(v.revenue) - v.cogs).toFixed(2), v.expenses.toFixed(2), (toE(v.revenue) - v.cogs - v.expenses).toFixed(2)]);
+    rows.push([ym, v.revenue.toFixed(2), toE(v.revenue).toFixed(2), v.cogs.toFixed(2), (toE(v.revenue) - v.cogs).toFixed(2), v.expenses.toFixed(2), (toE(v.revenue) - v.cogs - v.expenses - (v.losses || 0) - (v.gifts || 0)).toFixed(2)]);
   downloadFile("lanea-dashboard.csv", "text/csv", toCSV(rows));
 };
 window.exportProductsCSV = () => {
@@ -2641,10 +2755,10 @@ async function enterRemote(session) {
   for (const k of KINDS) {
     const { data, error } = await client.from(k).select("*").order("created_at", { ascending: true });
     if (error) {
-      if (error.code === "PGRST205" && k === "losses") {
+      if (error.code === "PGRST205" && OPTIONAL_KINDS[k]) {
         // optional newer table — app works without it until the migration runs
         fetched[k] = [];
-        pendingBanner = 'To enable the new <b>Losses</b> tab in the cloud, run <b>supabase/migration-v3-losses.sql</b> (from the GitHub repo) in your SQL Editor once. Everything else works meanwhile.';
+        pendingBanner = `One newer feature needs a small database update — run <b>supabase/${OPTIONAL_KINDS[k]}</b> (from the GitHub repo) in your SQL Editor once. Everything else works meanwhile.`;
         continue;
       }
       if (error.code === "PGRST205") {
@@ -2659,6 +2773,7 @@ async function enterRemote(session) {
   if (pendingBanner) showBanner(pendingBanner); else hideBanner();
   setBadge(); render();
   maybeOfferLocalUpload();
+  ensureRecurring();
 }
 /* after signing in: if the cloud account is empty but this browser holds data
    saved while signed out, offer to bring it into the account (nothing is lost) */
@@ -2749,7 +2864,9 @@ window.saveLowStock = () => {
   toast(`Low-stock threshold set to ${v} ✓`);
   render();
 };
+document.getElementById("rc_start").value = todayISO().slice(0, 7);
 loadLocal(); setBadge(); render(); initSupabase();
+if (!remote) ensureRecurring();
 </script>
 </body>
 </html>
