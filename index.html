@@ -335,7 +335,7 @@
       <label>Date<input id="inv_date" type="date"></label>
       <button class="btn gold" type="button" onclick="startInventory()">Open inventory sheet</button>
       <button class="btn ghost" type="button" onclick="startInventoryPrefilled()">Open sheet prefilled from LANEA master (Actual Inventory)</button>
-      <button class="btn ghost" type="button" onclick="startPosInventoryPrefilled()">Prefill Teta + Pharma St.Rita counts (warehouse untouched)</button>
+      <button class="btn ghost" type="button" onclick="startPosInventoryPrefilled()">Prefill Home + Teta + Pharma St.Rita counts (warehouse untouched)</button>
     </div>
   </section>
   <section class="card" id="invSheet" style="display:none">
@@ -656,7 +656,9 @@
     Net profit = gross − expenses − losses − gifts at cost.
     <b>Recurring expenses</b> (rent, subscriptions…) are set once in the Expenses tab and added automatically each month on the day you choose.
     <b>Stocks</b>: the per-product statement (initial + purchased − sold − gifted ± adjustments = stock) and the warehouse/POS matrix.
-    <b>Sales &amp; prices</b>: each POS's performance and its price list (bulk edit + Save prices).
+    <b>Sales &amp; prices</b>: each POS's performance and its price list (bulk edit + Save prices);
+    the <b>Reseller tool</b> above the price matrix fills a whole POS column at X% off the Home price in one click (e.g. Teta and Pharma St.Rita at −15%).
+    Locations always show in the order <b>Home · Teta · Pharma St.Rita · (others) · Warehouse</b>.
     <b>Catalog</b>: products by category. Everything exports to CSV; the dashboard prints to PDF.</p>
   </section>
   <section class="card">
@@ -1247,7 +1249,7 @@ function renderPos() {
     el.innerHTML = '<p class="empty">No points of sale yet — add your first one (e.g. Beirut Boutique, Shopify, Paris Exhibition…).</p>';
     return;
   }
-  el.innerHTML = '<div class="pos-grid">' + state.pos.map(p => {
+  el.innerHTML = '<div class="pos-grid">' + sortedPos().map(p => {
     const sales = state.sales.filter(s => s.pos_id === p.id);
     const rev = sales.reduce((a, s) => a + Number(s.qty) * Number(s.price_per_unit), 0);
     const units = sales.reduce((a, s) => a + Number(s.qty), 0);
@@ -1358,18 +1360,28 @@ window.renderPriceList = () => {
   const list = state.products.filter(p => prodMatch(p, q))
     .sort(prodSort);
   const n = plChangedCount();
+  const spos = sortedPos();
+  const curDiscPos = gv("pl_disc_pos"), curDiscPct = gv("pl_disc") || "15";
   bar.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <button class="btn gold" id="plSaveBtn" onclick="savePrices()">${n ? `Save prices (${n} changed)` : "Save prices"}</button>
       <button class="btn ghost" onclick="prefillPrices()">Prefill LANEA prices ($)</button>
       <button class="btn ghost" id="plDiscardBtn" onclick="discardPrices()" style="${n ? "" : "display:none"}">Discard changes</button>
+      <span style="display:inline-flex;gap:6px;align-items:center;border-left:1px solid var(--line,#e5e7eb);padding-left:10px">
+        <span class="hint" style="margin:0">Reseller:</span>
+        <select id="pl_disc_pos" class="rin" style="width:auto">${spos.map(p => `<option value="${p.id}"${p.id === curDiscPos ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
+        <span class="hint" style="margin:0">−</span>
+        <input id="pl_disc" class="rin" type="number" min="0" max="100" step="0.5" value="${esc(curDiscPct)}" style="width:64px">
+        <span class="hint" style="margin:0">% off Home</span>
+        <button class="btn ghost" onclick="applyPosDiscount()">Apply to all products</button>
+      </span>
       <span class="hint" style="margin:0">Prices are in <b>$</b> · nothing saves until you press <b>Save prices</b></span>
     </div>`;
   let h = `<table><tr><th>Product</th><th class="num">Avg cost (€)</th>`
-    + state.pos.map(p => `<th class="num">${esc(p.name)} ($)</th>`).join("") + `</tr>`;
+    + spos.map(p => `<th class="num">${esc(p.name)} ($)</th>`).join("") + `</tr>`;
   for (const p of list) {
     const c = productCalc(p);
     h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${showE(c.avgCost)}</td>`
-      + state.pos.map(pos => {
+      + spos.map(pos => {
           const key = pos.id + "|" + p.id;
           const saved = priceFor(pos.id, p.id);
           const val = priceDraft[key] !== undefined ? priceDraft[key] : (saved ?? "");
@@ -1411,6 +1423,16 @@ window.posSheetFor = pos => {
   }
   return null;
 };
+/* display order for locations everywhere: Home, Teta, Pharma St.Rita, then any
+   other POS alphabetically — and the Warehouse column always comes LAST */
+const POS_ORDER = ["home", "teta", "pharmastrita"];
+window.posRank = pos => {
+  const n = normPosName(pos && pos.name);
+  if (!n) return POS_ORDER.length;
+  const i = POS_ORDER.findIndex(k => n === k || n.includes(k) || (n.length >= 4 && k.includes(n)));
+  return i === -1 ? POS_ORDER.length : i;
+};
+window.sortedPos = () => [...state.pos].sort((a, b) => posRank(a) - posRank(b) || String(a.name || "").localeCompare(String(b.name || "")));
 window.prefillPrices = () => {
   if (typeof RETAIL_USD === "undefined") { alert("Price data not loaded — reload the page."); return; }
   if (!state.pos.length) { alert("Create a point of sale first."); return; }
@@ -1431,6 +1453,36 @@ window.prefillPrices = () => {
   renderPriceList();
   toast(n ? `${n} prices prefilled${sheetNames.length ? ` — ${sheetNames.join(" & ")} at their own sheet prices, other POS at the LANEA list` : " from the LANEA price list"} — review, then press Save prices`
           : "All prices already match the LANEA price list ✓");
+};
+/* Reseller pricing: fill one POS's whole column at X% off the Home price
+   (current Home column value — unsaved edits included — else the LANEA list). */
+window.applyPosDiscount = () => {
+  const posId = gv("pl_disc_pos");
+  const pct = Number(gv("pl_disc"));
+  if (!posId) { alert("Pick the point of sale to price."); return; }
+  if (!isFinite(pct) || pct < 0 || pct >= 100) { alert("Enter a discount between 0 and 99%."); return; }
+  const pos = posById(posId);
+  const home = state.pos.find(x => normPosName(x.name) === "home");
+  let n = 0;
+  for (const p of state.products) {
+    let base = null;
+    if (home) {
+      const hk = home.id + "|" + p.id;
+      const hv = priceDraft[hk] !== undefined ? priceDraft[hk] : priceFor(home.id, p.id);
+      if (hv != null && hv !== "" && isFinite(Number(hv))) base = Number(hv);
+    }
+    if (base == null && p.ref && RETAIL_USD[p.ref] !== undefined) base = RETAIL_USD[p.ref];
+    if (base == null) continue;
+    const price = Math.round(base * (1 - pct / 100) * 100) / 100;
+    const key = posId + "|" + p.id;
+    const saved = priceFor(posId, p.id);
+    if (saved != null && Number(saved) === price) { delete priceDraft[key]; continue; }
+    priceDraft[key] = String(price);
+    n++;
+  }
+  renderPriceList();
+  toast(n ? `${pos ? pos.name : "POS"}: ${n} prices set at ${pct}% off Home — review, then press Save prices`
+          : `${pos ? pos.name : "POS"} is already at ${pct}% off Home ✓`);
 };
 window.focusNextPrice = el => {
   // Enter moves DOWN the same POS column, like a spreadsheet
@@ -1597,10 +1649,10 @@ function refreshSelects() {
   }
   {
     const sel = document.getElementById("l_pos"); const cur = sel.value;
-    sel.innerHTML = '<option value="">Warehouse</option>' + state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+    sel.innerHTML = '<option value="">Warehouse</option>' + sortedPos().map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
     sel.value = cur;
   }
-  const posOpts = state.pos.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  const posOpts = sortedPos().map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
   for (const id of ["t_from", "t_to", "pu_pos"]) {
     const sel = document.getElementById(id); const cur = sel.value;
     sel.innerHTML = '<option value="">Warehouse</option>' + posOpts;
@@ -1738,7 +1790,7 @@ function renderReport() {
   const keep = {};
   for (const id of NR_IDS) { const el = document.getElementById(id); if (el) keep[id] = el.value; }
 
-  const posOpt = sel => state.pos.map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(p.name)}</option>`).join("");
+  const posOpt = sel => sortedPos().map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(p.name)}</option>`).join("");
   const prodOpt = sel => prodOptionsGrouped(sel);
   const catOpt = sel => CATEGORIES.map(c => `<option${c === sel ? " selected" : ""}>${c}</option>`).join("");
   const enter = fn => `onkeydown="if(event.key==='Enter'){event.preventDefault();${fn}()}"`;
@@ -1762,12 +1814,13 @@ function renderReport() {
       return state.pos.some(pos => (priceFor(pos.id, p.id) ?? 0) > 0)
         || state.pos.some(pos => lineOf(p.id, pos.id) || savedQ[p.id + "|" + pos.id]);
     }).sort(prodSort);
+    const spos = sortedPos();
     h += '<div style="overflow-x:auto"><table><tr><th>Product</th>'
-      + state.pos.map(p => `<th class="num">${esc(p.name)}</th>`).join("")
+      + spos.map(p => `<th class="num">${esc(p.name)}</th>`).join("")
       + '<th class="num">Total ($)</th></tr>';
     for (const p of rowsP) {
       let rowTot = 0;
-      const cells = state.pos.map(pos => {
+      const cells = spos.map(pos => {
         const line = lineOf(p.id, pos.id);
         const price = line ? Number(line.price_per_unit) : priceFor(pos.id, p.id);
         const qty = line ? line.qty : "";
@@ -2062,8 +2115,8 @@ function renderInventory() {
   const q = (gv("inv_search") || "").toLowerCase();
   const list = state.products.filter(p => prodMatch(p, q))
     .sort(prodSort);
-  // matrix sheet: rows = products, columns = warehouse + every POS
-  const locs = [{ key: "wh", name: "Warehouse" }, ...state.pos.map(p => ({ key: p.id, name: p.name }))];
+  // matrix sheet: rows = products, columns = POS (Home, Teta, Pharma St.Rita first), warehouse LAST
+  const locs = [...sortedPos().map(p => ({ key: p.id, name: p.name })), { key: "wh", name: "Warehouse" }];
   let h = `<table><tr><th>Product</th>` + locs.map(l => `<th class="num">${esc(l.name)}</th>`).join("") + `<th class="num">Diff</th></tr>`;
   for (const p of list) {
     let rowDiff = 0, any = false;
@@ -2389,19 +2442,21 @@ window.renderPosStock = () => {
     .sort(prodSort);
   if (!list.length) { el.innerHTML = '<p class="empty">No products.</p>'; return; }
   if (view === "" || view === "wh") {
-    // warehouse overview: warehouse + each POS side by side
-    let h = `<table><tr><th>Product</th><th class="num">Warehouse</th>`
-      + state.pos.map(p => `<th class="num">${esc(p.name)}</th>`).join("")
-      + `<th class="num">Global stock</th></tr>`;
+    // location overview: POS side by side (Home, Teta, Pharma St.Rita first), warehouse LAST
+    const spos = sortedPos();
+    let h = `<table><tr><th>Product</th>`
+      + spos.map(p => `<th class="num">${esc(p.name)}</th>`).join("")
+      + `<th class="num">Warehouse</th><th class="num">Global stock</th></tr>`;
     let any = false;
     for (const p of list) {
       const c = productCalc(p);
       if ((c.iq + c.purQty) <= 0) continue;
       any = true;
       const wh = warehouseOf(p);
-      h += `<tr><td>${prodLabel(p)}</td><td class="num calc ${wh < 0 ? "stock-neg" : ""}">${fmtN(wh)}</td>`
-        + state.pos.map(pos => { const v = posStockOf(p.id, pos.id);
+      h += `<tr><td>${prodLabel(p)}</td>`
+        + spos.map(pos => { const v = posStockOf(p.id, pos.id);
             return `<td class="num calc ${v < 0 ? "stock-neg" : ""}">${v === 0 ? "·" : fmtN(v)}</td>`; }).join("")
+        + `<td class="num calc ${wh < 0 ? "stock-neg" : ""}">${fmtN(wh)}</td>`
         + `<td class="num calc ${c.stock < 0 ? "stock-neg" : ""}">${fmtN(c.stock)}</td></tr>`;
     }
     el.innerHTML = any ? h + "</table>" : '<p class="empty">No stocked products yet — import your invoices first.</p>';
