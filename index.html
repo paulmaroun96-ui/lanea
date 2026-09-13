@@ -335,6 +335,7 @@
       <label>Date<input id="inv_date" type="date"></label>
       <button class="btn gold" type="button" onclick="startInventory()">Open inventory sheet</button>
       <button class="btn ghost" type="button" onclick="startInventoryPrefilled()">Open sheet prefilled from LANEA master (Actual Inventory)</button>
+      <button class="btn ghost" type="button" onclick="startPosInventoryPrefilled()">Prefill Teta + Pharma St.Rita counts (warehouse untouched)</button>
     </div>
   </section>
   <section class="card" id="invSheet" style="display:none">
@@ -1397,14 +1398,30 @@ window.priceEdit = (pos, prod, el) => {
   if (cell) cell.innerHTML = val !== "" && toE(num) > 0 ? "margin " + fmtP((toE(num) - cost) / toE(num)) : "&nbsp;";
   updatePlBar();
 };
+/* POS_SHEETS (invoices-data.js) carries each POS's own counts and prices from the
+   master file. Match a POS to its sheet by name, tolerant of case/accents/dots. */
+const normPosName = s => String(s || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "");
+window.posSheetFor = pos => {
+  if (typeof POS_SHEETS === "undefined" || !pos) return null;
+  const n = normPosName(pos.name);
+  if (!n) return null;
+  for (const k of Object.keys(POS_SHEETS)) {
+    const kn = normPosName(k);
+    if (n === kn || (n.length >= 4 && kn.includes(n)) || (kn.length >= 4 && n.includes(kn))) return POS_SHEETS[k];
+  }
+  return null;
+};
 window.prefillPrices = () => {
   if (typeof RETAIL_USD === "undefined") { alert("Price data not loaded — reload the page."); return; }
   if (!state.pos.length) { alert("Create a point of sale first."); return; }
   let n = 0;
+  const sheetNames = state.pos.filter(pos => posSheetFor(pos)).map(pos => pos.name);
   for (const p of state.products) {
-    const price = p.ref ? RETAIL_USD[p.ref] : undefined;
-    if (price === undefined) continue;
+    if (!p.ref) continue;
     for (const pos of state.pos) {
+      const sheet = posSheetFor(pos);
+      const price = sheet && sheet[p.ref] !== undefined ? sheet[p.ref].p : RETAIL_USD[p.ref];
+      if (price === undefined) continue;
       const key = pos.id + "|" + p.id;
       const saved = priceFor(pos.id, p.id);
       if (saved != null && Number(saved) === price) { delete priceDraft[key]; continue; }
@@ -1412,7 +1429,7 @@ window.prefillPrices = () => {
     }
   }
   renderPriceList();
-  toast(n ? `${n} prices prefilled from the LANEA price list — review, then press Save prices`
+  toast(n ? `${n} prices prefilled${sheetNames.length ? ` — ${sheetNames.join(" & ")} at their own sheet prices, other POS at the LANEA list` : " from the LANEA price list"} — review, then press Save prices`
           : "All prices already match the LANEA price list ✓");
 };
 window.focusNextPrice = el => {
@@ -1964,6 +1981,34 @@ window.startInventoryPrefilled = () => {
   activeInv = d.id;
   renderInventory();
   toast(`Full warehouse count prefilled (${n} products from the sheet, the rest at 0) — review, then SUBMIT to apply`);
+};
+window.startPosInventoryPrefilled = async () => {
+  if (typeof POS_SHEETS === "undefined") { alert("Master-sheet POS counts not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  // make sure each sheet's POS exists (created by its sheet name if missing)
+  const targets = [];
+  for (const name of Object.keys(POS_SHEETS)) {
+    let pos = state.pos.find(x => posSheetFor(x) === POS_SHEETS[name]);
+    if (!pos) pos = await addRow("pos", { name });
+    if (pos) targets.push([pos, POS_SHEETS[name]]);
+  }
+  if (!targets.length) { alert("Could not create the points of sale."); return; }
+  const d = { id: uid(), date: gv("inv_date") || todayISO(), pos_id: "ALL", counts: {} };
+  let n = 0;
+  for (const [pos, sheet] of targets) {
+    for (const p of state.products) {
+      // every product gets a count (sheet value, or 0 if absent from the sheet),
+      // so submitting REPLACES that POS's stock entirely. Warehouse column is
+      // left blank on purpose — the warehouse is not touched.
+      const v = (p.ref != null && sheet[p.ref] !== undefined) ? sheet[p.ref].q : 0;
+      d.counts[p.id + "|" + pos.id] = String(v);
+      if (v > 0) n++;
+    }
+  }
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  render();
+  toast(`${targets.map(t => t[0].name).join(" + ")} counts prefilled (${n} non-zero, the rest 0 — warehouse untouched). Review, then SUBMIT to apply`);
 };
 window.openInvDraft = id => {
   activeInv = id; renderInventory();
