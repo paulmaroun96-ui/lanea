@@ -335,6 +335,7 @@
       <label>Date<input id="inv_date" type="date"></label>
       <button class="btn gold" type="button" onclick="startInventory()">Open inventory sheet</button>
       <button class="btn ghost" type="button" onclick="startPosInventoryPrefilled()">Prefill actual inventory — Home + Teta + Pharma St.Rita (Book1)</button>
+      <button class="btn ghost" type="button" onclick="importBook1History()">Import Book1 sales &amp; gifts (history) + re-count</button>
     </div>
   </section>
   <section class="card" id="invSheet" style="display:none">
@@ -624,7 +625,7 @@
     <h2>The stock model</h2>
     <p style="line-height:1.8">Everything you buy (<b>Purchases</b>) and your <b>initial inventory</b> (Catalog) lands at <b>Home</b> — there is no separate warehouse.
     From the <b>Transfers</b> tab you <b>distribute</b> stock from Home to a reseller when you supply it. A <b>sale</b> in the Daily report
-    consumes that location's stock; a <b>gift</b> consumes Home and its <b>cost value is deducted from net profit</b>
+    consumes that location's stock; a <b>gift</b> consumes its location's stock (Home by default — pick the location in the gift line) and its <b>cost value is deducted from net profit</b>
     (not from COGS — so your sales margins stay true; note the person's name in the gift line); a <b>loss</b> (Losses tab — damaged, expired DLC, theft)
     consumes its location and its cost value counts against profit. A submitted <b>inventory count</b> corrects the counted location
     to reality — so stock = <b>last count + purchases − sales − gifts − losses since</b>. At all times: <b>Global stock = Home + all resellers</b>, and every product's value is carried at its
@@ -847,7 +848,9 @@ function productCalc(p) {
   let purQty = 0, purCost = 0;
   for (const u of state.purchases) if (u.product_id === p.id) { purQty += Number(u.qty); purCost += Number(u.qty) * Number(u.unit_cost); }
   const totQty = iq + purQty, totCost = iq * ic + purCost;
-  const avgCost = totQty > 0 ? totCost / totQty : 0;
+  // no purchase history yet -> fall back to the Book1 cost (New Cost €, Home sheet)
+  const sheetCost = (typeof POS_SHEETS !== "undefined" && p.ref && POS_SHEETS["Home"][p.ref]) ? Number(POS_SHEETS["Home"][p.ref].c || 0) : 0;
+  const avgCost = totQty > 0 ? totCost / totQty : sheetCost;
   let sold = 0, revenue = 0, gifted = 0;
   for (const s of state.sales) if (s.product_id === p.id) { sold += Number(s.qty); revenue += Number(s.qty) * Number(s.price_per_unit); }
   for (const g of state.gifts) if (g.product_id === p.id) gifted += Number(g.qty);
@@ -871,8 +874,11 @@ const soldAtPos = (pid, posId) => state.sales.filter(s => s.product_id === pid &
   .reduce((a, s) => a + Number(s.qty), 0);
 const lostAt = (pid, posId) => state.losses.filter(l => l.product_id === pid && (l.pos_id || null) === posId && !l.deleted)
   .reduce((a, l) => a + Number(l.qty), 0);
+/* gifts consume their location's stock — no location recorded = Home */
+const giftedAt = (pid, posId) => state.gifts.filter(g => g.product_id === pid && (g.pos_id || null) === posId)
+  .reduce((a, g) => a + Number(g.qty), 0);
 const posStockOf = (pid, posId) => {
-  const raw = transferredTo(pid, posId) - soldAtPos(pid, posId) - lostAt(pid, posId) + invDelta(pid, posId);
+  const raw = transferredTo(pid, posId) - soldAtPos(pid, posId) - lostAt(pid, posId) - giftedAt(pid, posId) + invDelta(pid, posId);
   const hp = homePos();
   if (hp && posId === hp.id) { const p = prodById(pid); return raw + (p ? warehouseOf(p) : 0); }
   return raw;
@@ -880,7 +886,7 @@ const posStockOf = (pid, posId) => {
 function warehouseOf(p) {
   const c = productCalc(p);
   const out = state.transfers.filter(t => t.product_id === p.id).reduce((a, t) => a + Number(t.qty), 0);
-  return c.iq + c.purQty - c.gifted - out - lostAt(p.id, null) + invDelta(p.id, null);
+  return c.iq + c.purQty - giftedAt(p.id, null) - out - lostAt(p.id, null) + invDelta(p.id, null);
 }
 /* stock corrections from submitted inventory counts: delta = counted - theoretical
    scope: "all" (any location) | null (warehouse) | a POS id */
@@ -1518,10 +1524,11 @@ function renderGifts() {
   const el = document.getElementById("giftsTable");
   const rows = [...state.gifts].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   if (!rows.length) { el.innerHTML = '<p class="empty">No gifts logged yet.</p>'; return; }
-  let h = `<table><tr><th>Date</th><th>Product</th><th class="num">Qty</th><th class="num">Cost value</th><th>Person / note</th><th class="no-print"></th></tr>`;
+  let h = `<table><tr><th>Date</th><th>Product</th><th class="num">Qty</th><th>From</th><th class="num">Cost value</th><th>Person / note</th><th class="no-print"></th></tr>`;
   for (const g of rows) {
     h += `<tr><td>${fmtD(g.date)}</td><td>${prodLabelById(g.product_id)}</td>
-      <td class="num">${g.qty}</td><td class="num calc">${showE(Number(g.qty) * avgCostOf(g.product_id))}</td><td>${esc(g.note)}</td>
+      <td class="num">${g.qty}</td><td>${g.pos_id ? esc(posById(g.pos_id)?.name || "(deleted)") : "Home"}</td>
+      <td class="num calc">${showE(Number(g.qty) * avgCostOf(g.product_id))}</td><td>${esc(g.note)}</td>
       <td class="no-print"><button class="btn small ghost" onclick="editGift('${g.id}')">Edit</button>
         <button class="btn small danger" onclick="delRow('gifts','${g.id}')">Del</button></td></tr>`;
   }
@@ -1761,6 +1768,7 @@ function renderDay() {
   const dayNet = dayGrossE - exp - dayGiftC;
   document.getElementById("daySummary").innerHTML =
     chip(`Revenue ${showU(rev)} · ${fmtN(units)} units`, "#d9ecdd") +
+    chip(`Cost of goods ${showE(cogs)}`, "#f3f4f6") +
     chip(`Gross profit ${showE(dayGrossE)}`, "#d9eaee") +
     chip(`Gifts ${fmtN(dayGifts.reduce((a, g) => a + Number(g.qty), 0))} units (${showE(dayGiftC)})`, "#fdeeca") +
     chip(`Expenses ${showE(exp)}`, "#ffdad6") +
@@ -1770,7 +1778,7 @@ function renderDay() {
     desc: `${prodLabelById(s.product_id)} × ${s.qty} @ ${usdF.format(Number(s.price_per_unit))} — ${esc(posById(s.pos_id)?.name || "no POS")}`,
     disp: showU(Number(s.qty) * Number(s.price_per_unit)), neg: false, fn: "editSale" });
   for (const g of dayGifts) rows.push({ kind: "gifts", id: g.id, type: "Gift", bg: "#fdeeca",
-    desc: `${prodLabelById(g.product_id)} × ${g.qty}${g.note ? " — " + esc(g.note) : ""}`, disp: "—", neg: false, fn: "editGift" });
+    desc: `${prodLabelById(g.product_id)} × ${g.qty} — from ${g.pos_id ? esc(posById(g.pos_id)?.name || "?") : "Home"}${g.note ? " — " + esc(g.note) : ""}`, disp: "—", neg: false, fn: "editGift" });
   for (const e of dayExp) rows.push({ kind: "expenses", id: e.id, type: "Expense", bg: CAT_CHIPS[e.category] || "#f3f4f6",
     desc: `${esc(e.description)} (${esc(e.category)})`, disp: showE(-Number(e.amount)), neg: true, fn: "editExpense" });
   const el = document.getElementById("dayList");
@@ -1785,7 +1793,7 @@ function renderDay() {
 
 /* ================= interactive daily report ================= */
 const gv = id => { const el = document.getElementById(id); return el ? el.value : ""; };
-const NR_IDS = ["nr_g_prod", "nr_g_qty", "nr_g_note", "nr_e_desc", "nr_e_cat", "nr_e_amt"];
+const NR_IDS = ["nr_g_prod", "nr_g_qty", "nr_g_pos", "nr_g_note", "nr_e_desc", "nr_e_cat", "nr_e_amt"];
 function renderReport() {
   document.getElementById("repDate").textContent = fmtD(selectedDay);
   const n = draftCount();
@@ -1851,18 +1859,24 @@ function renderReport() {
     h += "</table></div><p class='hint' style='margin-top:4px'>Type quantities — the price under each cell comes from your price list (click it for a special price). \"saved N\" = already submitted today.</p>";
   }
 
+  // gifts consume their location's stock; empty location = Home (the default)
+  const locOpt = sel => `<option value=""${!sel ? " selected" : ""}>Home</option>`
+    + sortedPos().filter(p => !homePos() || p.id !== homePos().id)
+      .map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(p.name)}</option>`).join("");
   h += '<div class="rep-sec">Gifts</div><div style="overflow-x:auto"><table>';
-  h += `<tr><th style="min-width:230px">Product</th><th class="num">Qty</th><th style="min-width:200px">Person / comment</th><th></th></tr>`;
+  h += `<tr><th style="min-width:230px">Product</th><th class="num">Qty</th><th>From location</th><th style="min-width:200px">Person / comment</th><th></th></tr>`;
   draft.gifts.forEach((d, i) => {
     h += `<tr>
       <td><select class="rin" onchange="updDraft('gifts',${i},'product_id',this.value)">${prodOpt(d.product_id)}</select></td>
       <td class="num"><input class="rin" type="number" min="1" step="1" value="${d.qty}" style="width:72px" onchange="updDraft('gifts',${i},'qty',this.value)"></td>
+      <td><select class="rin" onchange="updDraft('gifts',${i},'pos_id',this.value)">${locOpt(d.pos_id || "")}</select></td>
       <td><input class="rin" value="${esc(d.note || "")}" onchange="updDraft('gifts',${i},'note',this.value)"></td>
       <td><button class="btn small danger" title="Remove line" onclick="removeDraft('gifts',${i})">✕</button></td></tr>`;
   });
   h += `<tr class="newrow">
     <td><select class="rin" id="nr_g_prod" onchange="nrGiftSync()"><option value=""></option>${prodOpt("")}</select></td>
     <td class="num"><input class="rin" id="nr_g_qty" type="number" min="1" step="1" placeholder="qty" style="width:72px" ${enter("addReportGift")}></td>
+    <td><select class="rin" id="nr_g_pos">${locOpt("")}</select></td>
     <td><input class="rin" id="nr_g_note" placeholder="Person / comment — e.g. Marie (PR)" ${enter("addReportGift")}></td>
     <td><button class="btn small gold" onclick="addReportGift()">+ Add</button></td></tr>`;
   h += `</table></div><p class="hint" id="nr_g_hint" style="margin-top:4px"></p>`;
@@ -1893,6 +1907,7 @@ function renderReport() {
   const repNet = repGrossE - exp - giftC;
   h += `<div class="rep-tot">
     <span class="chip" style="background:#d9ecdd">Sales ${showU(rev)} · ${fmtN(units)} units</span>
+    <span class="chip" style="background:#f3f4f6">Cost of goods ${showE(cogs)}</span>
     <span class="chip" style="background:#d9eaee">Gross profit ${showE(repGrossE)}</span>
     <span class="chip" style="background:#fdeeca">Gifts ${fmtN(giftU)} units (${showE(giftC)})</span>
     <span class="chip" style="background:#ffdad6">Expenses ${showE(exp)}</span>
@@ -1954,11 +1969,15 @@ window.updDraft = (kind, i, field, val) => {
 /* (single-line sale entry replaced by the product x POS sales grid above) */
 window.addReportGift = () => {
   const product_id = gv("nr_g_prod"), qty = Number(gv("nr_g_qty"));
+  const pos_id = gv("nr_g_pos") || "";
   if (!product_id) { alert("Pick a product."); return; }
   if (!(qty > 0)) { alert("Enter the quantity gifted."); return; }
-  const available = productCalc(prodById(product_id)).stock - pendingOut(product_id);
-  if (qty > available && !confirm(`Only ${fmtN(available)} in stock (counting report lines) — add anyway?`)) return;
-  draft.gifts.push({ date: selectedDay, product_id, qty, note: gv("nr_g_note").trim() });
+  const hp = homePos();
+  const at = pos_id ? posStockOf(product_id, pos_id)
+           : hp ? posStockOf(product_id, hp.id) : warehouseOf(prodById(product_id));
+  const available = at - pendingOut(product_id);
+  if (qty > available && !confirm(`Only ${fmtN(available)} in stock at ${pos_id ? (posById(pos_id)?.name || "this POS") : "Home"} (counting report lines) — add anyway?`)) return;
+  draft.gifts.push({ date: selectedDay, product_id, qty, pos_id, note: gv("nr_g_note").trim() });
   saveDraft(); renderDay();
 };
 window.addReportExpense = () => {
@@ -1977,10 +1996,14 @@ window.saveDay = async () => {
   for (const kind of ["sales", "gifts", "expenses"]) {
     if (!draft[kind].length) continue;
     const rows = draft[kind].map(d => ({ id: uid(), ...d }));
+    // a gift from Home carries no pos_id (also keeps old cloud DBs without the column working)
+    if (kind === "gifts") for (const r of rows) if (!r.pos_id) delete r.pos_id;
     if (remote) {
       const { data, error } = await client.from(kind).insert(rows).select();
       if (error) {
-        alert(`Cloud error while saving ${kind}: ${error.message}\nAlready-saved lines were kept; the rest is still pending.`);
+        const hint = kind === "gifts" && /pos_id/.test(error.message)
+          ? "\nGift locations need a small database update — run supabase/migration-v6-gift-location.sql in the Supabase SQL editor." : "";
+        alert(`Cloud error while saving ${kind}: ${error.message}${hint}\nAlready-saved lines were kept; the rest is still pending.`);
         if (btn) btn.disabled = false;
         renderDay(); return;
       }
@@ -2057,6 +2080,54 @@ window.startPosInventoryPrefilled = async () => {
   activeInv = d.id;
   render();
   toast(`${targets.map(t => t[0].name).join(" + ")} counts prefilled (${n} non-zero, the rest 0). Review, then SUBMIT — global stock becomes exactly the sheet`);
+};
+/* Book1 also recorded WHAT WAS SOLD and GIFTED before the app existed (Qt Sold /
+   Qt Gifted). This imports them as history — sales at each location's sheet price,
+   gifts from their location — dated BOOK1_DATE, then re-counts every location to
+   the sheet's Qt Remaining so stock stays exactly the sheet. */
+const BOOK1_DATE = "2026-09-12";
+window.importBook1History = async () => {
+  if (typeof POS_SHEETS === "undefined") { alert("Book1 data not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  if (state.sales.some(s => s.date === BOOK1_DATE) || state.gifts.some(g => g.date === BOOK1_DATE)) {
+    alert(`Book1 history is already imported (entries dated ${fmtD(BOOK1_DATE)}).`); return;
+  }
+  if (!(await niceConfirm("Import Book1 sales & gifts?",
+    `Every Qt Sold and Qt Gifted from Book1 becomes a sale (at that location's sheet price) or a gift record dated ${fmtD(BOOK1_DATE)}, and each location is then re-counted to the sheet's Qt Remaining — so revenue history is recorded and stock stays exactly the sheet.`, "Import"))) return;
+  const targets = [];
+  for (const name of Object.keys(POS_SHEETS)) {
+    let pos = state.pos.find(x => posSheetFor(x) === POS_SHEETS[name]);
+    if (!pos) pos = await addRow("pos", { name });
+    if (pos) targets.push([pos, POS_SHEETS[name]]);
+  }
+  const hp = homePos();
+  let nS = 0, nG = 0, rev = 0;
+  for (const [pos, sheet] of targets) {
+    for (const p of state.products) {
+      const e = p.ref ? sheet[p.ref] : null;
+      if (!e) continue;
+      if (e.s > 0) {
+        if (!(await addRow("sales", { date: BOOK1_DATE, pos_id: pos.id, product_id: p.id, qty: e.s, price_per_unit: e.p || 0 }))) return;
+        nS += e.s; rev += e.s * (e.p || 0);
+      }
+      if (e.g > 0) {
+        const row = { date: BOOK1_DATE, product_id: p.id, qty: e.g, note: "Book1 import" };
+        if (hp && pos.id !== hp.id) row.pos_id = pos.id; // gifts from Home carry no pos_id
+        if (!(await addRow("gifts", row))) return;
+        nG += e.g;
+      }
+    }
+  }
+  // re-count every location to the sheet so the imported movements don't double-deduct
+  const d = { id: uid(), date: todayISO(), pos_id: "ALL", counts: {} };
+  for (const [pos, sheet] of targets)
+    for (const p of state.products)
+      d.counts[p.id + "|" + pos.id] = String(p.ref != null && sheet[p.ref] !== undefined ? sheet[p.ref].q : 0);
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  await submitInventory();
+  toast(`Book1 history imported ✓ — ${fmtN(nS)} units sold (${usdF.format(rev)}) and ${fmtN(nG)} gifted, stock re-counted to the sheet`);
+  render();
 };
 window.openInvDraft = id => {
   activeInv = id; renderInventory();
@@ -2647,7 +2718,7 @@ window.editGift = async id => {
   const g = state.gifts.find(x => x.id === id); if (!g) return;
   if (!confirm("Move this saved gift back into the daily report for editing? Submit the report again to re-save it.")) return;
   await deleteRow("gifts", id);
-  draft.gifts.push({ date: g.date, product_id: g.product_id, qty: Number(g.qty), note: g.note || "" });
+  draft.gifts.push({ date: g.date, product_id: g.product_id, qty: Number(g.qty), pos_id: g.pos_id || "", note: g.note || "" });
   saveDraft(); showTab("day"); setDay(g.date); render();
   toast("Moved into the report — edit it there, then Submit");
 };
