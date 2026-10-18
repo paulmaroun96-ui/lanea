@@ -588,6 +588,10 @@
       <button class="btn gold" type="submit">Add expense</button>
     </form>
     <p class="hint">Any date works — use it to back-fill old expenses. Today's small costs can also go through the Daily report.</p>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+      <button class="btn gold" type="button" onclick="importOldExpenses()">Import the 55 old expenses from the Excel (€21,064.87)</button>
+      <span class="hint" style="margin:0">One click — safe to press twice, already-imported lines are skipped. Supplier invoices are excluded (they live in Purchases).</span>
+    </div>
   </section>
   <section class="card no-print">
     <h2>Recurring expenses</h2>
@@ -1655,6 +1659,20 @@ document.getElementById("recForm").addEventListener("submit", async ev => {
     render();
   }
 });
+/* one-click import of ONLY the old expenses from Old Inv Test.xlsx —
+   independent of the sales-history import, idempotent */
+window.importOldExpenses = async () => {
+  if (typeof OLD_HISTORY === "undefined") { alert("Old-expenses data not loaded — reload the page."); return; }
+  let n = 0, skip = 0;
+  for (const e of OLD_HISTORY.expenses) {
+    if (state.expenses.some(x => x.description === e.description && Number(x.amount) === Number(e.amount))) { skip++; continue; }
+    if (!(await addRow("expenses", { date: e.date, description: e.description, category: e.category, amount: e.amount }))) return;
+    n++;
+  }
+  toast(n ? `${n} old expenses imported ✓${skip ? ` (${skip} were already there)` : ""} — ${eurF.format(OLD_HISTORY.expenses.reduce((a, x) => a + x.amount, 0))} total in the log`
+          : "All 55 old expenses are already in the log ✓");
+  render();
+};
 document.getElementById("expForm").addEventListener("submit", async ev => {
   ev.preventDefault();
   const row = {
