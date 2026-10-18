@@ -946,6 +946,9 @@ function filteredSales() {
     && (!filters.prod || s.product_id === filters.prod));
 }
 function filteredExpenses() { return state.expenses.filter(e => inPeriod(e.date)); }
+function filteredPurchases() {
+  return state.purchases.filter(u => inPeriod(u.date) && (!filters.prod || u.product_id === filters.prod));
+}
 function filteredLosses() {
   return state.losses.filter(l => !l.deleted && inPeriod(l.date)
     && (!filters.pos || l.pos_id === filters.pos)
@@ -1085,6 +1088,11 @@ function renderDash() {
   const giftUnits = giftRows.reduce((a, g) => a + Number(g.qty), 0);
   const revEUR = toE(revenue);
   const gross = revEUR - cogs, net = gross - expTotal - lossVal - giftCost;
+  // cash view: what was actually paid out for goods in the period vs money in
+  const purRows = filteredPurchases();
+  const purCost = purRows.reduce((a, u) => a + Number(u.qty) * Number(u.unit_cost), 0);
+  const purUnits = purRows.reduce((a, u) => a + Number(u.qty), 0);
+  const cash = revEUR - purCost - expTotal;
   let stockValue = 0, stockUnits = 0, stockRetail = 0;
   for (const p of state.products) {
     const c = productCalc(p);
@@ -1096,9 +1104,11 @@ function renderDash() {
     .sort((a, b) => a.c.stock - b.c.stock);
   const cards = [
     ["payments", "Revenue", showU(revenue), `≈ ${showE(revEUR)} · ${fmtN(units)} units`, ""],
+    ["local_shipping", "Purchases (goods)", showE(purCost), `${fmtN(purUnits)} units bought — what you paid suppliers`, ""],
     ["shopping_cart", "COGS", showE(cogs), "avg cost basis (€)", ""],
     ["trending_up", "Gross profit", showE(gross), fmtP(revEUR > 0 ? gross / revEUR : null) + " margin", ""],
     ["account_balance_wallet", "Expenses", showE(expTotal), `${expenses.length} entries`, ""],
+    ["flag", "Break-even (cash)", showE(cash), cash >= 0 ? "money in ≥ purchases + expenses ✓" : "still to recover before break-even", cash < 0 ? "red" : ""],
     ["report", "Losses", showE(lossVal), `${fmtN(lossUnits)} units written off`, lossVal > 0 ? "red" : ""],
     ["volunteer_activism", "Gifts (at cost)", showE(giftCost), `${fmtN(giftUnits)} units given`, giftCost > 0 ? "red" : ""],
     ["savings", "Net profit", showE(net), fmtP(revEUR > 0 ? net / revEUR : null) + " net margin", ""],
@@ -1116,21 +1126,22 @@ function renderDash() {
 
   // monthly table
   const months = {};
-  const bucket = ym => months[ym] ??= { revenue: 0, cogs: 0, expenses: 0, losses: 0, gifts: 0 };
+  const bucket = ym => months[ym] ??= { revenue: 0, purchases: 0, cogs: 0, expenses: 0, losses: 0, gifts: 0 };
   for (const s of sales) { const b = bucket(s.date.slice(0, 7)); const q = Number(s.qty); b.revenue += q * Number(s.price_per_unit); b.cogs += q * avgCostOf(s.product_id); }
+  for (const u of purRows) if (u.date) bucket(u.date.slice(0, 7)).purchases += Number(u.qty) * Number(u.unit_cost);
   for (const e of expenses) bucket(e.date.slice(0, 7)).expenses += Number(e.amount);
   for (const l of lossRows) if (l.date) bucket(l.date.slice(0, 7)).losses += Number(l.qty) * avgCostOf(l.product_id);
   for (const g of giftRows) if (g.date) bucket(g.date.slice(0, 7)).gifts += Number(g.qty) * avgCostOf(g.product_id);
   const rows = Object.entries(months).sort(([a], [b]) => a.localeCompare(b));
   if (!rows.length) document.getElementById("dashMonthly").innerHTML = '<p class="empty">No activity in this selection yet.</p>';
   else {
-    let h = `<table><tr><th>Month</th><th class="num">Revenue ($)</th><th class="num">COGS (€)</th><th class="num">Gross profit (€)</th><th class="num">Expenses (€)</th><th class="num">Losses (€)</th><th class="num">Gifts (€)</th><th class="num">Net (€)</th><th class="num">Net margin</th><th class="num">Cumulative net (€)</th></tr>`;
-    let cum = 0, tR = 0, tC = 0, tE = 0, tL = 0, tGf = 0;
+    let h = `<table><tr><th>Month</th><th class="num">Revenue ($)</th><th class="num">Purchases (€)</th><th class="num">COGS (€)</th><th class="num">Gross profit (€)</th><th class="num">Expenses (€)</th><th class="num">Losses (€)</th><th class="num">Gifts (€)</th><th class="num">Net (€)</th><th class="num">Net margin</th><th class="num">Cumulative net (€)</th></tr>`;
+    let cum = 0, tR = 0, tP = 0, tC = 0, tE = 0, tL = 0, tGf = 0;
     for (const [ym, v] of rows) {
       const rE = toE(v.revenue);
       const g = rE - v.cogs, n = g - v.expenses - v.losses - v.gifts;
-      cum += n; tR += v.revenue; tC += v.cogs; tE += v.expenses; tL += v.losses; tGf += v.gifts;
-      h += `<tr><td>${monthLabel(ym)}</td><td class="num calc">${showU(v.revenue)}</td><td class="num calc">${showE(v.cogs)}</td>
+      cum += n; tR += v.revenue; tP += v.purchases; tC += v.cogs; tE += v.expenses; tL += v.losses; tGf += v.gifts;
+      h += `<tr><td>${monthLabel(ym)}</td><td class="num calc">${showU(v.revenue)}</td><td class="num calc">${showE(v.purchases)}</td><td class="num calc">${showE(v.cogs)}</td>
         <td class="num calc">${showE(g)}</td><td class="num calc">${showE(v.expenses)}</td>
         <td class="num calc ${v.losses > 0 ? "neg" : ""}">${showE(v.losses)}</td>
         <td class="num calc ${v.gifts > 0 ? "neg" : ""}">${showE(v.gifts)}</td>
@@ -1138,11 +1149,14 @@ function renderDash() {
         <td class="num calc ${cum < 0 ? "neg" : ""}">${showE(cum)}</td></tr>`;
     }
     const tG = toE(tR) - tC, tN = tG - tE - tL - tGf;
-    h += `<tr class="total"><td>TOTAL</td><td class="num">${showU(tR)}</td><td class="num">${showE(tC)}</td><td class="num">${showE(tG)}</td>
+    h += `<tr class="total"><td>TOTAL</td><td class="num">${showU(tR)}</td><td class="num">${showE(tP)}</td><td class="num">${showE(tC)}</td><td class="num">${showE(tG)}</td>
       <td class="num">${showE(tE)}</td><td class="num ${tL > 0 ? "neg" : ""}">${showE(tL)}</td>
       <td class="num ${tGf > 0 ? "neg" : ""}">${showE(tGf)}</td>
       <td class="num ${tN < 0 ? "neg" : ""}">${showE(tN)}</td>
       <td class="num">${fmtP(toE(tR) > 0 ? tN / toE(tR) : null)}</td><td></td></tr></table>`;
+    const cashSel = toE(tR) - tP - tE;
+    h += `<p class="hint" style="margin-top:6px"><b>Cash view for this selection:</b> revenue ${showE(toE(tR))} − purchases ${showE(tP)} − expenses ${showE(tE)} = <b class="${cashSel < 0 ? "neg" : ""}">${showE(cashSel)}</b>
+      ${cashSel >= 0 ? "— above break-even ✓" : "— still to recover before break-even"} (losses and gifts are not extra cash out: they were paid inside purchases).</p>`;
     document.getElementById("dashMonthly").innerHTML = h;
   }
 
@@ -1734,6 +1748,11 @@ function renderCFO() {
     b("payments", `<b>Lifetime revenue:</b> ${showU(revenue)} · COGS ${showE(cogs)} → gross profit ${showE(toE(revenue) - cogs)} (<b>${fmtP(margin)}</b> margin)`) +
     b("receipt_long", `<b>Expenses:</b> ${showE(expTot)} lifetime · ${showE(expMonth)} this month — gifts at cost ${showE(giftC)} · losses ${showE(lossC)}`) +
     b("account_balance", `<b>Net result so far:</b> ${showE(net)}`, net < 0) +
+    (() => {
+      const cash = toE(revenue) - invested - expTot;
+      if (cash >= 0) return b("flag", `<b>Break-even: PASSED ✓</b> — revenue ${showE(toE(revenue))} covers goods ${showE(invested)} + expenses ${showE(expTot)}, cash surplus ${showE(cash)}`);
+      return b("flag", `<b>Break-even gap: ${showE(-cash)}</b> — revenue so far ${showE(toE(revenue))} vs goods ${showE(invested)} + expenses ${showE(expTot)} paid out. ≈ ${showU(-cash * USD_RATE)} more sales from the stock you already own closes it (stock on hand is worth ${showU(stockRetail)} at retail)`, true);
+    })() +
     b("inventory_2", `<b>Stock on hand:</b> ${showE(stockC)} at cost — worth ${showU(stockRetail)} at retail if all sold`) +
     (uUnits > 0
       ? b("warning", `<b>Unaccounted:</b> ${fmtN(uUnits)} units ≈ ${showE(uCost)} at cost (${showU(uRetail)} at retail) left stock with <b>no sale, gift or loss record</b> — mostly the period before daily recording. Worst products below.`, true)
@@ -3043,13 +3062,14 @@ const toCSV = rows => "﻿" + rows.map(r => r.map(csvCell).join(",")).join("\r\n
 window.exportDashboardCSV = () => {
   const sales = filteredSales(), expenses = filteredExpenses();
   const months = {};
-  const bucket = ym => months[ym] ??= { revenue: 0, cogs: 0, expenses: 0 };
+  const bucket = ym => months[ym] ??= { revenue: 0, purchases: 0, cogs: 0, expenses: 0 };
   for (const s of sales) { const b = bucket(s.date.slice(0, 7)); b.revenue += Number(s.qty) * Number(s.price_per_unit); b.cogs += Number(s.qty) * avgCostOf(s.product_id); }
+  for (const u of filteredPurchases()) if (u.date) bucket(u.date.slice(0, 7)).purchases += Number(u.qty) * Number(u.unit_cost);
   for (const e of expenses) bucket(e.date.slice(0, 7)).expenses += Number(e.amount);
   const rows = [["LANEA — Dashboard export"], [`Filters: ${filters.from || "start"} → ${filters.to || "now"}${filters.pos ? " | POS: " + (posById(filters.pos)?.name || "") : ""}${filters.prod ? " | Product: " + (prodById(filters.prod)?.name || "") : ""} | rate: 1 EUR = ${USD_RATE} USD`], [],
-    ["Month", "Revenue (USD)", "Revenue (EUR)", "COGS (EUR)", "Gross profit (EUR)", "Expenses (EUR)", "Net (EUR)"]];
+    ["Month", "Revenue (USD)", "Revenue (EUR)", "Purchases (EUR)", "COGS (EUR)", "Gross profit (EUR)", "Expenses (EUR)", "Net (EUR)", "Cash = rev - purchases - expenses (EUR)"]];
   for (const [ym, v] of Object.entries(months).sort(([a], [b]) => a.localeCompare(b)))
-    rows.push([ym, v.revenue.toFixed(2), toE(v.revenue).toFixed(2), v.cogs.toFixed(2), (toE(v.revenue) - v.cogs).toFixed(2), v.expenses.toFixed(2), (toE(v.revenue) - v.cogs - v.expenses - (v.losses || 0) - (v.gifts || 0)).toFixed(2)]);
+    rows.push([ym, v.revenue.toFixed(2), toE(v.revenue).toFixed(2), v.purchases.toFixed(2), v.cogs.toFixed(2), (toE(v.revenue) - v.cogs).toFixed(2), v.expenses.toFixed(2), (toE(v.revenue) - v.cogs - v.expenses - (v.losses || 0) - (v.gifts || 0)).toFixed(2), (toE(v.revenue) - v.purchases - v.expenses).toFixed(2)]);
   downloadFile("lanea-dashboard.csv", "text/csv", toCSV(rows));
 };
 window.exportProductsCSV = () => {
