@@ -345,6 +345,7 @@
       <button class="btn ghost" type="button" onclick="importBook1History()">Import Book1 sales &amp; gifts (history) + re-count</button>
       <button class="btn ghost" type="button" onclick="importOldHistory()">Import OLD history (Old Inv Test: 1,130 sold + expenses) + re-count</button>
     </div>
+    <p class="hint" id="importState" style="margin-top:6px"></p>
   </section>
   <section class="card" id="invSheet" style="display:none">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
@@ -2064,7 +2065,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderVariance(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
+  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderImportState(); renderVariance(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
@@ -2492,6 +2493,20 @@ window.importBook1History = async () => {
   toast(`Book1 history imported ✓ — ${fmtN(nS)} units sold (${usdF.format(rev)}) and ${fmtN(nG)} gifted, stock re-counted to the sheet`);
   render();
 };
+/* live status under the import buttons: shows what landed where, so a missing
+   migration or a signed-out import is visible at a glance */
+function renderImportState() {
+  const el = document.getElementById("importState");
+  if (!el) return;
+  const chip = (ok, label) => `<span class="chip" style="background:${ok ? "#d9ecdd" : "#ffdad6"};margin-right:6px">${ok ? "✓" : "✗"} ${label}</span>`;
+  const b1 = state.sales.some(s => s.date === "2026-09-12");
+  const oldOk = typeof OLD_HISTORY !== "undefined" && state.sales.some(s => s.date === OLD_HISTORY.date);
+  const oldExp = typeof OLD_HISTORY !== "undefined" ? state.expenses.filter(e => OLD_HISTORY.expenses.some(o => o.description === e.description)).length : 0;
+  el.innerHTML =
+    chip(!!remote, remote ? "Signed in — saving to the cloud" : "NOT signed in — anything imported now stays in this browser only") +
+    chip(b1, b1 ? "Book1 sales & gifts: imported" : "Book1 sales & gifts: not imported yet") +
+    chip(oldOk, oldOk ? `OLD history: imported (${oldExp}/${typeof OLD_HISTORY !== "undefined" ? OLD_HISTORY.expenses.length : 0} expenses)` : "OLD history (1,130 sold + 55 expenses): not imported yet");
+}
 /* OLD pre-app history (Old Inv Test.xlsx): everything sold/gifted before daily
    recording, at the OLD prices and OLD unit costs, plus the old operating
    expenses. Sales carry unit_cost so COGS uses the real historical cost
