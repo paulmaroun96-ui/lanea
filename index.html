@@ -276,6 +276,12 @@
     <button class="btn ghost" onclick="printDash()">Print / PDF</button>
   </div>
   <div class="cards" id="dashCards"></div>
+  <section class="card">
+    <h2>CFO report — lifetime, where every unit and euro went</h2>
+    <p class="hint">Always all-time (ignores the filters above): purchases vs what is sold, gifted, lost, in stock — and what is <b>unaccounted</b> (left stock with no record, mostly the pre-app period).</p>
+    <div id="cfoHighlights"></div>
+    <div class="scrollbox" style="max-height:420px" id="cfoTable"></div>
+  </section>
   <section class="card"><h2>Monthly performance</h2><div id="dashMonthly"></div></section>
   <div class="grid2">
     <section class="card"><h2>Sales by point of sale</h2><div id="dashPos"></div></section>
@@ -445,6 +451,18 @@
     <span id="importStatus" style="margin-left:10px;font-size:13px"></span>
   </section>
   <section class="card no-print">
+    <h2>Scan an invoice (AI)</h2>
+    <p class="hint">Drop a <b>PDF or photo</b> of a supplier invoice — Gemini reads the date, invoice ref and every line (product · qty · unit price · line total).
+    You review and match the products, then import. The API key is saved <b>only in this browser</b> — never in the code or the cloud.</p>
+    <div class="rowform">
+      <label>Gemini API key<input id="gm_key" type="password" placeholder="AIza…" style="min-width:260px" autocomplete="off"></label>
+      <label>Invoice file<input id="gm_file" type="file" accept=".pdf,image/*"></label>
+      <button class="btn gold" type="button" id="gm_scan" onclick="scanInvoice()">Scan invoice</button>
+    </div>
+    <p class="hint" id="scanStatus" style="margin-top:6px"></p>
+    <div id="scanResult"></div>
+  </section>
+  <section class="card no-print">
     <h2>Add purchase manually</h2>
     <form class="rowform" id="purchaseForm">
       <label>Date<input id="pu_date" type="date" required></label>
@@ -541,7 +559,18 @@
 
 <!-- ================= EXPENSES ================= -->
 <div class="tab" id="tab-exp" style="display:none">
-  <div class="pagehead"><h1>Expenses</h1><p>All business costs in EUR. Log daily expenses in the Daily report tab — review, analyse and automate them here.</p></div>
+  <div class="pagehead"><h1>Expenses</h1><p>All business costs in EUR — add one-off expenses (past or future dates), set recurring ones, and analyse everything.</p></div>
+  <section class="card no-print">
+    <h2>Add an expense</h2>
+    <form class="rowform" id="expForm">
+      <label>Date<input id="ex_date" type="date" required></label>
+      <label>Description<input id="ex_desc" required style="min-width:220px" placeholder="e.g. DHL shipment, exhibition stand…"></label>
+      <label>Category<select id="ex_cat"></select></label>
+      <label>Amount (€)<input id="ex_amount" type="number" min="0.01" step="0.01" required style="width:110px"></label>
+      <button class="btn gold" type="submit">Add expense</button>
+    </form>
+    <p class="hint">Any date works — use it to back-fill old expenses. Today's small costs can also go through the Daily report.</p>
+  </section>
   <section class="card no-print">
     <h2>Recurring expenses</h2>
     <p class="hint">Rent, subscriptions, phone… added to the log automatically on their day each month, from the start month until today. Pause or delete a rule anytime (already-created entries stay in the log).</p>
@@ -643,7 +672,9 @@
   </section>
   <section class="card">
     <h2>When goods move</h2>
-    <p style="line-height:1.8"><b>New supplier delivery</b> → Purchases tab (add lines, or send the PDF invoice to Claude to extend the import).
+    <p style="line-height:1.8"><b>New supplier delivery</b> → Purchases tab → <b>Scan an invoice (AI)</b>: drop the PDF or a photo,
+    Gemini extracts every line (product, qty, unit price, total, date), you review the product matches and import — or add lines manually.
+    The <b>CFO report</b> on the dashboard reconciles everything lifetime: invested € → sold / gifted / lost / in stock / unaccounted, and flags what needs attention.
     <b>Supplying a reseller or exhibition</b> → Transfers → From Home, To the reseller; leftovers → back to Home.</p>
   </section>
   <section class="card">
@@ -1584,6 +1615,22 @@ document.getElementById("recForm").addEventListener("submit", async ev => {
     render();
   }
 });
+document.getElementById("expForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const row = {
+    date: gv("ex_date") || todayISO(),
+    description: gv("ex_desc").trim(),
+    category: gv("ex_cat"),
+    amount: Number(gv("ex_amount")),
+  };
+  if (!row.description || !(row.amount > 0)) return;
+  if (await addRow("expenses", row)) {
+    document.getElementById("expForm").reset();
+    document.getElementById("ex_date").value = todayISO();
+    toast(`Expense saved ✓ — ${eurF.format(row.amount)} on ${fmtD(row.date)}`);
+    render();
+  }
+});
 function renderRecurring() {
   const el = document.getElementById("recurringList");
   if (!state.recurring_expenses.length) { el.innerHTML = '<p class="empty">No recurring expenses yet — e.g. your ~€1,000/month operating costs.</p>'; return; }
@@ -1653,6 +1700,231 @@ function renderExpenses() {
     : '<p class="empty">—</p>';
 }
 
+/* ================= CFO report (lifetime reconciliation) ================= */
+function renderCFO() {
+  const hi = document.getElementById("cfoHighlights"), tb = document.getElementById("cfoTable");
+  if (!hi) return;
+  if (!state.products.length) { hi.innerHTML = '<p class="empty">Import your invoices first — the CFO report builds itself from them.</p>'; tb.innerHTML = ""; return; }
+  let invested = 0, boughtUnits = 0, revenue = 0, cogs = 0, giftC = 0, lossC = 0, stockC = 0, stockRetail = 0;
+  let uUnits = 0, uCost = 0, uRetail = 0;
+  const rows = [];
+  for (const p of state.products) {
+    const c = productCalc(p);
+    invested += c.totCost; boughtUnits += c.iq + c.purQty;
+    revenue += c.revenue; cogs += c.cogs;
+    giftC += c.gifted * c.avgCost; lossC += c.lost * c.avgCost;
+    stockC += Math.max(c.stock, 0) * c.avgCost;
+    const retail = (p.ref && typeof RETAIL_USD !== "undefined" && RETAIL_USD[p.ref]) || 0;
+    stockRetail += Math.max(c.stock, 0) * retail;
+    const bought = c.iq + c.purQty;
+    const unacc = bought - c.sold - c.gifted - c.lost - c.stock; // what left stock with no record
+    if (unacc !== 0) rows.push({ p, bought, c, unacc, val: unacc * c.avgCost });
+    if (unacc > 0) { uUnits += unacc; uCost += unacc * c.avgCost; uRetail += unacc * retail; }
+  }
+  const expTot = state.expenses.reduce((a, e) => a + Number(e.amount), 0);
+  const thisYm = todayISO().slice(0, 7);
+  const expMonth = state.expenses.filter(e => (e.date || "").slice(0, 7) === thisYm).reduce((a, e) => a + Number(e.amount), 0);
+  const net = toE(revenue) - cogs - expTot - lossC - giftC;
+  const margin = revenue > 0 ? (toE(revenue) - cogs) / toE(revenue) : 0;
+  let negStock = 0;
+  for (const pos of state.pos) for (const p of state.products) if (posStockOf(p.id, pos.id) < 0) negStock++;
+  const b = (icon, text, warn) => `<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0${warn ? ";color:#a33" : ""}"><span class="ms" style="font-size:16px">${icon}</span><span>${text}</span></div>`;
+  hi.innerHTML =
+    b("shopping_cart", `<b>Invested in goods:</b> ${showE(invested)} — ${fmtN(boughtUnits)} units bought`) +
+    b("payments", `<b>Lifetime revenue:</b> ${showU(revenue)} · COGS ${showE(cogs)} → gross profit ${showE(toE(revenue) - cogs)} (<b>${fmtP(margin)}</b> margin)`) +
+    b("receipt_long", `<b>Expenses:</b> ${showE(expTot)} lifetime · ${showE(expMonth)} this month — gifts at cost ${showE(giftC)} · losses ${showE(lossC)}`) +
+    b("account_balance", `<b>Net result so far:</b> ${showE(net)}`, net < 0) +
+    b("inventory_2", `<b>Stock on hand:</b> ${showE(stockC)} at cost — worth ${showU(stockRetail)} at retail if all sold`) +
+    (uUnits > 0
+      ? b("warning", `<b>Unaccounted:</b> ${fmtN(uUnits)} units ≈ ${showE(uCost)} at cost (${showU(uRetail)} at retail) left stock with <b>no sale, gift or loss record</b> — mostly the period before daily recording. Worst products below.`, true)
+      : b("verified", "Every purchased unit is accounted for ✓")) +
+    (negStock ? b("error", `<b>${fmtN(negStock)}</b> product × location combinations show <b>negative stock</b> — sales were logged there without allocating stock (Transfers tab).`, true) : "");
+  rows.sort((a, b2) => b2.val - a.val);
+  if (!rows.length) { tb.innerHTML = ""; return; }
+  let h = `<table><tr><th>Product</th><th class="num">Bought</th><th class="num">Sold</th><th class="num">Gifted</th><th class="num">Lost</th><th class="num">In stock</th><th class="num">Unaccounted</th><th class="num">€ at cost</th></tr>`;
+  for (const r of rows.slice(0, 30)) {
+    h += `<tr><td>${prodLabel(r.p)}</td><td class="num calc">${fmtN(r.bought)}</td><td class="num calc">${fmtN(r.c.sold)}</td>
+      <td class="num calc">${fmtN(r.c.gifted)}</td><td class="num calc">${fmtN(r.c.lost)}</td><td class="num calc">${fmtN(r.c.stock)}</td>
+      <td class="num calc ${r.unacc > 0 ? "neg" : ""}">${r.unacc > 0 ? "+" : ""}${fmtN(r.unacc)}</td>
+      <td class="num calc ${r.val > 0 ? "neg" : ""}">${showE(r.val)}</td></tr>`;
+  }
+  h += `<tr class="total"><td>TOTAL unaccounted</td><td></td><td></td><td></td><td></td><td></td><td class="num">${fmtN(uUnits)}</td><td class="num">${showE(uCost)}</td></tr>`;
+  tb.innerHTML = h + "</table>";
+}
+
+/* ================= AI invoice scanner (Gemini) ================= */
+const LS_GMKEY = "lanea-gemini-key";
+const GM_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+let SCAN = null;
+const GM_PROMPT = `You are reading a supplier invoice for a cosmetics shop. Extract EVERY product line exactly as printed.
+Return: supplier, invoice_ref, date (YYYY-MM-DD), currency, and lines[] where each line has:
+ref (the article code as printed, e.g. AR00083 or 12SERUM30, empty if none), name (full product description),
+qty (units invoiced), unit_price (price per unit after any LINE discount but before global discounts), line_total.
+Also discount_total (sum of global/footer discounts as a positive number), shipping_total, grand_total (the amount actually payable).
+Do NOT include shipping or discount rows inside lines[]. Numbers must be plain numbers without currency symbols.`;
+const GM_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    supplier: { type: "STRING" }, invoice_ref: { type: "STRING" }, date: { type: "STRING" }, currency: { type: "STRING" },
+    discount_total: { type: "NUMBER" }, shipping_total: { type: "NUMBER" }, grand_total: { type: "NUMBER" },
+    lines: { type: "ARRAY", items: { type: "OBJECT", properties: {
+      ref: { type: "STRING" }, name: { type: "STRING" }, qty: { type: "NUMBER" },
+      unit_price: { type: "NUMBER" }, line_total: { type: "NUMBER" },
+    }, required: ["name", "qty", "unit_price"] } },
+  },
+  required: ["date", "lines", "grand_total"],
+};
+const gmNorm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+window.gmMatchProduct = (ref, name) => {
+  if (ref) {
+    for (const raw of String(ref).toUpperCase().split("/").map(x => x.trim())) {
+      for (const c of [raw, raw.replace(/^\d+/, "")]) {
+        const p = state.products.find(x => (x.ref || "").toUpperCase() === c);
+        if (p) return p.id;
+      }
+    }
+  }
+  const toks = gmNorm(name).split(" ").filter(t => t.length > 2);
+  if (!toks.length) return "";
+  let best = null, bestScore = 0;
+  for (const p of state.products) {
+    const hay = gmNorm(prodShort(p) + " " + (p.name || ""));
+    let score = 0;
+    for (const t of toks) if (hay.includes(t)) score++;
+    score /= toks.length;
+    if (score > bestScore) { bestScore = score; best = p; }
+  }
+  return bestScore >= 0.6 ? best.id : "";
+};
+function gmFileToB64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(",")[1]);
+    r.onerror = () => rej(new Error("could not read the file"));
+    r.readAsDataURL(file);
+  });
+}
+window.scanInvoice = async () => {
+  const st = document.getElementById("scanStatus");
+  const key = (gv("gm_key") || "").trim() || localStorage.getItem(LS_GMKEY) || "";
+  if (!key) { st.textContent = "Paste your Gemini API key first — it is kept only in this browser."; return; }
+  const f = document.getElementById("gm_file").files?.[0];
+  if (!f) { st.textContent = "Choose an invoice file (PDF or photo) first."; return; }
+  localStorage.setItem(LS_GMKEY, key);
+  const btn = document.getElementById("gm_scan");
+  btn.disabled = true; st.textContent = "Reading the invoice with Gemini — a few seconds…";
+  try {
+    const b64 = await gmFileToB64(f);
+    const body = {
+      contents: [{ parts: [
+        { inline_data: { mime_type: f.type || "application/pdf", data: b64 } },
+        { text: GM_PROMPT },
+      ] }],
+      generationConfig: { response_mime_type: "application/json", response_schema: GM_SCHEMA, temperature: 0 },
+    };
+    let parsed = null, lastErr = "";
+    for (const model of GM_MODELS) {
+      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) { lastErr = `${model}: HTTP ${resp.status} — ${(await resp.text()).slice(0, 200)}`; continue; }
+      const j = await resp.json();
+      const txt = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
+      try { parsed = JSON.parse(txt); break; } catch { lastErr = model + ": could not parse the response"; }
+    }
+    if (!parsed) throw new Error(lastErr || "no response from Gemini");
+    SCAN = {
+      supplier: parsed.supplier || "", invoice_ref: parsed.invoice_ref || "",
+      date: /^\d{4}-\d{2}-\d{2}$/.test(parsed.date || "") ? parsed.date : todayISO(),
+      total: Number(parsed.grand_total || 0), discount: Number(parsed.discount_total || 0), shipping: Number(parsed.shipping_total || 0),
+      lines: (parsed.lines || []).filter(l => Number(l.qty) > 0).map(l => ({
+        ref: l.ref || "", name: l.name || "", qty: Number(l.qty),
+        unit_price: Number(l.unit_price || 0),
+        line_total: Number(l.line_total || Number(l.qty) * Number(l.unit_price || 0)),
+        product_id: gmMatchProduct(l.ref, l.name),
+      })),
+    };
+    st.textContent = SCAN.lines.length ? "" : "Gemini found no product lines — is this a supplier invoice?";
+    renderScanResult();
+  } catch (e) {
+    st.textContent = "Scan failed — " + (e && e.message ? e.message : e);
+  } finally { btn.disabled = false; }
+};
+function renderScanResult() {
+  const el = document.getElementById("scanResult");
+  if (!SCAN || !SCAN.lines.length) { el.innerHTML = ""; return; }
+  const linesTot = SCAN.lines.reduce((a, l) => a + (l.line_total || l.qty * l.unit_price), 0);
+  let h = `<div class="rowform" style="margin-top:10px">
+    <label>Invoice ref<input class="rin" id="sc_ref" value="${esc(SCAN.invoice_ref)}" style="width:140px"></label>
+    <label>Date<input class="rin" id="sc_date" type="date" value="${SCAN.date}"></label>
+    <label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="sc_spread" checked style="width:auto">
+      Spread discount −${eurF.format(SCAN.discount || 0)} &amp; shipping +${eurF.format(SCAN.shipping || 0)} into unit costs</label>
+  </div>
+  <div class="scrollbox" style="max-height:340px"><table>
+  <tr><th>Invoice line</th><th>Matches product</th><th class="num">Qty</th><th class="num">Unit €</th><th class="num">Total €</th></tr>`;
+  SCAN.lines.forEach((l, i) => {
+    h += `<tr><td>${esc(l.ref ? l.ref + " — " : "")}${esc(l.name)}</td>
+      <td><select class="rin" onchange="scanSetProd(${i},this.value)"><option value=""${l.product_id ? "" : " selected"}>➕ create as new product</option>${prodOptionsGrouped(l.product_id)}</select></td>
+      <td class="num"><input class="rin" type="number" min="1" step="1" value="${l.qty}" style="width:70px" onchange="scanSetField(${i},'qty',this.value)"></td>
+      <td class="num"><input class="rin" type="number" min="0" step="0.0001" value="${l.unit_price}" style="width:95px" onchange="scanSetField(${i},'unit_price',this.value)"></td>
+      <td class="num calc">${eurF.format(l.line_total || l.qty * l.unit_price)}</td></tr>`;
+  });
+  h += `</table></div>`;
+  const check = linesTot - (SCAN.discount || 0) + (SCAN.shipping || 0);
+  const diff = SCAN.total ? SCAN.total - check : 0;
+  h += `<p class="hint">Lines ${eurF.format(linesTot)} − discount + shipping = ${eurF.format(check)} vs invoice total <b>${eurF.format(SCAN.total || 0)}</b>${Math.abs(diff) > 0.05 ? ` — <b style="color:#a33">difference of ${eurF.format(diff)}, check the lines before importing</b>` : " ✓ matches"}</p>`;
+  const unmatched = SCAN.lines.filter(l => !l.product_id).length;
+  h += `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <button class="btn gold" onclick="scanImport()">Import ${SCAN.lines.length} line${SCAN.lines.length === 1 ? "" : "s"} as purchases</button>
+    <button class="btn ghost" onclick="scanCancel()">Cancel</button>
+    ${unmatched ? `<span class="hint" style="margin:0">${unmatched} unmatched line${unmatched === 1 ? "" : "s"} will create new products</span>` : ""}
+  </div>`;
+  el.innerHTML = h;
+}
+window.scanSetProd = (i, v) => { if (SCAN) SCAN.lines[i].product_id = v; };
+window.scanSetField = (i, f, v) => {
+  if (!SCAN) return;
+  SCAN.lines[i][f] = Number(v);
+  SCAN.lines[i].line_total = SCAN.lines[i].qty * SCAN.lines[i].unit_price;
+  renderScanResult();
+};
+window.scanCancel = () => { SCAN = null; document.getElementById("scanResult").innerHTML = ""; document.getElementById("scanStatus").textContent = ""; };
+/* core importer — separate from the DOM so it is testable */
+window.importScanLines = async (meta, lines) => {
+  let created = 0, nLines = 0, units = 0, cost = 0;
+  for (const l of lines) {
+    let pid = l.product_id;
+    if (!pid) {
+      const ref = (String(l.ref || "").split("/").pop() || "").trim().replace(/^\d+/, "") || null;
+      const np = await addRow("products", { name: l.name, ref, category: null, initial_qty: 0, initial_cost: 0 });
+      if (!np) return false;
+      pid = np.id; created++;
+    }
+    const uc = Math.round(l.unit_price * (meta.spreadFactor || 1) * 10000) / 10000;
+    if (!(await addRow("purchases", { date: meta.date, invoice_ref: meta.invoice_ref || null, product_id: pid, qty: l.qty, unit_cost: uc }))) return false;
+    nLines++; units += l.qty; cost += l.qty * uc;
+  }
+  return { created, nLines, units, cost };
+};
+window.scanImport = async () => {
+  if (!SCAN || !SCAN.lines.length) return;
+  const invoice_ref = (gv("sc_ref") || "").trim() || SCAN.invoice_ref || null;
+  const date = gv("sc_date") || SCAN.date;
+  if (invoice_ref && state.purchases.some(u => u.invoice_ref === invoice_ref)
+      && !(await niceConfirm("Invoice already imported?", `Purchases with the ref ${invoice_ref} already exist — importing again may duplicate them.`, "Import anyway"))) return;
+  const gross = SCAN.lines.reduce((a, l) => a + l.qty * l.unit_price, 0);
+  const spreadOn = document.getElementById("sc_spread")?.checked !== false;
+  const spreadFactor = spreadOn && gross > 0 && (SCAN.discount || SCAN.shipping)
+    ? (gross - (SCAN.discount || 0) + (SCAN.shipping || 0)) / gross : 1;
+  const res = await importScanLines({ invoice_ref, date, spreadFactor }, SCAN.lines);
+  if (!res) return;
+  toast(`Invoice imported ✓ — ${res.nLines} lines · ${fmtN(res.units)} units · ${eurF.format(res.cost)}${res.created ? ` · ${res.created} new product${res.created === 1 ? "" : "s"}` : ""}`);
+  scanCancel();
+  render();
+};
+
 /* ================= selects & render root ================= */
 function refreshSelects() {
   const prods = [...state.products].sort(prodSort);
@@ -1689,8 +1961,8 @@ function refreshSelects() {
   const catOpts = CATEGORIES.map(c => `<option>${c}</option>`).join("");
   const elc = document.getElementById("el_cat"); const curc = elc.value;
   elc.innerHTML = '<option value="">All</option>' + catOpts; elc.value = curc;
-  {
-    const sel = document.getElementById("rc_cat"); const cur = sel.value;
+  for (const id of ["rc_cat", "ex_cat"]) {
+    const sel = document.getElementById(id); const cur = sel.value;
     sel.innerHTML = catOpts; if (cur) sel.value = cur;
   }
 }
@@ -1701,7 +1973,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderVariance(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses(); renderRecurring();
+  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderVariance(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
@@ -3038,6 +3310,8 @@ window.saveLowStock = () => {
   render();
 };
 document.getElementById("rc_start").value = todayISO().slice(0, 7);
+document.getElementById("ex_date").value = todayISO();
+try { document.getElementById("gm_key").value = localStorage.getItem(LS_GMKEY) || ""; } catch {}
 loadLocal(); setBadge(); render(); initSupabase();
 if (!remote) ensureRecurring();
 </script>
