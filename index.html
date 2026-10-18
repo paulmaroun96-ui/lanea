@@ -233,6 +233,7 @@
     <button data-tab="exp"><span class="ms">account_balance_wallet</span>Expenses</button>
     <button data-tab="stk"><span class="ms">warehouse</span>Stocks</button>
     <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
+    <button data-tab="his"><span class="ms">history</span>History</button>
     <div class="nav-sec">Setup &amp; help</div>
     <button data-tab="cat"><span class="ms">category</span>Catalog</button>
     <button data-tab="set"><span class="ms">settings</span>Settings</button>
@@ -342,6 +343,7 @@
       <button class="btn gold" type="button" onclick="startInventory()">Open inventory sheet</button>
       <button class="btn ghost" type="button" onclick="startPosInventoryPrefilled()">Prefill actual inventory — Home + Teta + Pharma St.Rita (Book1)</button>
       <button class="btn ghost" type="button" onclick="importBook1History()">Import Book1 sales &amp; gifts (history) + re-count</button>
+      <button class="btn ghost" type="button" onclick="importOldHistory()">Import OLD history (Old Inv Test: 1,130 sold + expenses) + re-count</button>
     </div>
   </section>
   <section class="card" id="invSheet" style="display:none">
@@ -522,6 +524,21 @@
 </div>
 
 <!-- ================= SALES ================= -->
+<div class="tab" id="tab-his" style="display:none">
+  <div class="pagehead"><h1>History</h1><p>Every product ever sold — quantity, real selling price and real unit cost (old sales keep their old prices and costs).</p></div>
+  <section class="card">
+    <h2>Products sold — lifetime</h2>
+    <div class="rowform no-print" style="margin-bottom:8px">
+      <label>Point of sale<select id="hi_pos" onchange="renderHistory()"><option value="">All</option></select></label>
+      <label>From month<input type="month" id="hi_from" onchange="renderHistory()"></label>
+      <label>To month<input type="month" id="hi_to" onchange="renderHistory()"></label>
+      <label>Search<input id="hi_search" oninput="renderHistory()" placeholder="product…" style="min-width:200px"></label>
+      <button class="btn ghost" onclick="exportHistoryCSV()">Export CSV</button>
+    </div>
+    <div class="scrollbox" style="max-height:520px" id="historyTable"></div>
+  </section>
+</div>
+
 <div class="tab" id="tab-sal" style="display:none">
   <div class="pagehead"><h1>Sales &amp; prices</h1><p>Points of sale, their price lists, and the full sales and gift history. Daily logging happens in the Daily entry tab.</p></div>
   <section class="card no-print">
@@ -688,6 +705,7 @@
     Net profit = gross − expenses − losses − gifts at cost.
     <b>Recurring expenses</b> (rent, subscriptions…) are set once in the Expenses tab and added automatically each month on the day you choose.
     <b>Stocks</b>: the per-product statement (initial + purchased − sold − gifted ± adjustments = stock) and the by-location matrix.
+    <b>History</b>: every product ever sold with its real price and real unit cost (old sales keep their old prices and costs — they are inside revenue and COGS everywhere).
     <b>Sales &amp; prices</b>: each POS's performance and its price list (bulk edit + Save prices);
     the <b>Reseller tool</b> above the price matrix fills a whole POS column at X% off the Home price in one click (e.g. Teta and Pharma St.Rita at −15%).
     Locations always show in the order <b>Home · Teta · Pharma St.Rita · (others)</b>, with <b>Global stock</b> as the total.
@@ -882,17 +900,24 @@ function productCalc(p) {
   // no purchase history yet -> fall back to the Book1 cost (New Cost €, Home sheet)
   const sheetCost = (typeof POS_SHEETS !== "undefined" && p.ref && POS_SHEETS["Home"][p.ref]) ? Number(POS_SHEETS["Home"][p.ref].c || 0) : 0;
   const avgCost = totQty > 0 ? totCost / totQty : sheetCost;
-  let sold = 0, revenue = 0, gifted = 0;
-  for (const s of state.sales) if (s.product_id === p.id) { sold += Number(s.qty); revenue += Number(s.qty) * Number(s.price_per_unit); }
+  let sold = 0, revenue = 0, gifted = 0, cogs = 0;
+  for (const s of state.sales) if (s.product_id === p.id) {
+    const q = Number(s.qty);
+    sold += q; revenue += q * Number(s.price_per_unit);
+    cogs += q * ((s.unit_cost != null && s.unit_cost !== "") ? Number(s.unit_cost) : avgCost);
+  }
   for (const g of state.gifts) if (g.product_id === p.id) gifted += Number(g.qty);
   let lost = 0;
   for (const l of state.losses) if (l.product_id === p.id && !l.deleted) lost += Number(l.qty);
   const stock = totQty - sold - gifted - lost + invDelta(p.id, "all");
-  return { iq, purQty, avgCost, sold, revenue, gifted, lost, stock, cogs: sold * avgCost, stockValue: stock * avgCost, totCost };
+  return { iq, purQty, avgCost, sold, revenue, gifted, lost, stock, cogs, stockValue: stock * avgCost, totCost };
 }
 const prodById = id => state.products.find(p => p.id === id);
 const posById = id => state.pos.find(p => p.id === id);
 const avgCostOf = id => { const p = prodById(id); return p ? productCalc(p).avgCost : 0; };
+/* historical rows can carry their own unit cost (old purchases cost differently) */
+const saleCostOf = s => (s.unit_cost != null && s.unit_cost !== "") ? Number(s.unit_cost) : avgCostOf(s.product_id);
+const giftCostOf = g => (g.unit_cost != null && g.unit_cost !== "") ? Number(g.unit_cost) : avgCostOf(g.product_id);
 
 /* THE USER'S MODEL: Home IS the warehouse. Every purchase and the initial
    inventory land at Home; stock is distributed from Home to the resellers.
@@ -1077,14 +1102,14 @@ function renderDash() {
   renderSetup();
   const sales = filteredSales(), expenses = filteredExpenses();
   let revenue = 0, units = 0, cogs = 0;
-  for (const s of sales) { const q = Number(s.qty); units += q; revenue += q * Number(s.price_per_unit); cogs += q * avgCostOf(s.product_id); }
+  for (const s of sales) { const q = Number(s.qty); units += q; revenue += q * Number(s.price_per_unit); cogs += q * saleCostOf(s); }
   const expTotal = expenses.reduce((a, e) => a + Number(e.amount), 0);
   const lossRows = filteredLosses();
   const lossVal = lossRows.reduce((a, l) => a + Number(l.qty) * avgCostOf(l.product_id), 0);
   const lossUnits = lossRows.reduce((a, l) => a + Number(l.qty), 0);
   // gifts count against net profit at their cost value (promo expense, not COGS)
   const giftRows = state.gifts.filter(g => inPeriod(g.date) && (!filters.prod || g.product_id === filters.prod));
-  const giftCost = giftRows.reduce((a, g) => a + Number(g.qty) * avgCostOf(g.product_id), 0);
+  const giftCost = giftRows.reduce((a, g) => a + Number(g.qty) * giftCostOf(g), 0);
   const giftUnits = giftRows.reduce((a, g) => a + Number(g.qty), 0);
   const revEUR = toE(revenue);
   const gross = revEUR - cogs, net = gross - expTotal - lossVal - giftCost;
@@ -1127,11 +1152,11 @@ function renderDash() {
   // monthly table
   const months = {};
   const bucket = ym => months[ym] ??= { revenue: 0, purchases: 0, cogs: 0, expenses: 0, losses: 0, gifts: 0 };
-  for (const s of sales) { const b = bucket(s.date.slice(0, 7)); const q = Number(s.qty); b.revenue += q * Number(s.price_per_unit); b.cogs += q * avgCostOf(s.product_id); }
+  for (const s of sales) { const b = bucket(s.date.slice(0, 7)); const q = Number(s.qty); b.revenue += q * Number(s.price_per_unit); b.cogs += q * saleCostOf(s); }
   for (const u of purRows) if (u.date) bucket(u.date.slice(0, 7)).purchases += Number(u.qty) * Number(u.unit_cost);
   for (const e of expenses) bucket(e.date.slice(0, 7)).expenses += Number(e.amount);
   for (const l of lossRows) if (l.date) bucket(l.date.slice(0, 7)).losses += Number(l.qty) * avgCostOf(l.product_id);
-  for (const g of giftRows) if (g.date) bucket(g.date.slice(0, 7)).gifts += Number(g.qty) * avgCostOf(g.product_id);
+  for (const g of giftRows) if (g.date) bucket(g.date.slice(0, 7)).gifts += Number(g.qty) * giftCostOf(g);
   const rows = Object.entries(months).sort(([a], [b]) => a.localeCompare(b));
   if (!rows.length) document.getElementById("dashMonthly").innerHTML = '<p class="empty">No activity in this selection yet.</p>';
   else {
@@ -1164,7 +1189,7 @@ function renderDash() {
   const byPos = {};
   for (const s of sales) {
     const k = s.pos_id || "none"; byPos[k] ??= { units: 0, revenue: 0, cogs: 0 };
-    const q = Number(s.qty); byPos[k].units += q; byPos[k].revenue += q * Number(s.price_per_unit); byPos[k].cogs += q * avgCostOf(s.product_id);
+    const q = Number(s.qty); byPos[k].units += q; byPos[k].revenue += q * Number(s.price_per_unit); byPos[k].cogs += q * saleCostOf(s);
   }
   const posRows = Object.entries(byPos).sort((a, b) => b[1].revenue - a[1].revenue);
   document.getElementById("dashPos").innerHTML = posRows.length
@@ -1194,7 +1219,7 @@ function renderDash() {
     byProd[s.product_id] ??= { units: 0, revenue: 0, cogs: 0 };
     const q = Number(s.qty); byProd[s.product_id].units += q;
     byProd[s.product_id].revenue += q * Number(s.price_per_unit);
-    byProd[s.product_id].cogs += q * avgCostOf(s.product_id);
+    byProd[s.product_id].cogs += q * saleCostOf(s);
   }
   const top = Object.entries(byProd).sort((a, b) => b[1].revenue - a[1].revenue).slice(0, 15);
   document.getElementById("dashTop").innerHTML = top.length
@@ -1376,7 +1401,7 @@ function renderSales() {
   {
     const units = rows.reduce((a, s) => a + Number(s.qty), 0);
     const rev = rows.reduce((a, s) => a + Number(s.qty) * Number(s.price_per_unit), 0);
-    const cogs = rows.reduce((a, s) => a + Number(s.qty) * avgCostOf(s.product_id), 0);
+    const cogs = rows.reduce((a, s) => a + Number(s.qty) * saleCostOf(s), 0);
     const g = toE(rev) - cogs;
     sum.innerHTML =
       `<span class="chip" style="background:#d9eaee">${fmtN(rows.length)} sale${rows.length === 1 ? "" : "s"}</span>` +
@@ -1387,7 +1412,7 @@ function renderSales() {
   let h = `<table><tr><th>Date</th><th>POS</th><th>Product</th><th class="num">Qty</th><th class="num">Price ($)</th><th class="num">Total ($)</th><th class="num">COGS (€)</th><th class="num">Gross (€)</th><th class="no-print"></th></tr>`;
   let tQ = 0, tT = 0, tC = 0;
   for (const s of rows) {
-    const q = Number(s.qty), total = q * Number(s.price_per_unit), cogs = q * avgCostOf(s.product_id);
+    const q = Number(s.qty), total = q * Number(s.price_per_unit), cogs = q * saleCostOf(s);
     const g = toE(total) - cogs;
     tQ += q; tT += total; tC += cogs;
     h += `<tr><td>${fmtD(s.date)}</td><td>${esc(posById(s.pos_id)?.name || "—")}</td><td>${prodLabelById(s.product_id)}</td>
@@ -1573,7 +1598,7 @@ function renderGifts() {
   for (const g of rows) {
     h += `<tr><td>${fmtD(g.date)}</td><td>${prodLabelById(g.product_id)}</td>
       <td class="num">${g.qty}</td><td>${g.pos_id ? esc(posById(g.pos_id)?.name || "(deleted)") : "Home"}</td>
-      <td class="num calc">${showE(Number(g.qty) * avgCostOf(g.product_id))}</td><td>${esc(g.note)}</td>
+      <td class="num calc">${showE(Number(g.qty) * giftCostOf(g))}</td><td>${esc(g.note)}</td>
       <td class="no-print"><button class="btn small ghost" onclick="editGift('${g.id}')">Edit</button>
         <button class="btn small danger" onclick="delRow('gifts','${g.id}')">Del</button></td></tr>`;
   }
@@ -1719,14 +1744,15 @@ function renderCFO() {
   const hi = document.getElementById("cfoHighlights"), tb = document.getElementById("cfoTable");
   if (!hi) return;
   if (!state.products.length) { hi.innerHTML = '<p class="empty">Import your invoices first — the CFO report builds itself from them.</p>'; tb.innerHTML = ""; return; }
-  let invested = 0, boughtUnits = 0, revenue = 0, cogs = 0, giftC = 0, lossC = 0, stockC = 0, stockRetail = 0;
+  let invested = 0, boughtUnits = 0, revenue = 0, cogs = 0, lossC = 0, stockC = 0, stockRetail = 0;
+  const giftC = state.gifts.reduce((a, g) => a + Number(g.qty) * giftCostOf(g), 0);
   let uUnits = 0, uCost = 0, uRetail = 0;
   const rows = [];
   for (const p of state.products) {
     const c = productCalc(p);
     invested += c.totCost; boughtUnits += c.iq + c.purQty;
     revenue += c.revenue; cogs += c.cogs;
-    giftC += c.gifted * c.avgCost; lossC += c.lost * c.avgCost;
+    lossC += c.lost * c.avgCost;
     stockC += Math.max(c.stock, 0) * c.avgCost;
     const retail = (p.ref && typeof RETAIL_USD !== "undefined" && RETAIL_USD[p.ref]) || 0;
     stockRetail += Math.max(c.stock, 0) * retail;
@@ -1770,6 +1796,52 @@ function renderCFO() {
   h += `<tr class="total"><td>TOTAL unaccounted</td><td></td><td></td><td></td><td></td><td></td><td class="num">${fmtN(uUnits)}</td><td class="num">${showE(uCost)}</td></tr>`;
   tb.innerHTML = h + "</table>";
 }
+
+/* ================= history: everything sold, with real price & cost ================= */
+function historyRows() {
+  const pos = gv("hi_pos"), from = gv("hi_from"), to = gv("hi_to"), q = (gv("hi_search") || "").toLowerCase();
+  const byProd = {};
+  for (const s of state.sales) {
+    if (pos && s.pos_id !== pos) continue;
+    const ym = (s.date || "").slice(0, 7);
+    if (from && ym < from) continue;
+    if (to && ym > to) continue;
+    const b = byProd[s.product_id] ??= { units: 0, revenue: 0, cogs: 0 };
+    const n = Number(s.qty);
+    b.units += n; b.revenue += n * Number(s.price_per_unit); b.cogs += n * saleCostOf(s);
+  }
+  return Object.entries(byProd)
+    .map(([pid, b]) => ({ p: prodById(pid), ...b, gross: toE(b.revenue) - b.cogs }))
+    .filter(r => r.p && prodMatch(r.p, q))
+    .sort((a, b) => b.revenue - a.revenue);
+}
+window.renderHistory = () => {
+  const el = document.getElementById("historyTable");
+  if (!el) return;
+  const rows = historyRows();
+  if (!rows.length) { el.innerHTML = '<p class="empty">No sales in this selection yet.</p>'; return; }
+  let h = `<table><tr><th>Product</th><th class="num">Units sold</th><th class="num">Avg price ($)</th><th class="num">Revenue ($)</th><th class="num">Avg cost (€)</th><th class="num">COGS (€)</th><th class="num">Gross (€)</th><th class="num">Margin</th></tr>`;
+  let tU = 0, tR = 0, tC = 0;
+  for (const r of rows) {
+    tU += r.units; tR += r.revenue; tC += r.cogs;
+    h += `<tr><td>${prodLabel(r.p)}</td><td class="num calc">${fmtN(r.units)}</td>
+      <td class="num calc">${showU(r.revenue / r.units)}</td><td class="num calc">${showU(r.revenue)}</td>
+      <td class="num calc">${showE(r.cogs / r.units)}</td><td class="num calc">${showE(r.cogs)}</td>
+      <td class="num calc ${r.gross < 0 ? "neg" : ""}">${showE(r.gross)}</td>
+      <td class="num calc">${fmtP(toE(r.revenue) > 0 ? r.gross / toE(r.revenue) : null)}</td></tr>`;
+  }
+  const tG = toE(tR) - tC;
+  h += `<tr class="total"><td>TOTAL</td><td class="num">${fmtN(tU)}</td><td></td><td class="num">${showU(tR)}</td><td></td>
+    <td class="num">${showE(tC)}</td><td class="num ${tG < 0 ? "neg" : ""}">${showE(tG)}</td>
+    <td class="num">${fmtP(toE(tR) > 0 ? tG / toE(tR) : null)}</td></tr></table>`;
+  el.innerHTML = h;
+};
+window.exportHistoryCSV = () => {
+  const rows = [["LANEA — Sales history by product"], ["Product", "Units sold", "Avg price (USD)", "Revenue (USD)", "Avg cost (EUR)", "COGS (EUR)", "Gross (EUR)", "Margin"]];
+  for (const r of historyRows())
+    rows.push([prodShort(r.p), r.units, (r.revenue / r.units).toFixed(2), r.revenue.toFixed(2), (r.cogs / r.units).toFixed(2), r.cogs.toFixed(2), r.gross.toFixed(2), toE(r.revenue) > 0 ? (r.gross / toE(r.revenue) * 100).toFixed(1) + "%" : ""]);
+  downloadFile("lanea-history.csv", "text/csv", toCSV(rows));
+};
 
 /* ================= AI invoice scanner (Gemini) ================= */
 const LS_GMKEY = "lanea-gemini-key";
@@ -1973,7 +2045,7 @@ function refreshSelects() {
     sel.innerHTML = '<option value="wh">Overview (all locations)</option>' + posOpts;
     if (cur) sel.value = cur;
   }
-  for (const [id, opts] of [["f_pos", posOpts], ["sl_pos", posOpts], ["f_prod", prodOpts], ["sl_prod", prodOpts]]) {
+  for (const [id, opts] of [["f_pos", posOpts], ["sl_pos", posOpts], ["hi_pos", posOpts], ["f_prod", prodOpts], ["sl_prod", prodOpts]]) {
     const sel = document.getElementById(id); const cur = sel.value;
     sel.innerHTML = '<option value="">All</option>' + opts; sel.value = cur;
   }
@@ -1992,7 +2064,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderVariance(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderGifts(); renderExpenses(); renderRecurring();
+  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderVariance(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
@@ -2051,11 +2123,11 @@ function renderDay() {
   const dayExp = state.expenses.filter(e => e.date === selectedDay);
   const rev = daySales.reduce((a, s) => a + Number(s.qty) * Number(s.price_per_unit), 0);
   const units = daySales.reduce((a, s) => a + Number(s.qty), 0);
-  const cogs = daySales.reduce((a, s) => a + Number(s.qty) * avgCostOf(s.product_id), 0);
+  const cogs = daySales.reduce((a, s) => a + Number(s.qty) * saleCostOf(s), 0);
   const exp = dayExp.reduce((a, e) => a + Number(e.amount), 0);
   const chip = (label, bg) => `<span class="chip" style="background:${bg};padding:6px 14px">${label}</span>`;
   const dayGrossE = toE(rev) - cogs;
-  const dayGiftC = dayGifts.reduce((a, g) => a + Number(g.qty) * avgCostOf(g.product_id), 0);
+  const dayGiftC = dayGifts.reduce((a, g) => a + Number(g.qty) * giftCostOf(g), 0);
   const dayNet = dayGrossE - exp - dayGiftC;
   document.getElementById("daySummary").innerHTML =
     chip(`Revenue ${showU(rev)} · ${fmtN(units)} units`, "#d9ecdd") +
@@ -2190,11 +2262,11 @@ function renderReport() {
 
   const rev = draft.sales.reduce((a, d) => a + Number(d.qty) * Number(d.price_per_unit), 0);
   const units = draft.sales.reduce((a, d) => a + Number(d.qty), 0);
-  const cogs = draft.sales.reduce((a, d) => a + Number(d.qty) * avgCostOf(d.product_id), 0);
+  const cogs = draft.sales.reduce((a, d) => a + Number(d.qty) * saleCostOf(d), 0);
   const exp = draft.expenses.reduce((a, d) => a + Number(d.amount), 0);
   const giftU = draft.gifts.reduce((a, d) => a + Number(d.qty), 0);
   const repGrossE = toE(rev) - cogs;
-  const giftC = draft.gifts.reduce((a, d) => a + Number(d.qty) * avgCostOf(d.product_id), 0);
+  const giftC = draft.gifts.reduce((a, d) => a + Number(d.qty) * giftCostOf(d), 0);
   const repNet = repGrossE - exp - giftC;
   h += `<div class="rep-tot">
     <span class="chip" style="background:#d9ecdd">Sales ${showU(rev)} · ${fmtN(units)} units</span>
@@ -2418,6 +2490,67 @@ window.importBook1History = async () => {
   activeInv = d.id;
   await submitInventory();
   toast(`Book1 history imported ✓ — ${fmtN(nS)} units sold (${usdF.format(rev)}) and ${fmtN(nG)} gifted, stock re-counted to the sheet`);
+  render();
+};
+/* OLD pre-app history (Old Inv Test.xlsx): everything sold/gifted before daily
+   recording, at the OLD prices and OLD unit costs, plus the old operating
+   expenses. Sales carry unit_cost so COGS uses the real historical cost
+   (needs supabase/migration-v7-sale-cost.sql in the cloud). After importing,
+   every location is re-counted to Book1 so stock stays exact. */
+window.importOldHistory = async () => {
+  if (typeof OLD_HISTORY === "undefined") { alert("Old-history data not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  const D = OLD_HISTORY.date;
+  if (state.sales.some(s => s.date === D)) {
+    alert(`The old history is already imported (entries dated ${fmtD(D)}).`); return;
+  }
+  const expTot = OLD_HISTORY.expenses.reduce((a, e) => a + e.amount, 0);
+  if (!(await niceConfirm("Import the old history?",
+    `${fmtN(OLD_HISTORY.sales.reduce((a, s) => a + s.qty, 0))} units sold and ${fmtN(OLD_HISTORY.gifts.reduce((a, g) => a + g.qty, 0))} gifted before daily recording — at their OLD prices and OLD costs — plus ${eurF.format(expTot)} of old expenses, all dated in the past. Every location is then re-counted to Book1 so today's stock does not move.`, "Import history"))) return;
+  // Home POS + any product the history knows that the catalog doesn't
+  let hp = homePos();
+  if (!hp) hp = await addRow("pos", { name: "Home" });
+  if (!hp) return;
+  const prodFor = async h => {
+    let p = state.products.find(x => (x.ref || "").toUpperCase() === (h.ref || "").toUpperCase());
+    if (!p && h.ref) p = await addRow("products", { name: h.name, ref: h.ref, category: null, initial_qty: 0, initial_cost: 0 });
+    return p;
+  };
+  let nS = 0, nG = 0, nE = 0, rev = 0;
+  for (const h of OLD_HISTORY.sales) {
+    const p = await prodFor(h); if (!p) continue;
+    if (!(await addRow("sales", { date: D, pos_id: hp.id, product_id: p.id, qty: h.qty, price_per_unit: h.price, unit_cost: h.cost }))) {
+      alert("If the cloud refused unit_cost: run supabase/migration-v7-sale-cost.sql, then retry."); return;
+    }
+    nS += h.qty; rev += h.qty * h.price;
+  }
+  for (const h of OLD_HISTORY.gifts) {
+    const p = await prodFor(h); if (!p) continue;
+    if (!(await addRow("gifts", { date: D, product_id: p.id, qty: h.qty, note: "Old history", unit_cost: h.cost }))) return;
+    nG += h.qty;
+  }
+  for (const e of OLD_HISTORY.expenses) {
+    if (state.expenses.some(x => x.description === e.description && Number(x.amount) === e.amount)) continue;
+    if (!(await addRow("expenses", { date: e.date, description: e.description, category: e.category, amount: e.amount }))) return;
+    nE++;
+  }
+  // re-count every location to Book1 so the imported movements don't double-deduct
+  if (typeof POS_SHEETS !== "undefined") {
+    const targets = [];
+    for (const name of Object.keys(POS_SHEETS)) {
+      let pos = state.pos.find(x => posSheetFor(x) === POS_SHEETS[name]);
+      if (!pos) pos = await addRow("pos", { name });
+      if (pos) targets.push([pos, POS_SHEETS[name]]);
+    }
+    const d = { id: uid(), date: todayISO(), pos_id: "ALL", counts: {} };
+    for (const [pos, sheet] of targets)
+      for (const p of state.products)
+        d.counts[p.id + "|" + pos.id] = String(p.ref != null && sheet[p.ref] !== undefined ? sheet[p.ref].q : 0);
+    invDrafts.push(d); saveInvDrafts();
+    activeInv = d.id;
+    await submitInventory();
+  }
+  toast(`Old history imported ✓ — ${fmtN(nS)} units sold (${usdF.format(rev)}), ${fmtN(nG)} gifted, ${nE} old expenses — stock re-counted`);
   render();
 };
 window.openInvDraft = id => {
@@ -3063,7 +3196,7 @@ window.exportDashboardCSV = () => {
   const sales = filteredSales(), expenses = filteredExpenses();
   const months = {};
   const bucket = ym => months[ym] ??= { revenue: 0, purchases: 0, cogs: 0, expenses: 0 };
-  for (const s of sales) { const b = bucket(s.date.slice(0, 7)); b.revenue += Number(s.qty) * Number(s.price_per_unit); b.cogs += Number(s.qty) * avgCostOf(s.product_id); }
+  for (const s of sales) { const b = bucket(s.date.slice(0, 7)); b.revenue += Number(s.qty) * Number(s.price_per_unit); b.cogs += Number(s.qty) * saleCostOf(s); }
   for (const u of filteredPurchases()) if (u.date) bucket(u.date.slice(0, 7)).purchases += Number(u.qty) * Number(u.unit_cost);
   for (const e of expenses) bucket(e.date.slice(0, 7)).expenses += Number(e.amount);
   const rows = [["LANEA — Dashboard export"], [`Filters: ${filters.from || "start"} → ${filters.to || "now"}${filters.pos ? " | POS: " + (posById(filters.pos)?.name || "") : ""}${filters.prod ? " | Product: " + (prodById(filters.prod)?.name || "") : ""} | rate: 1 EUR = ${USD_RATE} USD`], [],
@@ -3083,7 +3216,7 @@ window.exportProductsCSV = () => {
 window.exportSalesCSV = () => {
   const rows = [["Date", "POS", "Product", "Qty", "Price/unit ($)", "Total ($)", "COGS (EUR)", "Gross (EUR)"]];
   for (const s of [...state.sales].sort((a, b) => (a.date || "").localeCompare(b.date || ""))) {
-    const total = Number(s.qty) * Number(s.price_per_unit), cogs = Number(s.qty) * avgCostOf(s.product_id);
+    const total = Number(s.qty) * Number(s.price_per_unit), cogs = Number(s.qty) * saleCostOf(s);
     rows.push([s.date, posById(s.pos_id)?.name || "", prodById(s.product_id) ? prodShort(prodById(s.product_id)) : "", s.qty, s.price_per_unit, total.toFixed(2), cogs.toFixed(2), (toE(total) - cogs).toFixed(2)]);
   }
   downloadFile("lanea-sales.csv", "text/csv", toCSV(rows));

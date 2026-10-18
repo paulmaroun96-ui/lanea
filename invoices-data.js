@@ -2304,3 +2304,1109 @@ const POS_SHEETS = {
   "TESTEURCCMI": { "q": 0, "p": 0.0, "s": 0, "g": 0, "c": 0.0 }
  }
 };
+
+// Old pre-app history from 'Old Inv Test.xlsx' (2026-10-18): everything sold/
+// gifted before daily recording (OLD prices and OLD unit costs - they differ
+// from today's), plus the old operating expenses (converted USD->EUR at 1.15,
+// original $ kept in the description; supplier-invoice rows excluded - they
+// are already in Purchases). Dates of expenses are best estimates.
+const OLD_HISTORY = {
+ "date": "2026-09-11",
+ "sales": [
+  {
+   "ref": "BAINMOUSSANT500",
+   "name": "BAIN MOUSSANT 500 ML",
+   "qty": 2,
+   "price": 24.0,
+   "cost": 9.13
+  },
+  {
+   "ref": "LAITCORPS500",
+   "name": "LAIT CORPS AU LAIT D'ANESSE 500ML",
+   "qty": 5,
+   "price": 42.0,
+   "cost": 11.67
+  },
+  {
+   "ref": "LAITMONOI500",
+   "name": "LAIT CORPOREL AU LAIT D'ANESSE BIOLOGIQUE 500 ML MONOI",
+   "qty": 29,
+   "price": 42.0,
+   "cost": 11.67
+  },
+  {
+   "ref": "GDNAT500",
+   "name": "GEL DOUCHE AU LAIT D'ANESSE 500 ML",
+   "qty": 5,
+   "price": 30.0,
+   "cost": 8.93
+  },
+  {
+   "ref": "GDMONOI500",
+   "name": "Gel douche au lait d'ânesse frais et bio Monoï 500 ml",
+   "qty": 18,
+   "price": 30.0,
+   "cost": 8.93
+  },
+  {
+   "ref": "SHAMPOSOLIDE",
+   "name": "Shampooing solide au lait d'ânesse bio 100 g",
+   "qty": 15,
+   "price": 12.0,
+   "cost": 4.34
+  },
+  {
+   "ref": "SHAMP500",
+   "name": "Shampooing au lait d'ânesse frais et bio 500 ml",
+   "qty": 25,
+   "price": 30.0,
+   "cost": 11.12
+  },
+  {
+   "ref": "SHAMPMONOI500",
+   "name": "Shampooing au lait d'ânesse frais et bio Monoï 500 ml",
+   "qty": 26,
+   "price": 30.0,
+   "cost": 11.12
+  },
+  {
+   "ref": "ECOGDN500",
+   "name": "Recharge gel douche au lait d'ânesse frais et bio 500ml",
+   "qty": 3,
+   "price": 26.4,
+   "cost": 7.91
+  },
+  {
+   "ref": "ECOGDM500",
+   "name": "Recharge gel douche au lait d'ânesse frais et bio Monoï 500ml",
+   "qty": 4,
+   "price": 26.4,
+   "cost": 7.91
+  },
+  {
+   "ref": "ECOLCM500",
+   "name": "Recharge lait corporel au lait d'ânesse frais et bio Monoï 500ml",
+   "qty": 1,
+   "price": 38.4,
+   "cost": 10.0
+  },
+  {
+   "ref": "ECOSHN500",
+   "name": "Recharge shampoing au lait d'ânesse frais et bio 500ml",
+   "qty": 12,
+   "price": 26.4,
+   "cost": 10.1
+  },
+  {
+   "ref": "GOMMCORPS200",
+   "name": "GOMMAGE CORPS SUCRE ET SEL 200 ML",
+   "qty": 6,
+   "price": 30.0,
+   "cost": 8.11
+  },
+  {
+   "ref": "MASQUECH200",
+   "name": "Masque capillaire au lait d'ânesse frais et bio 200 ml",
+   "qty": 22,
+   "price": 24.0,
+   "cost": 7.29
+  },
+  {
+   "ref": "MASQUECHM200",
+   "name": "Masque capillaire au lait d'ânesse frais et bio Monoï 200 ml",
+   "qty": 17,
+   "price": 24.0,
+   "cost": 7.29
+  },
+  {
+   "ref": "CRENUI100",
+   "name": "Crème de nuit au lait d'ânesse frais et bio 100 ml",
+   "qty": 31,
+   "price": 42.0,
+   "cost": 6.27
+  },
+  {
+   "ref": "CREJOU100",
+   "name": "Crème de jour au lait d'ânesse frais et bio 100 ml",
+   "qty": 37,
+   "price": 42.0,
+   "cost": 6.27
+  },
+  {
+   "ref": "SERUM30",
+   "name": "Sérum au lait d'ânesse frais et bio 30 ml",
+   "qty": 35,
+   "price": 60.0,
+   "cost": 9.69
+  },
+  {
+   "ref": "GOMVIS100",
+   "name": "Gommage visage au lait d'ânesse frais et bio 100 ml - Carton de 20",
+   "qty": 16,
+   "price": 30.0,
+   "cost": 7.34
+  },
+  {
+   "ref": "LAIDEM250",
+   "name": "LAIT DÉMAQUILLANT AU LAIT D'ÂNESSE 250ml",
+   "qty": 13,
+   "price": 18.0,
+   "cost": 6.22
+  },
+  {
+   "ref": "EAUMICELLAIRE",
+   "name": "EAU MICELLAIRE AU L'AIT D'ÂNESSE BIOLOGIQUE 150 ML",
+   "qty": 15,
+   "price": 12.0,
+   "cost": 4.39
+  },
+  {
+   "ref": "CREMAI75",
+   "name": "Crème pour les mains au lait d'ânesse frais et bio 75 ml",
+   "qty": 58,
+   "price": 18.0,
+   "cost": 6.02
+  },
+  {
+   "ref": "CREPIE75",
+   "name": "Crème pour les pieds au lait d'ânesse frais et bio 75 ml",
+   "qty": 25,
+   "price": 18.0,
+   "cost": 6.02
+  },
+  {
+   "ref": "GELJAMBES",
+   "name": "Gel jambes légères au lait d’ânesse bio 100 ml",
+   "qty": 32,
+   "price": 18.0,
+   "cost": 6.0
+  },
+  {
+   "ref": "MASQCE20",
+   "name": "Masque Coup d'éclat en tissu au lait d'ânesse bio 20 ml - Carton de 20",
+   "qty": 21,
+   "price": 7.2,
+   "cost": 2.62
+  },
+  {
+   "ref": "MASQHY20",
+   "name": "Masque Hydratant en tissu au lait d'ânesse bio 20 ml - Carton de 20",
+   "qty": 14,
+   "price": 7.2,
+   "cost": 2.62
+  },
+  {
+   "ref": "MASQA-A20",
+   "name": "Masque Anti-âge en tissu au lait d'ânesse bio 20 ml - Carton de 20",
+   "qty": 13,
+   "price": 7.2,
+   "cost": 2.62
+  },
+  {
+   "ref": "MASQAF20",
+   "name": "Masque Anti-fatigue en tissu au lait d'ânesse bio 20ml - Carton de 20",
+   "qty": 17,
+   "price": 7.2,
+   "cost": 2.62
+  },
+  {
+   "ref": "MASQUEBEAU100",
+   "name": "Masque de beaute lait d'ânesse frais et bio 100 ml",
+   "qty": 16,
+   "price": 30.0,
+   "cost": 2.62
+  },
+  {
+   "ref": "CRAMA200",
+   "name": "CRÈME CORPS AU LAIT D'ÂNESSE AMANDE DOUCE 200ML",
+   "qty": 14,
+   "price": 24.0,
+   "cost": 7.6
+  },
+  {
+   "ref": "CREMEMONOI200",
+   "name": "CRÈME CORPS AU LAIT D'ÂNESSE MONOI 200 ML",
+   "qty": 13,
+   "price": 24.0,
+   "cost": 7.6
+  },
+  {
+   "ref": "CREMABRI200",
+   "name": "Crème corps au lait d'ânesse biologique Abricot 200 ML",
+   "qty": 8,
+   "price": 24.0,
+   "cost": 7.6
+  },
+  {
+   "ref": "CCORPSALOE200",
+   "name": "Crème corps au lait d’ânesse biologique Aloe Vera 200 ml",
+   "qty": 12,
+   "price": 24.0,
+   "cost": 7.6
+  },
+  {
+   "ref": "CCORPSMIEL200",
+   "name": "Crème corps au lait d’ânesse biologique Miel 200 ML",
+   "qty": 11,
+   "price": 24.0,
+   "cost": 7.6
+  },
+  {
+   "ref": "CRFDC200",
+   "name": "Crème corps au lait d'ânesse bio Fleur de cerisier 200 ml",
+   "qty": 4,
+   "price": 24.0,
+   "cost": 7.6
+  },
+  {
+   "ref": "SAVAYRUVEDANE",
+   "name": "Savon Ayurved’âne au lait d’ânesse biologique, 100g",
+   "qty": 22,
+   "price": 12.0,
+   "cost": 4.85
+  },
+  {
+   "ref": "SMONOIH",
+   "name": "Savon naturel au lait d'ânesse monoï 100g HYDRANESS",
+   "qty": 9,
+   "price": 12.0,
+   "cost": 4.83
+  },
+  {
+   "ref": "SAVONLAITNAT",
+   "name": "SAVON ROND 100 GR NATURE AU LAIT D'ÂNESSE",
+   "qty": 13,
+   "price": 7.2,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONAMAN",
+   "name": "Savon rond sans huile de palme au lait d'ânesse bio Amande 100g - Carton de 24",
+   "qty": 40,
+   "price": 7.2,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONMONOI",
+   "name": "SAVON ROND 100 GR MONOI AU LAIT D'ÂNESSE SS H.PALME",
+   "qty": 36,
+   "price": 7.2,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONCHEV",
+   "name": "Savon rond au lait d'ânesse biologique Chèvrefeuille 100g",
+   "qty": 20,
+   "price": 7.2,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONCOQ",
+   "name": "Savon rond sans huile de palme au lait d'ânesse bio Coquelicot 100g",
+   "qty": 20,
+   "price": 7.2,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONMIEL",
+   "name": "Savon rond sans huile de palme au lait d'ânesse bio Miel 100g",
+   "qty": 42,
+   "price": 7.2,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONALOE",
+   "name": "Savon rond sans huile de palme au lait d'ânesse bio Aloe Vera 100g",
+   "qty": 19,
+   "price": 7.2,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONFO",
+   "name": "Savon rond sans huile de palme au lait d'ânesse bio Fleur d'Oranger 100g",
+   "qty": 18,
+   "price": 7.2,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONFDCE",
+   "name": "Savon rond sans huile de palme au lait d'ânesse bio Fleur de cerisier 100g",
+   "qty": 10,
+   "price": 7.2,
+   "cost": 0.0
+  },
+  {
+   "ref": "SAVONARGAN",
+   "name": "Savon rond au lait d'ânesse bio Argan 100g - Carton de 24",
+   "qty": 6,
+   "price": 7.2,
+   "cost": 0.0
+  },
+  {
+   "ref": "SAVONFIG",
+   "name": "SAVON R0OND Figue100g",
+   "qty": 9,
+   "price": 7.2,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONKARI",
+   "name": "Savon rond sans huile de palme au lait d'ânesse bio Karité 100g - Carton de 24",
+   "qty": 3,
+   "price": 7.2,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONHELAV",
+   "name": "Savon rond au lait d'ânesse bio Lavande 100g - Carton de 24",
+   "qty": 6,
+   "price": 7.2,
+   "cost": 2.02
+  },
+  {
+   "ref": "KDOBFSAVINVITE",
+   "name": "Cadeau Savon rond invité - Aloe vera- Lot de 54",
+   "qty": 35,
+   "price": 2.4,
+   "cost": 0.0
+  },
+  {
+   "ref": "LIQ500FLCOT",
+   "name": "Savon liquide au lait d'ânesse bio Fleur de Coton 500 ml - Carton de 6",
+   "qty": 12,
+   "price": 18.0,
+   "cost": 7.04
+  },
+  {
+   "ref": "ECOSLFDC500",
+   "name": "Recharge savon liquide au lait d'ânesse bio Fleur de Coton 500ml",
+   "qty": 3,
+   "price": 14.4,
+   "cost": 6.73
+  },
+  {
+   "ref": "LCMONOI200H",
+   "name": "Hydr'aness Lait corps hydratant MONOI certifié bio au lait d'ânesse frais 200ml",
+   "qty": 18,
+   "price": 24.0,
+   "cost": 7.98
+  },
+  {
+   "ref": "SHAMPMONOI200H",
+   "name": "Hydr'aness SHAMPOOING MONOI CERTIFIE COSMOS ORGANIC 200 ML",
+   "qty": 14,
+   "price": 18.0,
+   "cost": 7.77
+  },
+  {
+   "ref": "GDMONOI200H",
+   "name": "Hydr'aness GEL DOUCHE MONOI CERTIFIE COSMOS ORGANIC 200ML",
+   "qty": 15,
+   "price": 18.0,
+   "cost": 6.72
+  },
+  {
+   "ref": "LCALOE200H",
+   "name": "Hydr'aness Lait corps hydratant aloe vera certifié bio au lait d'ânesse frais 200ml",
+   "qty": 5,
+   "price": 24.0,
+   "cost": 7.98
+  },
+  {
+   "ref": "GDALOE200H",
+   "name": "Hydr'aness Gel douche aloe vera certifié bio au lait d'ânesse frais 200ml",
+   "qty": 7,
+   "price": 18.0,
+   "cost": 6.72
+  },
+  {
+   "ref": "SHAMPALOE200H",
+   "name": "Hydr'aness Shampooing aloe vera certifié bio au lait d'ânesse frais 2 00 ml",
+   "qty": 9,
+   "price": 18.0,
+   "cost": 7.77
+  },
+  {
+   "ref": "GELLIMAMDO100",
+   "name": "Gel douche limonade au lait d'ânesse frais et bio Amande Douce 100 ml",
+   "qty": 22,
+   "price": 10.2,
+   "cost": 4.34
+  },
+  {
+   "ref": "GDLIMOMONOI",
+   "name": "Gel douche limonade au lait d'ânesse frais et bio Monoï 100 ml",
+   "qty": 13,
+   "price": 10.2,
+   "cost": 4.34
+  },
+  {
+   "ref": "GELLIMIEL100",
+   "name": "Gel douche limonade au lait d'ânesse frais et bio Miel 100 ml",
+   "qty": 12,
+   "price": 10.2,
+   "cost": 4.34
+  },
+  {
+   "ref": "GELLIMABRI100",
+   "name": "Gel douche limonade au lait d'ânesse frais et bio Abricot 100 ml",
+   "qty": 15,
+   "price": 10.2,
+   "cost": 4.34
+  },
+  {
+   "ref": "GDLIMO100",
+   "name": "Gel douche limonade au lait d'ânesse frais et bio Aloe Vera 100 ml",
+   "qty": 14,
+   "price": 10.2,
+   "cost": 4.34
+  },
+  {
+   "ref": "BAUMLEVRES",
+   "name": "Baume à lèvres au lait d'ânesse biologique Beurre de Karité 15 ml",
+   "qty": 22,
+   "price": 14.4,
+   "cost": 5.07
+  },
+  {
+   "ref": "CREMARA100",
+   "name": "Crème après rasage au lait d'ânesse frais, Biologique 100 ml",
+   "qty": 21,
+   "price": 18.0,
+   "cost": 5.22
+  },
+  {
+   "ref": "TESTEURLCM",
+   "name": "LAIT CORPOREL AU LAIT D'ANESSE BIOLOGIQUE 250ML MONOI",
+   "qty": 1,
+   "price": 24.0,
+   "cost": 0.0
+  },
+  {
+   "ref": "GDMONOI30H",
+   "name": "Gel douche format voyage monoï certifié bio au lait d'ânesse frais 30ml Hydr'aness",
+   "qty": 6,
+   "price": 7.2,
+   "cost": 1.51
+  },
+  {
+   "ref": "LCMONOI30H",
+   "name": "Lait corps format voyage monoï certifié bio au lait d'ânesse frais 30ml Hydr'aness",
+   "qty": 12,
+   "price": 7.2,
+   "cost": 1.51
+  },
+  {
+   "ref": "SHAMPMONOI30H",
+   "name": "Shampoing format voyage monoï certifié bio au lait d'ânesse frais 30ml Hydr'aness",
+   "qty": 5,
+   "price": 0.0,
+   "cost": 1.51
+  },
+  {
+   "ref": "COFROND",
+   "name": "Coffret pour 3 savons rond Au Pays des Ânes - Lot de 20",
+   "qty": 1,
+   "price": 0.0,
+   "cost": 0.0
+  }
+ ],
+ "gifts": [
+  {
+   "ref": "BAINMOUSSANT500",
+   "name": "BAIN MOUSSANT 500 ML",
+   "qty": 1,
+   "cost": 9.13
+  },
+  {
+   "ref": "LAITMONOI500",
+   "name": "LAIT CORPOREL AU LAIT D'ANESSE BIOLOGIQUE 500 ML MONOI",
+   "qty": 1,
+   "cost": 11.67
+  },
+  {
+   "ref": "SHAMPOSOLIDE",
+   "name": "Shampooing solide au lait d'ânesse bio 100 g",
+   "qty": 2,
+   "cost": 4.34
+  },
+  {
+   "ref": "SHAMP500",
+   "name": "Shampooing au lait d'ânesse frais et bio 500 ml",
+   "qty": 1,
+   "cost": 11.12
+  },
+  {
+   "ref": "SHAMPMONOI500",
+   "name": "Shampooing au lait d'ânesse frais et bio Monoï 500 ml",
+   "qty": 1,
+   "cost": 11.12
+  },
+  {
+   "ref": "ECOGDM500",
+   "name": "Recharge gel douche au lait d'ânesse frais et bio Monoï 500ml",
+   "qty": 2,
+   "cost": 7.91
+  },
+  {
+   "ref": "ECOLCM500",
+   "name": "Recharge lait corporel au lait d'ânesse frais et bio Monoï 500ml",
+   "qty": 1,
+   "cost": 10.0
+  },
+  {
+   "ref": "ECOSHN500",
+   "name": "Recharge shampoing au lait d'ânesse frais et bio 500ml",
+   "qty": 1,
+   "cost": 10.1
+  },
+  {
+   "ref": "GOMMCORPS200",
+   "name": "GOMMAGE CORPS SUCRE ET SEL 200 ML",
+   "qty": 2,
+   "cost": 8.11
+  },
+  {
+   "ref": "MASQUECH200",
+   "name": "Masque capillaire au lait d'ânesse frais et bio 200 ml",
+   "qty": 3,
+   "cost": 7.29
+  },
+  {
+   "ref": "CRENUI100",
+   "name": "Crème de nuit au lait d'ânesse frais et bio 100 ml",
+   "qty": 4,
+   "cost": 6.27
+  },
+  {
+   "ref": "CREJOU100",
+   "name": "Crème de jour au lait d'ânesse frais et bio 100 ml",
+   "qty": 5,
+   "cost": 6.27
+  },
+  {
+   "ref": "SERUM30",
+   "name": "Sérum au lait d'ânesse frais et bio 30 ml",
+   "qty": 1,
+   "cost": 9.69
+  },
+  {
+   "ref": "GOMVIS100",
+   "name": "Gommage visage au lait d'ânesse frais et bio 100 ml - Carton de 20",
+   "qty": 2,
+   "cost": 7.34
+  },
+  {
+   "ref": "LAIDEM250",
+   "name": "LAIT DÉMAQUILLANT AU LAIT D'ÂNESSE 250ml",
+   "qty": 1,
+   "cost": 6.22
+  },
+  {
+   "ref": "EAUMICELLAIRE",
+   "name": "EAU MICELLAIRE AU L'AIT D'ÂNESSE BIOLOGIQUE 150 ML",
+   "qty": 1,
+   "cost": 4.39
+  },
+  {
+   "ref": "CREMAI75",
+   "name": "Crème pour les mains au lait d'ânesse frais et bio 75 ml",
+   "qty": 5,
+   "cost": 6.02
+  },
+  {
+   "ref": "CREPIE75",
+   "name": "Crème pour les pieds au lait d'ânesse frais et bio 75 ml",
+   "qty": 5,
+   "cost": 6.02
+  },
+  {
+   "ref": "GELJAMBES",
+   "name": "Gel jambes légères au lait d’ânesse bio 100 ml",
+   "qty": 4,
+   "cost": 6.0
+  },
+  {
+   "ref": "MASQCE20",
+   "name": "Masque Coup d'éclat en tissu au lait d'ânesse bio 20 ml - Carton de 20",
+   "qty": 1,
+   "cost": 2.62
+  },
+  {
+   "ref": "MASQHY20",
+   "name": "Masque Hydratant en tissu au lait d'ânesse bio 20 ml - Carton de 20",
+   "qty": 1,
+   "cost": 2.62
+  },
+  {
+   "ref": "MASQUEBEAU100",
+   "name": "Masque de beaute lait d'ânesse frais et bio 100 ml",
+   "qty": 2,
+   "cost": 2.62
+  },
+  {
+   "ref": "CREMABRI200",
+   "name": "Crème corps au lait d'ânesse biologique Abricot 200 ML",
+   "qty": 2,
+   "cost": 7.6
+  },
+  {
+   "ref": "CCORPSMIEL200",
+   "name": "Crème corps au lait d’ânesse biologique Miel 200 ML",
+   "qty": 1,
+   "cost": 7.6
+  },
+  {
+   "ref": "CRFDC200",
+   "name": "Crème corps au lait d'ânesse bio Fleur de cerisier 200 ml",
+   "qty": 4,
+   "cost": 7.6
+  },
+  {
+   "ref": "SAVAYRUVEDANE",
+   "name": "Savon Ayurved’âne au lait d’ânesse biologique, 100g",
+   "qty": 3,
+   "cost": 4.85
+  },
+  {
+   "ref": "SAVONMONOI",
+   "name": "SAVON ROND 100 GR MONOI AU LAIT D'ÂNESSE SS H.PALME",
+   "qty": 1,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONMIEL",
+   "name": "Savon rond sans huile de palme au lait d'ânesse bio Miel 100g",
+   "qty": 2,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONALOE",
+   "name": "Savon rond sans huile de palme au lait d'ânesse bio Aloe Vera 100g",
+   "qty": 1,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONKARI",
+   "name": "Savon rond sans huile de palme au lait d'ânesse bio Karité 100g - Carton de 24",
+   "qty": 1,
+   "cost": 2.02
+  },
+  {
+   "ref": "SAVONHELAV",
+   "name": "Savon rond au lait d'ânesse bio Lavande 100g - Carton de 24",
+   "qty": 1,
+   "cost": 2.02
+  },
+  {
+   "ref": "KDOBFSAVINVITE",
+   "name": "Cadeau Savon rond invité - Aloe vera- Lot de 54",
+   "qty": 19,
+   "cost": 0.0
+  },
+  {
+   "ref": "ECOSLFDC500",
+   "name": "Recharge savon liquide au lait d'ânesse bio Fleur de Coton 500ml",
+   "qty": 3,
+   "cost": 6.73
+  },
+  {
+   "ref": "LCMONOI200H",
+   "name": "Hydr'aness Lait corps hydratant MONOI certifié bio au lait d'ânesse frais 200ml",
+   "qty": 2,
+   "cost": 7.98
+  },
+  {
+   "ref": "SHAMPMONOI200H",
+   "name": "Hydr'aness SHAMPOOING MONOI CERTIFIE COSMOS ORGANIC 200 ML",
+   "qty": 2,
+   "cost": 7.77
+  },
+  {
+   "ref": "GDMONOI200H",
+   "name": "Hydr'aness GEL DOUCHE MONOI CERTIFIE COSMOS ORGANIC 200ML",
+   "qty": 1,
+   "cost": 6.72
+  },
+  {
+   "ref": "LCALOE200H",
+   "name": "Hydr'aness Lait corps hydratant aloe vera certifié bio au lait d'ânesse frais 200ml",
+   "qty": 3,
+   "cost": 7.98
+  },
+  {
+   "ref": "GDALOE200H",
+   "name": "Hydr'aness Gel douche aloe vera certifié bio au lait d'ânesse frais 200ml",
+   "qty": 3,
+   "cost": 6.72
+  },
+  {
+   "ref": "SHAMPALOE200H",
+   "name": "Hydr'aness Shampooing aloe vera certifié bio au lait d'ânesse frais 2 00 ml",
+   "qty": 4,
+   "cost": 7.77
+  },
+  {
+   "ref": "GELLIMAMDO100",
+   "name": "Gel douche limonade au lait d'ânesse frais et bio Amande Douce 100 ml",
+   "qty": 1,
+   "cost": 4.34
+  },
+  {
+   "ref": "GELLIMIEL100",
+   "name": "Gel douche limonade au lait d'ânesse frais et bio Miel 100 ml",
+   "qty": 1,
+   "cost": 4.34
+  },
+  {
+   "ref": "BAUMLEVRES",
+   "name": "Baume à lèvres au lait d'ânesse biologique Beurre de Karité 15 ml",
+   "qty": 4,
+   "cost": 5.07
+  },
+  {
+   "ref": "CREMARA100",
+   "name": "Crème après rasage au lait d'ânesse frais, Biologique 100 ml",
+   "qty": 5,
+   "cost": 5.22
+  },
+  {
+   "ref": "BOITEKDOLUXESR",
+   "name": "Boite luxe pour trio de savons ronds",
+   "qty": 1,
+   "cost": 0.0
+  }
+ ],
+ "expenses": [
+  {
+   "date": "2025-07-01",
+   "description": "Notaire ($200)",
+   "category": "Accounting",
+   "amount": 173.91
+  },
+  {
+   "date": "2025-07-01",
+   "description": "Attorney ($900)",
+   "category": "Accounting",
+   "amount": 782.61
+  },
+  {
+   "date": "2025-07-01",
+   "description": "Notaire (delegation location) ($25)",
+   "category": "Accounting",
+   "amount": 21.74
+  },
+  {
+   "date": "2025-04-20",
+   "description": "Andrezieux Travel (2 Persons) ($345.1)",
+   "category": "Logistics",
+   "amount": 300.09
+  },
+  {
+   "date": "2025-04-20",
+   "description": "Andrezieux Travel (2 Persons) ($345.1) #2",
+   "category": "Logistics",
+   "amount": 300.09
+  },
+  {
+   "date": "2025-04-29",
+   "description": "Extra Luggage ($432)",
+   "category": "Logistics",
+   "amount": 375.65
+  },
+  {
+   "date": "2025-08-01",
+   "description": "Website August 2025 ($350)",
+   "category": "Shopify Website",
+   "amount": 304.35
+  },
+  {
+   "date": "2025-08-01",
+   "description": "Social Media Designer August 2025 ($300)",
+   "category": "Marketing",
+   "amount": 260.87
+  },
+  {
+   "date": "2025-08-01",
+   "description": "Ring light ($10)",
+   "category": "Marketing",
+   "amount": 8.7
+  },
+  {
+   "date": "2025-08-01",
+   "description": "Telephone samsung + Card ($185)",
+   "category": "Phone",
+   "amount": 160.87
+  },
+  {
+   "date": "2025-08-01",
+   "description": "Projecteur ($60)",
+   "category": "Marketing",
+   "amount": 52.17
+  },
+  {
+   "date": "2025-08-01",
+   "description": "Divers (Wiskey, papier bulles, Copies, …. ($100)",
+   "category": "Other",
+   "amount": 86.96
+  },
+  {
+   "date": "2025-10-07",
+   "description": "2 MEA Tickets (7-12 October 2025) ($1161.13)",
+   "category": "Logistics",
+   "amount": 1009.68
+  },
+  {
+   "date": "2025-10-01",
+   "description": "Additional bags ($100)",
+   "category": "Other",
+   "amount": 86.96
+  },
+  {
+   "date": "2025-10-01",
+   "description": "bags ($60)",
+   "category": "Other",
+   "amount": 52.17
+  },
+  {
+   "date": "2025-10-01",
+   "description": "bubble wraps ($9)",
+   "category": "Shipment",
+   "amount": 7.83
+  },
+  {
+   "date": "2025-09-01",
+   "description": "Social Media Designer September 2025 ($150)",
+   "category": "Marketing",
+   "amount": 130.43
+  },
+  {
+   "date": "2025-09-01",
+   "description": "Storage shelves ($500)",
+   "category": "Other",
+   "amount": 434.78
+  },
+  {
+   "date": "2025-10-01",
+   "description": "Adlibitum (October 2025) ($700)",
+   "category": "Marketing",
+   "amount": 608.7
+  },
+  {
+   "date": "2025-11-01",
+   "description": "Adlibitum (November 2025) ($700)",
+   "category": "Marketing",
+   "amount": 608.7
+  },
+  {
+   "date": "2025-11-01",
+   "description": "extinguisher ($20)",
+   "category": "Other",
+   "amount": 17.39
+  },
+  {
+   "date": "2025-11-01",
+   "description": "MoH (Bribery) ($100)",
+   "category": "Other",
+   "amount": 86.96
+  },
+  {
+   "date": "2025-11-01",
+   "description": "Femme de Menage ($15)",
+   "category": "Other",
+   "amount": 13.04
+  },
+  {
+   "date": "2025-12-10",
+   "description": "Backyard 10-16 Dec. ($403)",
+   "category": "Exhibitions",
+   "amount": 350.43
+  },
+  {
+   "date": "2025-11-01",
+   "description": "Shopify November 2025 ($8.85)",
+   "category": "Shopify Website",
+   "amount": 7.7
+  },
+  {
+   "date": "2025-12-01",
+   "description": "Expenses expo.(Madi Library) ($23)",
+   "category": "Exhibitions",
+   "amount": 20.0
+  },
+  {
+   "date": "2025-11-01",
+   "description": "2 Marlboro 50, Ticket 278, Porteur 20 ($348)",
+   "category": "Logistics",
+   "amount": 302.61
+  },
+  {
+   "date": "2025-11-01",
+   "description": "taxi 30 euro, extra bag 50 euro ($93.6)",
+   "category": "Logistics",
+   "amount": 81.39
+  },
+  {
+   "date": "2025-12-01",
+   "description": "Stickers ($15)",
+   "category": "Marketing",
+   "amount": 13.04
+  },
+  {
+   "date": "2025-12-10",
+   "description": "Miscellaneous backyard ($287)",
+   "category": "Exhibitions",
+   "amount": 249.57
+  },
+  {
+   "date": "2025-12-10",
+   "description": "transport Miro Backyard ($20)",
+   "category": "Exhibitions",
+   "amount": 17.39
+  },
+  {
+   "date": "2025-12-01",
+   "description": "Paul Extra Luggage December 2025 ($88.125)",
+   "category": "Logistics",
+   "amount": 76.63
+  },
+  {
+   "date": "2025-12-01",
+   "description": "Paul hand bag (Airfrance) ($235)",
+   "category": "Logistics",
+   "amount": 204.35
+  },
+  {
+   "date": "2025-11-01",
+   "description": "November Boost ($100)",
+   "category": "Marketing",
+   "amount": 86.96
+  },
+  {
+   "date": "2025-12-01",
+   "description": "Adlibitum (December 2025) ($700)",
+   "category": "Marketing",
+   "amount": 608.7
+  },
+  {
+   "date": "2025-12-01",
+   "description": "Exhibition decoration (Le charcutier) ($18)",
+   "category": "Exhibitions",
+   "amount": 15.65
+  },
+  {
+   "date": "2026-01-01",
+   "description": "Adlibitum (January 2026) ($1000)",
+   "category": "Marketing",
+   "amount": 869.57
+  },
+  {
+   "date": "2025-12-01",
+   "description": "Shopify Dec 2025 ($27.7)",
+   "category": "Shopify Website",
+   "amount": 24.09
+  },
+  {
+   "date": "2026-01-01",
+   "description": "Shopify Jan 2025 ($27.7)",
+   "category": "Shopify Website",
+   "amount": 24.09
+  },
+  {
+   "date": "2026-02-01",
+   "description": "Shopify Feb 2025 ($27.7)",
+   "category": "Shopify Website",
+   "amount": 24.09
+  },
+  {
+   "date": "2026-02-01",
+   "description": "Total Feb ($1065)",
+   "category": "Other",
+   "amount": 926.09
+  },
+  {
+   "date": "2026-03-01",
+   "description": "Phoenicia ($400)",
+   "category": "Exhibitions",
+   "amount": 347.83
+  },
+  {
+   "date": "2026-03-01",
+   "description": "Adlibitum (Mar 2026) ($700)",
+   "category": "Marketing",
+   "amount": 608.7
+  },
+  {
+   "date": "2026-03-01",
+   "description": "Shopify Mars 2025 ($27.7)",
+   "category": "Shopify Website",
+   "amount": 24.09
+  },
+  {
+   "date": "2026-02-01",
+   "description": "Adlibitum (Fev 2026) ($700)",
+   "category": "Marketing",
+   "amount": 608.7
+  },
+  {
+   "date": "2026-04-01",
+   "description": "Adlibitum (Apr 2026) ($700)",
+   "category": "Marketing",
+   "amount": 608.7
+  },
+  {
+   "date": "2026-04-01",
+   "description": "Forum de Bey ($1100)",
+   "category": "Exhibitions",
+   "amount": 956.52
+  },
+  {
+   "date": "2026-05-01",
+   "description": "Adlibitum (Mai 2026) ($700)",
+   "category": "Marketing",
+   "amount": 608.7
+  },
+  {
+   "date": "2026-06-01",
+   "description": "Adlibitum (June 2026) ($1000)",
+   "category": "Marketing",
+   "amount": 869.57
+  },
+  {
+   "date": "2026-07-01",
+   "description": "Adlibitum (July 2026) ($1000)",
+   "category": "Marketing",
+   "amount": 869.57
+  },
+  {
+   "date": "2026-08-01",
+   "description": "Shipping (Aug 2026) ($6531)",
+   "category": "Shipment",
+   "amount": 5679.13
+  },
+  {
+   "date": "2026-03-01",
+   "description": "Shopify Mars 2026 ($27.7)",
+   "category": "Shopify Website",
+   "amount": 24.09
+  },
+  {
+   "date": "2026-04-01",
+   "description": "Shopify Apr 2026 ($27.7)",
+   "category": "Shopify Website",
+   "amount": 24.09
+  },
+  {
+   "date": "2026-05-01",
+   "description": "Shopify Mai 2026 ($27.7)",
+   "category": "Shopify Website",
+   "amount": 24.09
+  },
+  {
+   "date": "2026-06-01",
+   "description": "Shopify June 2026 ($27.7)",
+   "category": "Shopify Website",
+   "amount": 24.09
+  }
+ ]
+};
