@@ -3842,12 +3842,12 @@ window.pushLocalToCloud = async () => {
 };
 
 /* ================= boot ================= */
-document.getElementById("pu_date").value = todayISO();
-document.getElementById("t_date").value = todayISO();
-document.getElementById("inv_date").value = todayISO();
-document.getElementById("l_date").value = todayISO();
-document.getElementById("set_low").value = LOW_STOCK;
-document.getElementById("set_rate").value = USD_RATE;
+const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+setVal("pu_date", todayISO());
+setVal("t_date", todayISO());
+setVal("l_date", todayISO());
+setVal("set_low", LOW_STOCK);
+setVal("set_rate", USD_RATE);
 document.querySelectorAll(".curbtn").forEach(b => b.classList.toggle("on", b.dataset.cur === VIEW_CUR));
 window.saveRate = () => {
   const v = Number(gv("set_rate"));
@@ -3866,9 +3866,9 @@ window.saveLowStock = () => {
   toast(`Low-stock threshold set to ${v} ✓`);
   render();
 };
-document.getElementById("rc_start").value = todayISO().slice(0, 7);
-document.getElementById("ex_date").value = todayISO();
-try { document.getElementById("gm_key").value = localStorage.getItem(LS_GMKEY) || ""; } catch {}
+setVal("rc_start", todayISO().slice(0, 7));
+setVal("ex_date", todayISO());
+try { setVal("gm_key", localStorage.getItem(LS_GMKEY) || ""); } catch {}
 loadLocal(); setBadge(); render(); initSupabase();
 if (!remote) ensureRecurring();
 </script>
