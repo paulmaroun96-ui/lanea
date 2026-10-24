@@ -378,7 +378,19 @@
 
 <!-- ================= STOCKS ================= -->
 <div class="tab" id="tab-stk" style="display:none">
-  <div class="pagehead"><h1>Stocks</h1><p>Your actual stock levels — initial + purchased − sold − gifted ± inventory adjustments — globally and per location.</p></div>
+  <div class="pagehead"><h1>Stocks</h1><p>Your actual stock levels — globally, per location, and per reseller with what they sold.</p></div>
+  <section class="card">
+    <h2>Reseller tracking — given · sold · in hand · revenue</h2>
+    <p class="hint">For each reseller: everything you <b>sent them</b> (transfers from Home), what they <b>sold</b> and the <b>revenue</b> it made,
+    gifts/losses recorded there, count corrections, and what is <b>in their hands now</b> (valued at cost).</p>
+    <div id="resellerSummary"></div>
+    <div class="rowform no-print" style="margin-top:10px">
+      <label>Products detail for<select id="rt_pos" onchange="renderResellers()"><option value="">All resellers combined</option></select></label>
+      <label>Search<input id="rt_search" oninput="renderResellers()" placeholder="product…" style="min-width:200px"></label>
+      <button class="btn ghost" onclick="exportResellersCSV()">Export CSV</button>
+    </div>
+    <div class="scrollbox" style="max-height:440px" id="resellerTable"></div>
+  </section>
   <section class="card">
     <h2>Stock statement</h2>
     <p class="hint"><b>How stock is calculated:</b> Stock = your <b>last submitted inventory count</b> (per location)
@@ -1825,6 +1837,76 @@ function renderCFO() {
   tb.innerHTML = h + "</table>";
 }
 
+/* ================= reseller tracking: given / sold / in hand / revenue ================= */
+const resellerPosList = () => { const hp = homePos(); return sortedPos().filter(p => !hp || p.id !== hp.id); };
+window.resellerStats = (posId, pid) => {
+  // one reseller (or null = all resellers combined), one product (or null = all)
+  const posIds = posId ? [posId] : resellerPosList().map(p => p.id);
+  const prods = pid ? [prodById(pid)].filter(Boolean) : state.products;
+  const st = { given: 0, sold: 0, rev: 0, gifted: 0, lost: 0, adj: 0, hand: 0, val: 0 };
+  for (const id of posIds) {
+    for (const p of prods) {
+      st.given += transferredTo(p.id, id);
+      st.gifted += giftedAt(p.id, id);
+      st.lost += lostAt(p.id, id);
+      st.adj += invDelta(p.id, id);
+      const h = posStockOf(p.id, id);
+      st.hand += h; st.val += h * avgCostOf(p.id);
+    }
+    for (const s of state.sales) if (s.pos_id === id && (!pid || s.product_id === pid)) {
+      st.sold += Number(s.qty); st.rev += Number(s.qty) * Number(s.price_per_unit);
+    }
+  }
+  return st;
+};
+window.renderResellers = () => {
+  const sumEl = document.getElementById("resellerSummary");
+  if (!sumEl) return;
+  const rs = resellerPosList();
+  if (!rs.length) { sumEl.innerHTML = '<p class="empty">No resellers yet — create them in Sales & prices.</p>'; document.getElementById("resellerTable").innerHTML = ""; return; }
+  let h = `<table><tr><th>Reseller</th><th class="num">Qty given</th><th class="num">Qty sold</th><th class="num">Revenue ($)</th><th class="num">Gifted</th><th class="num">Lost</th><th class="num">Count adj.</th><th class="num">In hand now</th><th class="num">Value in hand (€)</th></tr>`;
+  const tot = { given: 0, sold: 0, rev: 0, gifted: 0, lost: 0, adj: 0, hand: 0, val: 0 };
+  for (const pos of rs) {
+    const s = resellerStats(pos.id, null);
+    for (const k in tot) tot[k] += s[k];
+    h += `<tr><td><b>${esc(pos.name)}</b></td><td class="num calc">${fmtN(s.given)}</td><td class="num calc">${fmtN(s.sold)}</td>
+      <td class="num calc">${showU(s.rev)}</td><td class="num calc">${fmtN(s.gifted)}</td><td class="num calc">${fmtN(s.lost)}</td>
+      <td class="num calc">${s.adj > 0 ? "+" : ""}${fmtN(s.adj)}</td>
+      <td class="num calc ${s.hand < 0 ? "stock-neg" : ""}">${fmtN(s.hand)}</td><td class="num calc">${showE(s.val)}</td></tr>`;
+  }
+  h += `<tr class="total"><td>TOTAL resellers</td><td class="num">${fmtN(tot.given)}</td><td class="num">${fmtN(tot.sold)}</td>
+    <td class="num">${showU(tot.rev)}</td><td class="num">${fmtN(tot.gifted)}</td><td class="num">${fmtN(tot.lost)}</td>
+    <td class="num">${tot.adj > 0 ? "+" : ""}${fmtN(tot.adj)}</td><td class="num">${fmtN(tot.hand)}</td><td class="num">${showE(tot.val)}</td></tr></table>`;
+  sumEl.innerHTML = h;
+  // per-product detail for one reseller (or all combined)
+  const posId = gv("rt_pos") || null;
+  const q = (gv("rt_search") || "").toLowerCase();
+  const rows = state.products.filter(p => prodMatch(p, q)).sort(prodSort)
+    .map(p => ({ p, s: resellerStats(posId, p.id) }))
+    .filter(r => r.s.given || r.s.sold || r.s.hand || r.s.gifted || r.s.lost || r.s.adj);
+  const el = document.getElementById("resellerTable");
+  if (!rows.length) { el.innerHTML = '<p class="empty">Nothing given to or sold by this reseller yet.</p>'; return; }
+  let d = `<table><tr><th>Product</th><th class="num">Given</th><th class="num">Sold</th><th class="num">Revenue ($)</th><th class="num">Gifted</th><th class="num">Lost</th><th class="num">Count adj.</th><th class="num">In hand</th></tr>`;
+  for (const r of rows) {
+    d += `<tr><td>${prodLabel(r.p)}</td><td class="num calc">${fmtN(r.s.given)}</td><td class="num calc">${fmtN(r.s.sold)}</td>
+      <td class="num calc">${r.s.rev ? showU(r.s.rev) : "·"}</td><td class="num calc">${r.s.gifted ? fmtN(r.s.gifted) : "·"}</td>
+      <td class="num calc">${r.s.lost ? fmtN(r.s.lost) : "·"}</td><td class="num calc">${r.s.adj ? (r.s.adj > 0 ? "+" : "") + fmtN(r.s.adj) : "·"}</td>
+      <td class="num calc ${r.s.hand < 0 ? "stock-neg" : ""}">${fmtN(r.s.hand)}</td></tr>`;
+  }
+  el.innerHTML = d + "</table>";
+};
+window.exportResellersCSV = () => {
+  const posId = gv("rt_pos") || null;
+  const name = posId ? (posById(posId)?.name || "") : "All resellers";
+  const rows = [["LANEA — Reseller tracking: " + name], ["Product", "Given", "Sold", "Revenue (USD)", "Gifted", "Lost", "Count adj.", "In hand"]];
+  for (const p of [...state.products].sort(prodSort)) {
+    const s = resellerStats(posId, p.id);
+    if (!(s.given || s.sold || s.hand || s.gifted || s.lost || s.adj)) continue;
+    rows.push([prodShort(p), s.given, s.sold, s.rev.toFixed(2), s.gifted, s.lost, s.adj, s.hand]);
+  }
+  downloadFile("lanea-resellers.csv", "text/csv", toCSV(rows));
+};
+
 /* ================= history: everything sold, with real price & cost ================= */
 function historyRows() {
   const pos = gv("hi_pos"), from = gv("hi_from"), to = gv("hi_to"), q = (gv("hi_search") || "").toLowerCase();
@@ -2073,6 +2155,11 @@ function refreshSelects() {
     sel.innerHTML = '<option value="wh">Overview (all locations)</option>' + posOpts;
     if (cur) sel.value = cur;
   }
+  {
+    const sel = document.getElementById("rt_pos"); const cur = sel.value;
+    sel.innerHTML = '<option value="">All resellers combined</option>' + posOptsNoHome;
+    if (cur) sel.value = cur;
+  }
   for (const [id, opts] of [["f_pos", posOpts], ["sl_pos", posOpts], ["hi_pos", posOpts], ["f_prod", prodOpts], ["sl_prod", prodOpts]]) {
     const sel = document.getElementById(id); const cur = sel.value;
     sel.innerHTML = '<option value="">All</option>' + opts; sel.value = cur;
@@ -2092,7 +2179,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderImportState(); renderVariance(); renderStocks(); renderPosStock(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
+  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderImportState(); renderVariance(); renderStocks(); renderPosStock(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
