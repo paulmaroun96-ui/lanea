@@ -343,13 +343,20 @@
     <p class="hint">One sheet counts everything: <b>rows = products, columns = your locations (Home first, then the resellers)</b>. Type the real balance in the cells you count (leave the rest blank), then submit — stock adjusts per location and every difference is kept in the list below.</p>
     <div class="rowform">
       <label>Date<input id="inv_date" type="date"></label>
-      <button class="btn gold" type="button" onclick="startInventory()">Open inventory sheet</button>
-      <button class="btn ghost" type="button" onclick="startPosInventoryPrefilled()">Prefill actual inventory — Home + Teta + Pharma St.Rita (Book1)</button>
-      <button class="btn ghost" type="button" onclick="importBook1History()">Import Book1 sales &amp; gifts (history) + re-count</button>
-      <button class="btn ghost" type="button" onclick="importOldHistory()">Import OLD history (Old Inv Test: 1,130 sold + expenses) + re-count</button>
-      <button class="btn danger" type="button" onclick="resetInventoriesBaseline()">RESET all inventories → June 28 baseline (Home 444 · Teta 66)</button>
+      <button class="btn gold" type="button" onclick="startInventoryCurrent()">New count — prefilled with my current stock</button>
+      <button class="btn ghost" type="button" onclick="startInventory()">Start a BLANK count</button>
     </div>
     <p class="hint" id="importState" style="margin-top:6px"></p>
+    <details class="no-print" style="margin-top:8px">
+      <summary class="hint" style="cursor:pointer;display:inline-block">⚙ One-time setup tools — baseline reset · Book1 · old history (don't use these day to day)</summary>
+      <div class="rowform" style="margin-top:8px">
+        <button class="btn danger" type="button" onclick="resetInventoriesBaseline()">RESET all inventories → June 28 baseline (Home 444 · Teta 66 · rest 0)</button>
+        <button class="btn ghost" type="button" onclick="importBook1History()">Import Book1 sales &amp; gifts (history) + re-count</button>
+        <button class="btn ghost" type="button" onclick="importOldHistory()">Import OLD history (Old Inv Test: 1,130 sold + expenses) + re-count</button>
+        <button class="btn ghost" type="button" onclick="startPosInventoryPrefilled()">Prefill a fiche from the Book1 counts</button>
+      </div>
+      <p class="hint">These create or overwrite inventory counts — one-time setup only. Day to day, use the two buttons above.</p>
+    </details>
   </section>
   <section class="card" id="invSheet" style="display:none">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
@@ -726,8 +733,10 @@
   </section>
   <section class="card">
     <h2>Counting &amp; reconciling</h2>
-    <p style="line-height:1.8"><b>Inventory</b> tab → open a fiche d'inventaire for one location → type the actual counted quantities
-    (drafts pause and resume) → <b>Submit</b> → stock snaps to reality and the écart (units and €) stays in the inventory list forever.</p>
+    <p style="line-height:1.8"><b>Inventory</b> tab → <b>"New count — prefilled with my current stock"</b>: the fiche opens already filled with
+    today's quantities (your last count carried forward) — change only the lines that differ, <b>Submit</b>, and that becomes your single
+    <b>CURRENT ✓</b> inventory. Older counts collapse into the <b>Archive</b> (kept for the math, out of the way). A blank fiche is also available
+    for counting from scratch, and the one-time setup tools (baseline reset, Book1, old history) are tucked under ⚙.</p>
   </section>
   <section class="card">
     <h2>Reading the business</h2>
@@ -2604,6 +2613,25 @@ window.startInventory = () => {
   activeInv = d.id;
   renderInventory();
 };
+/* THE living inventory: a new count starts from today's stock (= the last
+   count carried forward). Change only what differs, submit — that becomes
+   the single current reference. */
+window.startInventoryCurrent = () => {
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  const hp = homePos();
+  const locs = [...sortedPos().map(p => ({ key: p.id })), ...(hp ? [] : [{ key: "wh" }])];
+  if (!locs.length) { alert("Create your locations first (Sales & prices tab)."); return; }
+  const d = { id: uid(), date: gv("inv_date") || todayISO(), pos_id: "ALL", counts: {} };
+  for (const p of state.products)
+    for (const l of locs) {
+      const v = l.key === "wh" ? warehouseOf(p) : posStockOf(p.id, l.key);
+      d.counts[p.id + "|" + l.key] = String(Math.max(v, 0));
+    }
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  renderInventory();
+  toast("Count prefilled with your CURRENT stock (your last count carried forward) — change only what differs, then SUBMIT");
+};
 window.startPosInventoryPrefilled = async () => {
   if (typeof POS_SHEETS === "undefined") { alert("Master-sheet POS counts not loaded — reload the page."); return; }
   if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
@@ -2936,7 +2964,10 @@ function renderInvList() {
     ...state.inventories.map(i => ({ type: "done", date: i.date, obj: i })),
   ].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   if (!items.length) { el.innerHTML = '<p class="empty">No inventory yet — open a sheet above.</p>'; return; }
-  el.innerHTML = items.map(it => {
+  // ONE current snapshot: the most recent non-deleted count(s); the rest is archive
+  const curDate = state.inventories.filter(i => !i.deleted).reduce((a, i) => ((i.date || "") > a ? i.date : a), "");
+  const isCur = it => it.type === "done" && !it.obj.deleted && curDate && it.obj.date === curDate;
+  const htmlFor = it => {
     if (it.type === "draft") {
       const d = it.obj, n = Object.keys(d.counts).length;
       return `<div style="display:flex;align-items:center;gap:14px;padding:11px 14px;border:1.5px dashed #d8a53f;border-radius:10px;margin-bottom:10px;background:#fffbeb;flex-wrap:wrap">
@@ -2960,9 +2991,10 @@ function renderInvList() {
         <td class="num calc">${fmtN(Number(l.theoretical))}</td><td class="num calc">${fmtN(Number(l.counted))}</td>
         <td class="num calc ${diff !== 0 ? "neg" : ""}">${diff > 0 ? "+" : ""}${fmtN(diff)}</td></tr>`;
     }).join("");
-    return `<details class="inv" style="${del ? "opacity:.55" : ""}"><summary><span class="ref">${esc(invScopeName(inv.pos_id))}</span>
+    const cur = isCur(it);
+    return `<details class="inv" style="${del ? "opacity:.55" : ""}${cur ? "border:1.5px solid var(--gold);border-radius:10px" : ""}"><summary><span class="ref">${esc(invScopeName(inv.pos_id))}</span>
       <span class="meta">${fmtD(inv.date)}</span>
-      <span class="chip" style="background:${del ? "#e5e7eb" : "#d9ecdd"}">${del ? "DELETED" : "SUBMITTED"}</span>
+      <span class="chip" style="background:${del ? "#e5e7eb" : cur ? "#d9eaee" : "#d9ecdd"};font-weight:${cur ? "700" : "400"}">${del ? "DELETED" : cur ? "CURRENT ✓" : "SUBMITTED"}</span>
       <span class="meta">${lines.length} counted</span>
       <span class="meta ${dU !== 0 ? "neg" : ""}">Δ ${dU > 0 ? "+" : ""}${fmtN(dU)} units</span>
       <span style="margin-left:auto;font-weight:700" class="${dV < 0 ? "neg" : ""}">${showE(dV)}</span>
@@ -2972,7 +3004,12 @@ function renderInvList() {
            <button class="btn small danger no-print" onclick="event.preventDefault();softDelInv('${inv.id}')">Del</button>`}
       </summary>
       <div class="lines"><table><tr><th>Product</th><th class="num">Theoretical</th><th class="num">Counted</th><th class="num">Difference</th></tr>${rows}</table></div></details>`;
-  }).join("");
+  };
+  const main = items.filter(it => it.type === "draft" || isCur(it));
+  const arch = items.filter(it => !(it.type === "draft" || isCur(it)));
+  el.innerHTML = (main.length ? main.map(htmlFor).join("") : "") +
+    (arch.length ? `<details style="margin-top:10px"><summary class="hint" style="cursor:pointer">📦 Archive — ${arch.length} older record${arch.length === 1 ? "" : "s"} (kept: deleting them would move today's stock)</summary>
+      <div style="margin-top:8px">${arch.map(htmlFor).join("")}</div></details>` : "");
 }
 /* soft delete: the inventory stays listed as DELETED and stops affecting stock */
 window.softDelInv = async id => {
