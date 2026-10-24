@@ -349,6 +349,7 @@
     <details class="no-print" style="margin-top:12px">
       <summary class="hint" style="cursor:pointer;display:inline-block">⚙ Maintenance</summary>
       <div class="rowform" style="margin-top:8px">
+        <button class="btn gold" type="button" onclick="importJulySales()">Import the July WhatsApp sales (204 units · $5,691 + 2 gifts)</button>
         <button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>
       </div>
       <p class="hint">Removes every old / overwriting count and replaces them with ONE clean count of your current stock. Your quantities do not change by a single unit.</p>
@@ -2827,6 +2828,36 @@ window.resetInventoriesBaseline = async () => {
   activeInv = d.id;
   await submitInventory();
   toast("Inventories reset ✓ — ONE baseline dated 28 Jun 2026: Home 444 · Teta 66 · Pharma St.Rita 0. Log your sales from here.");
+  render();
+};
+/* July 2026 sales from the WhatsApp log: 204 units ($5,691) + 2 gifts, real
+   dates and real prices, all sold from Home. They DEDUCT from the June 28
+   baseline + delivery stock — exactly the flow the books are built on. */
+window.importJulySales = async () => {
+  if (typeof JULY_SALES === "undefined") { alert("July data not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  if (state.sales.some(s => (s.date || "").slice(0, 7) === "2026-07")) {
+    alert("July 2026 sales already exist in the log — import blocked to avoid duplicates."); return;
+  }
+  const units = JULY_SALES.sales.reduce((a, l) => a + l.qty, 0);
+  if (!(await niceConfirm("Import the July sales?",
+    `${fmtN(units)} units sold ($5,691 revenue) and 2 gifts, dated 1–20 July at the real prices from your messages — they deduct from the June 28 baseline + delivery stock.`, "Import July"))) return;
+  let hp = homePos();
+  if (!hp) hp = await addRow("pos", { name: "Home" });
+  if (!hp) return;
+  const byRef = {};
+  for (const p of state.products) if (p.ref) byRef[p.ref] = p;
+  for (const l of JULY_SALES.sales) {
+    const p = byRef[l.ref];
+    if (!p) { alert("Unknown product ref " + l.ref + " — reload and retry."); return; }
+    if (!(await addRow("sales", { date: l.date, pos_id: hp.id, product_id: p.id, qty: l.qty, price_per_unit: l.price }))) return;
+  }
+  for (const g of JULY_SALES.gifts) {
+    const p = byRef[g.ref];
+    if (!p) continue;
+    if (!(await addRow("gifts", { date: g.date, product_id: p.id, qty: g.qty, note: g.note }))) return;
+  }
+  toast(`July imported ✓ — ${fmtN(units)} units sold ($5,691) + 2 gifts, stock deducted`);
   render();
 };
 /* CONSOLIDATE: delete every old / overwriting inventory count, then submit
