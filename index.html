@@ -352,6 +352,7 @@
         <button class="btn gold" type="button" onclick="addJuneDeliveryHome()">Add the CMD-2026-06-26 delivery (+1,568 units) into Home</button>
         <button class="btn gold" type="button" onclick="importAllSales()">Import ALL WhatsApp sales Jul–Oct (364 units · $9,151 + 8 gifts)</button>
         <button class="btn gold" type="button" onclick="importMamBatch()">Import Mam's (Teta) batch — 20 transfers + 22 sales at website prices</button>
+        <button class="btn gold" type="button" onclick="importMamExpenses()">Import the exhibition expenses ($2,886.41 — LBP at 89,500/$)</button>
         <button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>
       </div>
       <p class="hint">Removes every old / overwriting count and replaces them with ONE clean count of your current stock. Your quantities do not change by a single unit.</p>
@@ -2915,6 +2916,19 @@ window.importMamBatch = async () => {
   for (const l of MAM_BATCH.salesTeta) if (!(await sellAt(teta, l))) return;
   for (const l of MAM_BATCH.salesHome) if (!(await sellAt(hp, l))) return;
   toast(`Teta batch imported ✓ — ${fmtN(nT)} transferred, ${fmtN(nS)} sold (${usdF.format(rev)} at website prices)`);
+  render();
+};
+/* the exhibition expenses from the same paste — LBP converted at 89,500/$ */
+window.importMamExpenses = async () => {
+  if (typeof MAM_EXPENSES === "undefined") { alert("Expense data not loaded — reload the page."); return; }
+  let n = 0, skip = 0;
+  for (const e of MAM_EXPENSES) {
+    if (state.expenses.some(x => x.description === e.description && Number(x.amount) === Number(e.amount))) { skip++; continue; }
+    if (!(await addRow("expenses", { date: e.date, description: e.description, category: e.category, amount: e.amount }))) return;
+    n++;
+  }
+  toast(n ? `${n} exhibition expenses imported ✓${skip ? ` (${skip} already there)` : ""} — $2,886.41 total (LBP at 89,500/$)`
+          : "All 20 exhibition expenses are already in the log ✓");
   render();
 };
 /* ALL WhatsApp sales (July 1 – Oct 24) as SALES at Home: real dates, real
