@@ -96,6 +96,9 @@
   td.num { font-family: "JetBrains Mono", Consolas, monospace; font-size: 12.5px; }
   td.calc { color: #40454e; }
   tr.total td { font-weight: 700; border-top: 2px solid var(--ink); background: #faf8f3; }
+  table th { cursor: pointer; user-select: none; }
+  table th:hover { text-decoration: underline; }
+  table th[data-sort]::after { content: ""; }
   .neg { color: var(--red); font-weight: 600; }
   td.stock-neg { background: var(--red-soft); color: var(--red); font-weight: 700; }
   .chip { padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
@@ -714,7 +717,8 @@
     <b>Sales &amp; prices</b>: each POS's performance and its price list (bulk edit + Save prices);
     the <b>Reseller tool</b> above the price matrix fills a whole POS column at X% off the Home price in one click (e.g. Teta and Pharma St.Rita at −15%).
     Locations always show in the order <b>Home · Teta · Pharma St.Rita · (others)</b>, with <b>Global stock</b> as the total.
-    <b>Catalog</b>: products by category. Everything exports to CSV; the dashboard prints to PDF.</p>
+    <b>Catalog</b>: products by category. Everything exports to CSV; the dashboard prints to PDF.
+    <b>Click any column header to sort that table</b> (click again to reverse — TOTAL rows stay at the bottom).</p>
   </section>
   <section class="card">
     <h2>What saves when</h2>
@@ -3207,6 +3211,51 @@ function showTab(name) {
   document.getElementById("tab-" + name).style.display = "";
 }
 document.querySelectorAll("#nav button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+/* ================= universal table sorting =================
+   Click any column header to sort that table by it (click again to reverse).
+   Works on EVERY table in the app. TOTAL rows stay pinned at the bottom;
+   sorting is a view — the next data change re-renders the default order. */
+window.sortAnyTable = (table, th) => {
+  const headRow = table.querySelector("tr");
+  if (!headRow || ![...headRow.children].includes(th)) return;
+  const cols = [...headRow.children];
+  const idx = cols.indexOf(th);
+  const rows = [...table.querySelectorAll("tr")].slice(1);
+  const movable = rows.filter(r => !r.classList.contains("total") && !r.classList.contains("newrow")
+    && r.children.length === cols.length && !r.querySelector("th"));
+  if (movable.length < 2) return;
+  const pinned = rows.filter(r => !movable.includes(r));
+  const dir = th.dataset.sort === "asc" ? -1 : 1;
+  for (const c of cols) { c.removeAttribute("data-sort"); c.textContent = c.textContent.replace(/ [▲▼]$/, ""); }
+  th.dataset.sort = dir === 1 ? "asc" : "desc";
+  th.textContent += dir === 1 ? " ▲" : " ▼";
+  const val = r => {
+    const cell = r.children[idx];
+    if (!cell) return "";
+    const inp = cell.querySelector("input,select");
+    const t = (inp ? String(inp.value) : cell.textContent).trim();
+    const n = parseFloat(t.replace(/[^0-9.\-]/g, ""));
+    return (/[0-9]/.test(t) && isFinite(n)) ? n : t.toLowerCase();
+  };
+  movable.sort((a, b) => {
+    const x = val(a), y = val(b);
+    const bothNum = typeof x === "number" && typeof y === "number";
+    if (bothNum) return (x - y) * dir;
+    if (typeof x === "number") return -dir;   // numbers before text
+    if (typeof y === "number") return dir;
+    return String(x).localeCompare(String(y)) * dir;
+  });
+  const parent = headRow.parentElement;
+  for (const r of movable) parent.appendChild(r);
+  for (const r of pinned) parent.appendChild(r);
+};
+document.addEventListener("click", ev => {
+  const th = ev.target && ev.target.closest ? ev.target.closest("th") : null;
+  if (!th || ev.target.closest("button, input, select, a")) return;
+  const table = th.closest("table");
+  if (table) sortAnyTable(table, th);
+});
 
 /* toast */
 let toastTimer;
