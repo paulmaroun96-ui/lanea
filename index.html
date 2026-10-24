@@ -350,8 +350,7 @@
       <summary class="hint" style="cursor:pointer;display:inline-block">⚙ Maintenance</summary>
       <div class="rowform" style="margin-top:8px">
         <button class="btn gold" type="button" onclick="addJuneDeliveryHome()">Add the CMD-2026-06-26 delivery (+1,568 units) into Home</button>
-        <button class="btn gold" type="button" onclick="deductJulyInventoryOnly()">Deduct July quantities from Home — INVENTORY ONLY (no sales records)</button>
-        <button class="btn ghost" type="button" onclick="importJulySales()">…or import July as SALES (204 units · $5,691 + 2 gifts)</button>
+        <button class="btn gold" type="button" onclick="importAllSales()">Import ALL WhatsApp sales Jul–Oct (364 units · $9,151 + 8 gifts)</button>
         <button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>
       </div>
       <p class="hint">Removes every old / overwriting count and replaces them with ONE clean count of your current stock. Your quantities do not change by a single unit.</p>
@@ -2877,6 +2876,56 @@ window.importJulySales = async () => {
     if (!(await addRow("gifts", { date: g.date, product_id: p.id, qty: g.qty, note: g.note }))) return;
   }
   toast(`July imported ✓ — ${fmtN(units)} units sold ($5,691) + 2 gifts, stock deducted`);
+  render();
+};
+/* ALL WhatsApp sales (July 1 – Oct 24) as SALES at Home: real dates, real
+   prices, gifts with names. Asks whether the quantities were ALREADY removed
+   from inventory (manually / inventory-only) — if yes, stock is pinned so
+   nothing is deducted twice; if no, the sales deduct stock normally. */
+window.importAllSales = async () => {
+  if (typeof JULY_SALES === "undefined" || typeof AUGOCT_SALES === "undefined") { alert("Sales data not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  const sig = (dt, ref, qty) => state.sales.some(s => s.date === dt && s.qty == qty && (prodById(s.product_id) || {}).ref === ref);
+  const julyDone = sig("2026-07-01", "CREJOU100", 1) && sig("2026-07-12", "CRENUI100", 3);
+  const augDone = sig("2026-07-22", "SAVONKARI", 2) || sig("2026-10-04", "SHAMPMONOI30H", 9);
+  const parts = [];
+  if (!julyDone) parts.push(JULY_SALES);
+  if (!augDone) parts.push(AUGOCT_SALES);
+  if (!parts.length) { alert("All WhatsApp sales (July–October) are already imported."); return; }
+  const units = parts.reduce((a, p) => a + p.sales.reduce((x, l) => x + l.qty, 0), 0);
+  const nGifts = parts.reduce((a, p) => a + p.gifts.reduce((x, g) => x + g.qty, 0), 0);
+  if (!(await niceConfirm("Import the WhatsApp sales?",
+    `${fmtN(units)} units sold and ${nGifts} gifts, dated July–October at the real prices, all at Home. Next question decides what happens to stock.`, "Continue"))) return;
+  const pin = confirm("IMPORTANT — did you ALREADY remove these quantities from your inventory (manually in the grid, or with the old inventory-only button)?\n\nOK = YES, already removed → only the sales records are added, stock does not move.\nCancel = NO → the sales will deduct the stock now.");
+  let hp = homePos();
+  if (!hp) hp = await addRow("pos", { name: "Home" });
+  if (!hp) return;
+  const snap = {};
+  if (pin) for (const p of state.products) snap[p.id] = Math.max(posStockOf(p.id, hp.id), 0);
+  const byRef = {};
+  for (const p of state.products) if (p.ref) byRef[p.ref] = p;
+  let rev = 0;
+  for (const part of parts) {
+    for (const l of part.sales) {
+      const p = byRef[l.ref];
+      if (!p) { alert("Unknown product ref " + l.ref + " — reload and retry."); return; }
+      if (!(await addRow("sales", { date: l.date, pos_id: hp.id, product_id: p.id, qty: l.qty, price_per_unit: l.price }))) return;
+      rev += l.qty * l.price;
+    }
+    for (const g of part.gifts) {
+      const p = byRef[g.ref];
+      if (!p) continue;
+      if (!(await addRow("gifts", { date: g.date, product_id: p.id, qty: g.qty, note: g.note }))) return;
+    }
+  }
+  if (pin) {
+    const d = { id: uid(), date: todayISO(), pos_id: "ALL", counts: {} };
+    for (const [pid, v] of Object.entries(snap)) d.counts[pid + "|" + hp.id] = String(v);
+    invDrafts.push(d); saveInvDrafts();
+    activeInv = d.id;
+    await submitInventory();
+  }
+  toast(`WhatsApp sales imported ✓ — ${fmtN(units)} units (${usdF.format(rev)}), ${nGifts} gifts${pin ? ", stock pinned (not deducted twice)" : ", stock deducted"}`);
   render();
 };
 /* July quantities OUT of Home as INVENTORY ONLY — no sales records, no
