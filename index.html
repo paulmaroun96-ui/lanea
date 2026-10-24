@@ -356,6 +356,7 @@
         <button class="btn gold" type="button" onclick="importMamExpenses()">Import the exhibition expenses ($2,886.41 — LBP at 89,500/$)</button>
         <button class="btn gold" type="button" onclick="fixTetaPrices()">Set Teta at reseller prices (−15%) + re-price her existing sales</button>
         <button class="btn gold" type="button" onclick="importPharmaBatch()">Import Pharmacie St.Rita placement (25 Jul — 137 units → Pharma)</button>
+        <button class="btn gold" type="button" onclick="importNamedGifts()">Import the named gifts (102 units — Adlibitum, Christina, Maya…)</button>
         <button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>
       </div>
       <p class="hint">Removes every old / overwriting count and replaces them with ONE clean count of your current stock. Your quantities do not change by a single unit.</p>
@@ -2998,6 +2999,27 @@ window.importJulySales = async () => {
     if (!(await addRow("gifts", { date: g.date, product_id: p.id, qty: g.qty, note: g.note }))) return;
   }
   toast(`July imported ✓ — ${fmtN(units)} units sold ($5,691) + 2 gifts, stock deducted`);
+  render();
+};
+/* Named gifts dictated by the user: 102 units from Home, each with the
+   person's name in the gift-log note. */
+window.importNamedGifts = async () => {
+  if (typeof GIFTS_NAMED === "undefined") { alert("Gift data not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  if (state.gifts.some(g => g.note === "Lidea")) {
+    alert("The named gifts are already imported (Lidea's gift exists)."); return;
+  }
+  const units = GIFTS_NAMED.gifts.reduce((a, l) => a + l.qty, 0);
+  if (!(await niceConfirm("Import the named gifts?",
+    `${fmtN(units)} units gifted from Home, each logged with the person's name (Adlibitum, Christina, Maya, Dr. Boustani, Rosy…), dated ${fmtD(GIFTS_NAMED.date)}. Their cost value reduces net profit.`, "Import gifts"))) return;
+  const byRef = {};
+  for (const p of state.products) if (p.ref) byRef[p.ref] = p;
+  for (const l of GIFTS_NAMED.gifts) {
+    const p = byRef[l.ref];
+    if (!p) { alert("Unknown ref " + l.ref); return; }
+    if (!(await addRow("gifts", { date: GIFTS_NAMED.date, product_id: p.id, qty: l.qty, note: l.note || "" }))) return;
+  }
+  toast(`Named gifts imported ✓ — ${fmtN(units)} units with their recipients`);
   render();
 };
 /* Pharmacie Ste Rita placement (handwritten invoices 26/27/28, 25 Jul 2026):
