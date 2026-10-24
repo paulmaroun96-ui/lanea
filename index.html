@@ -353,6 +353,7 @@
         <button class="btn gold" type="button" onclick="importAllSales()">Import ALL WhatsApp sales Jul–Oct (364 units · $9,151 + 8 gifts)</button>
         <button class="btn gold" type="button" onclick="importMamBatch()">Import Mam's (Teta) batch — 20 transfers + 22 sales at website prices</button>
         <button class="btn gold" type="button" onclick="importMamExpenses()">Import the exhibition expenses ($2,886.41 — LBP at 89,500/$)</button>
+        <button class="btn gold" type="button" onclick="fixTetaPrices()">Set Teta at reseller prices (−15%) + re-price her existing sales</button>
         <button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>
       </div>
       <p class="hint">Removes every old / overwriting count and replaces them with ONE clean count of your current stock. Your quantities do not change by a single unit.</p>
@@ -2995,6 +2996,35 @@ window.importJulySales = async () => {
     if (!(await addRow("gifts", { date: g.date, product_id: p.id, qty: g.qty, note: g.note }))) return;
   }
   toast(`July imported ✓ — ${fmtN(units)} units sold ($5,691) + 2 gifts, stock deducted`);
+  render();
+};
+/* GUARANTEE: everything sold at Teta is at her reseller price (15% off the
+   Home price). Sets Teta's whole price list to −15% and re-prices every
+   existing Teta sale that differs. Undo-able (Ctrl+Z). */
+window.fixTetaPrices = async () => {
+  const teta = state.pos.find(x => normPosName(x.name) === "teta");
+  if (!teta) { alert("No Teta location found."); return; }
+  if (!(await niceConfirm("Set Teta at reseller prices (−15%)?",
+    "Teta's price list becomes exactly 15% off the Home price for every product, and every EXISTING sale at Teta is re-priced to that level. Revenue updates accordingly. Ctrl+Z undoes it.", "Apply −15%"))) return;
+  const hp = homePos();
+  let nP = 0, nS = 0, dRev = 0;
+  for (const p of state.products) {
+    const base = (hp ? priceFor(hp.id, p.id) : null)
+      ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0);
+    if (!(base > 0)) continue;
+    const tp = Math.round(base * 0.85 * 100) / 100;
+    if (priceFor(teta.id, p.id) !== tp) { await upsertPosPrice(teta.id, p.id, tp); nP++; }
+  }
+  for (const s of state.sales) {
+    if (s.pos_id !== teta.id) continue;
+    const tp = priceFor(teta.id, s.product_id);
+    if (tp != null && Number(s.price_per_unit) !== tp) {
+      dRev += (tp - Number(s.price_per_unit)) * Number(s.qty);
+      if (!(await updateRow("sales", s.id, { price_per_unit: tp }))) return;
+      nS++;
+    }
+  }
+  toast(`Teta at −15% ✓ — ${nP} price-list entries set, ${fmtN(nS)} sales re-priced (revenue ${dRev >= 0 ? "+" : ""}${usdF.format(dRev)})`);
   render();
 };
 /* Mam's boutique batch (= TETA, per the user): 21 sales at Teta + 1 at Home
