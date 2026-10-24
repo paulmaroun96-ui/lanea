@@ -959,7 +959,7 @@ const giftCostOf = g => (g.unit_cost != null && g.unit_cost !== "") ? Number(g.u
    inventory land at Home; stock is distributed from Home to the resellers.
    Technically the POS named "Home" absorbs the whole warehouse balance, so
    there is no separate Warehouse anywhere — Global stock = Home + resellers. */
-const homePos = () => state.pos.find(x => normPosName(x.name) === "home");
+const homePos = () => state.pos.find(x => ["home", "house", "maison"].includes(normPosName(x.name)));
 const transferredTo = (pid, posId) => state.transfers.filter(t => t.product_id === pid && t.pos_id === posId)
   .reduce((a, t) => a + Number(t.qty), 0);
 const soldAtPos = (pid, posId) => state.sales.filter(s => s.product_id === pid && s.pos_id === posId)
@@ -1545,7 +1545,7 @@ window.posSheetFor = pos => {
 };
 /* display order for locations everywhere: Home, Teta, Pharma St.Rita, then any
    other POS alphabetically */
-const POS_ORDER = ["home", "teta", "pharmastrita"];
+const POS_ORDER = ["home", "house", "teta", "pharmastrita"];
 window.posRank = pos => {
   const n = normPosName(pos && pos.name);
   if (!n) return POS_ORDER.length;
@@ -2733,7 +2733,7 @@ window.resetInventoriesBaseline = async () => {
   if (typeof BASELINE_0628 === "undefined") { alert("Baseline data not loaded — reload the page."); return; }
   if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
   if (!(await niceConfirm("DELETE ALL inventories & load the June 28 baseline?",
-    "Every inventory count ever submitted is PERMANENTLY deleted (sales, purchases, gifts, losses and expenses are kept). Then one count dated 28 Jun 2026 is submitted: Home 444 units · Teta 66 · Pharma St.Rita 0 — products not in your list count as 0. This cannot be undone.",
+    "Every inventory count ever submitted is PERMANENTLY deleted (sales, purchases, gifts, losses and expenses are kept). Then one count dated 28 Jun 2026 is submitted covering EVERY location: Home 444 units · Teta 66 · everything and everywhere else 0 — ONLY your list remains. This cannot be undone.",
     "DELETE & reset"))) return;
   if (remote) {
     const r1 = await client.from("inventory_lines").delete().not("id", "is", null);
@@ -2744,13 +2744,21 @@ window.resetInventoriesBaseline = async () => {
   state.inventory_lines = []; state.inventories = [];
   invDrafts = []; activeInv = null; saveInvDrafts();
   if (!remote) saveLocal();
-  // make sure the three locations exist, then one full count (missing = 0)
-  const d = { id: uid(), date: BASELINE_0628.date, pos_id: "ALL", counts: {} };
+  // make sure the three baseline locations exist, then one full count over
+  // EVERY existing location — baseline values where given, 0 everywhere else,
+  // so ONLY the dictated quantities remain anywhere (duplicates included)
+  const locSheet = {};
   for (const [name, sheet] of Object.entries(BASELINE_0628.locations)) {
     let pos = state.pos.find(x => normPosName(x.name) === normPosName(name))
+           || (normPosName(name) === "home" ? homePos() : null)
            || state.pos.find(x => posSheetFor(x) === (typeof POS_SHEETS !== "undefined" ? POS_SHEETS[name] : null));
     if (!pos) pos = await addRow("pos", { name });
     if (!pos) return;
+    locSheet[pos.id] = sheet;
+  }
+  const d = { id: uid(), date: BASELINE_0628.date, pos_id: "ALL", counts: {} };
+  for (const pos of state.pos) {
+    const sheet = locSheet[pos.id] || {};
     for (const p of state.products)
       d.counts[p.id + "|" + pos.id] = String((p.ref != null && sheet[p.ref] !== undefined) ? sheet[p.ref] : 0);
   }
