@@ -2922,24 +2922,29 @@ window.submitInventory = async () => {
   const invDraft = activeDraft();
   if (!invDraft) return;
   if (invDraft.pos_id === "ALL") {
-    // matrix sheet: one inventory record per location that has counts
+    // matrix sheet: one inventory record per location that has REAL counts.
+    // A line is stored only if the counted qty is non-zero OR it actually
+    // corrects leftover stock to 0 — zero-on-already-zero lines are noise.
     const byLoc = {};
     for (const [k, v] of Object.entries(invDraft.counts)) {
       if (v === "" || !isFinite(Number(v))) continue;
       const i = k.indexOf("|");
-      (byLoc[k.slice(i + 1)] ??= []).push([k.slice(0, i), Number(v)]);
+      const pid = k.slice(0, i), loc = k.slice(i + 1);
+      const posId = loc === "wh" ? null : loc;
+      const theo = posId ? posStockOf(pid, posId) : warehouseOf(prodById(pid));
+      if (Number(v) === 0 && theo === 0) continue;
+      (byLoc[loc] ??= []).push([pid, Number(v), theo]);
     }
     const locs = Object.keys(byLoc);
     const total = locs.reduce((a, l) => a + byLoc[l].length, 0);
-    if (!total) { alert("Count at least one product first (type its actual quantity)."); return; }
+    if (!total) { alert("Every line equals the current stock (or is 0 on 0) — nothing to save."); return; }
     if (!confirm(`Submit this inventory? ${total} count${total === 1 ? "" : "s"} across ${locs.length} location${locs.length === 1 ? "" : "s"} — stock will be adjusted to the counted quantities.`)) return;
     for (const loc of locs) {
       const posId = loc === "wh" ? null : loc;
       const invRow = { id: uid(), date: invDraft.date, pos_id: posId };
-      const lines = byLoc[loc].map(([pid, counted]) => ({
+      const lines = byLoc[loc].map(([pid, counted, theoretical]) => ({
         id: uid(), inventory_id: invRow.id, product_id: pid,
-        theoretical: posId ? posStockOf(pid, posId) : warehouseOf(prodById(pid)),
-        counted,
+        theoretical, counted,
       }));
       if (!(await persistInventory(invRow, lines))) return;
     }
@@ -2949,14 +2954,16 @@ window.submitInventory = async () => {
     render();
     return;
   }
-  const entries = Object.entries(invDraft.counts).filter(([, v]) => v !== "" && isFinite(Number(v)));
-  if (!entries.length) { alert("Count at least one product first (type its actual quantity)."); return; }
+  const entries = Object.entries(invDraft.counts)
+    .filter(([, v]) => v !== "" && isFinite(Number(v)))
+    .map(([pid, v]) => [pid, Number(v), invDraft.pos_id ? posStockOf(pid, invDraft.pos_id) : warehouseOf(prodById(pid))])
+    .filter(([, v, theo]) => v !== 0 || theo !== 0);
+  if (!entries.length) { alert("Every line equals the current stock (or is 0 on 0) — nothing to save."); return; }
   if (!confirm(`Submit this inventory for ${invScopeName(invDraft.pos_id)}? ${entries.length} product${entries.length === 1 ? "" : "s"} counted — stock will be adjusted to the counted quantities.`)) return;
   const invRow = { id: uid(), date: invDraft.date, pos_id: invDraft.pos_id };
-  const lines = entries.map(([pid, v]) => ({
+  const lines = entries.map(([pid, counted, theoretical]) => ({
     id: uid(), inventory_id: invRow.id, product_id: pid,
-    theoretical: invDraft.pos_id ? posStockOf(pid, invDraft.pos_id) : warehouseOf(prodById(pid)),
-    counted: Number(v),
+    theoretical, counted,
   }));
   if (!(await persistInventory(invRow, lines))) return;
   invDrafts = invDrafts.filter(d => d.id !== activeInv);
