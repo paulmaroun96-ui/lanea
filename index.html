@@ -354,6 +354,7 @@
         <button class="btn gold" type="button" onclick="importMamBatch()">Import Mam's (Teta) batch — 20 transfers + 22 sales at website prices</button>
         <button class="btn gold" type="button" onclick="importMamExpenses()">Import the exhibition expenses ($2,886.41 — LBP at 89,500/$)</button>
         <button class="btn gold" type="button" onclick="fixTetaPrices()">Set Teta at reseller prices (−15%) + re-price her existing sales</button>
+        <button class="btn gold" type="button" onclick="importPharmaBatch()">Import Pharmacie St.Rita placement (25 Jul — 137 units → Pharma)</button>
         <button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>
       </div>
       <p class="hint">Removes every old / overwriting count and replaces them with ONE clean count of your current stock. Your quantities do not change by a single unit.</p>
@@ -2996,6 +2997,33 @@ window.importJulySales = async () => {
     if (!(await addRow("gifts", { date: g.date, product_id: p.id, qty: g.qty, note: g.note }))) return;
   }
   toast(`July imported ✓ — ${fmtN(units)} units sold ($5,691) + 2 gifts, stock deducted`);
+  render();
+};
+/* Pharmacie Ste Rita placement (handwritten invoices 26/27/28, 25 Jul 2026):
+   137 units transferred Home → Pharma St.Rita. Consignment stock, NOT sales —
+   matches the Book1 September Pharma count exactly. */
+window.importPharmaBatch = async () => {
+  if (typeof PHARMA_BATCH === "undefined") { alert("Pharma data not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  const D = PHARMA_BATCH.date;
+  let pharma = state.pos.find(x => posSheetFor(x) === (typeof POS_SHEETS !== "undefined" ? POS_SHEETS["Pharma St.Rita"] : null))
+            || state.pos.find(x => normPosName(x.name).indexOf("pharma") >= 0);
+  if (!pharma) pharma = await addRow("pos", { name: "Pharma St.Rita" });
+  if (!pharma) return;
+  if (state.transfers.some(t => t.date === D && t.pos_id === pharma.id)) {
+    alert(`The Pharmacie St.Rita placement is already imported (transfers dated ${fmtD(D)}).`); return;
+  }
+  const units = PHARMA_BATCH.transfers.reduce((a, l) => a + l.qty, 0);
+  if (!(await niceConfirm("Import the Pharmacie St.Rita placement?",
+    `${fmtN(units)} units (invoices 26–28 of 25 Jul 2026, $2,421.65 at her prices) move Home → Pharma St.Rita as consignment stock. No sales are recorded — revenue comes when she sells.`, "Import placement"))) return;
+  const byRef = {};
+  for (const p of state.products) if (p.ref) byRef[p.ref] = p;
+  for (const l of PHARMA_BATCH.transfers) {
+    const p = byRef[l.ref];
+    if (!p) { alert("Unknown ref " + l.ref); return; }
+    if (!(await addRow("transfers", { date: D, product_id: p.id, pos_id: pharma.id, qty: l.qty }))) return;
+  }
+  toast(`Pharmacie St.Rita placement imported ✓ — ${fmtN(units)} units Home → Pharma`);
   render();
 };
 /* GUARANTEE: everything sold at Teta is at her reseller price (15% off the
