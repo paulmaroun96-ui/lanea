@@ -350,7 +350,8 @@
       <summary class="hint" style="cursor:pointer;display:inline-block">⚙ Maintenance</summary>
       <div class="rowform" style="margin-top:8px">
         <button class="btn gold" type="button" onclick="addJuneDeliveryHome()">Add the CMD-2026-06-26 delivery (+1,568 units) into Home</button>
-        <button class="btn gold" type="button" onclick="importJulySales()">Import the July WhatsApp sales (204 units · $5,691 + 2 gifts)</button>
+        <button class="btn gold" type="button" onclick="deductJulyInventoryOnly()">Deduct July quantities from Home — INVENTORY ONLY (no sales records)</button>
+        <button class="btn ghost" type="button" onclick="importJulySales()">…or import July as SALES (204 units · $5,691 + 2 gifts)</button>
         <button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>
       </div>
       <p class="hint">Removes every old / overwriting count and replaces them with ONE clean count of your current stock. Your quantities do not change by a single unit.</p>
@@ -2854,6 +2855,9 @@ window.importJulySales = async () => {
   if (state.sales.some(s => (s.date || "").slice(0, 7) === "2026-07")) {
     alert("July 2026 sales already exist in the log — import blocked to avoid duplicates."); return;
   }
+  if (state.inventories.some(i => i.date === "2026-07-20" && !i.deleted)) {
+    alert("The July quantities were already deducted as INVENTORY ONLY (count dated 20 Jul) — importing the sales now would deduct them twice. Blocked."); return;
+  }
   const units = JULY_SALES.sales.reduce((a, l) => a + l.qty, 0);
   if (!(await niceConfirm("Import the July sales?",
     `${fmtN(units)} units sold ($5,691 revenue) and 2 gifts, dated 1–20 July at the real prices from your messages — they deduct from the June 28 baseline + delivery stock.`, "Import July"))) return;
@@ -2873,6 +2877,53 @@ window.importJulySales = async () => {
     if (!(await addRow("gifts", { date: g.date, product_id: p.id, qty: g.qty, note: g.note }))) return;
   }
   toast(`July imported ✓ — ${fmtN(units)} units sold ($5,691) + 2 gifts, stock deducted`);
+  render();
+};
+/* July quantities OUT of Home as INVENTORY ONLY — no sales records, no
+   revenue: one Home count dated 20 July. If the July sales were already
+   imported, they are deleted and the stock stays pinned where it is. */
+const JULY_DEDUCT_DATE = "2026-07-20";
+window.deductJulyInventoryOnly = async () => {
+  if (typeof JULY_SALES === "undefined") { alert("July data not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  if (state.inventories.some(i => i.date === JULY_DEDUCT_DATE && !i.deleted)) {
+    alert("The July quantities are already deducted (count dated 20 Jul 2026)."); return;
+  }
+  let hp = homePos();
+  if (!hp) hp = await addRow("pos", { name: "Home" });
+  if (!hp) return;
+  const julSales = state.sales.filter(s => (s.date || "").slice(0, 7) === "2026-07");
+  const julGifts = state.gifts.filter(g => (g.date || "").slice(0, 7) === "2026-07");
+  const hasRecords = julSales.length || julGifts.length;
+  if (!(await niceConfirm("Deduct the July quantities from Home — inventory only?",
+    hasRecords
+      ? "Your July sales/gift records are DELETED (revenue disappears from the dashboard) and the stock stays exactly where it is now — one clean Home count dated 20 Jul 2026. Inventory only, as asked."
+      : "206 units (the whole July 1–20 WhatsApp log, gifts included) are deducted from Home as ONE count dated 20 Jul 2026 — no sales, no revenue, inventory only.",
+    "Deduct from inventory"))) return;
+  const byRef = {};
+  for (const p of state.products) if (p.ref) byRef[p.ref] = p;
+  const counts = {};
+  if (hasRecords) {
+    // pin the current (already-deducted) stock, then remove the records
+    const touched = new Set([...julSales.map(s => s.product_id), ...julGifts.map(g => g.product_id)]);
+    for (const pid of touched) counts[pid] = Math.max(posStockOf(pid, hp.id), 0);
+    for (const s of [...julSales]) if (!(await deleteRow("sales", s.id))) return;
+    for (const g of [...julGifts]) if (!(await deleteRow("gifts", g.id))) return;
+  } else {
+    const qty = {};
+    for (const l of JULY_SALES.sales) qty[l.ref] = (qty[l.ref] || 0) + l.qty;
+    for (const g of JULY_SALES.gifts) qty[g.ref] = (qty[g.ref] || 0) + g.qty;
+    for (const [ref, q] of Object.entries(qty)) {
+      const p = byRef[ref]; if (!p) continue;
+      counts[p.id] = Math.max(posStockOf(p.id, hp.id) - q, 0);
+    }
+  }
+  const d = { id: uid(), date: JULY_DEDUCT_DATE, pos_id: "ALL", counts: {} };
+  for (const [pid, v] of Object.entries(counts)) d.counts[pid + "|" + hp.id] = String(v);
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  await submitInventory();
+  toast("July quantities deducted from Home ✓ — inventory only, no sales records");
   render();
 };
 /* CONSOLIDATE: delete every old / overwriting inventory count, then submit
