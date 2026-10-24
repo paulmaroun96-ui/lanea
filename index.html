@@ -813,15 +813,11 @@ const prodMatch = (p, q) => !q || prodShort(p).toLowerCase().includes(q)
   || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q);
 const prodSort = (a, b) => (isFreebie(a) - isFreebie(b)) || prodShort(a).localeCompare(prodShort(b));
 
-/* product <option>s grouped by category — easier picking among 100+ products */
+/* product <option>s — ALWAYS the same flat A→Z order as the daily report
+   sales grid (gift/free items last), everywhere in the app */
 function prodOptionsGrouped(sel) {
-  const groups = {};
-  for (const p of state.products) (groups[catOf(p)] ??= []).push(p);
-  const order = PRODUCT_CATS.filter(c => groups[c]).concat(Object.keys(groups).filter(c => !PRODUCT_CATS.includes(c)).sort());
-  return order.map(c => `<optgroup label="${esc(c)}">` +
-    groups[c].sort(prodSort)
-      .map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(prodShort(p))}</option>`).join("") +
-    "</optgroup>").join("");
+  return [...state.products].sort(prodSort)
+    .map(p => `<option value="${p.id}"${p.id === sel ? " selected" : ""}>${esc(prodShort(p))}</option>`).join("");
 }
 
 let state = { products: [], purchases: [], pos: [], pos_prices: [], transfers: [], losses: [], inventories: [], inventory_lines: [], sales: [], gifts: [], expenses: [], recurring_expenses: [] };
@@ -1836,7 +1832,7 @@ function historyRows() {
   return Object.entries(byProd)
     .map(([pid, b]) => ({ p: prodById(pid), ...b, gross: toE(b.revenue) - b.cogs }))
     .filter(r => r.p && prodMatch(r.p, q))
-    .sort((a, b) => b.revenue - a.revenue);
+    .sort((a, b) => prodSort(a.p, b.p)); // same A→Z order as the daily report (click a column to rank)
 }
 window.renderHistory = () => {
   const el = document.getElementById("historyTable");
@@ -2261,7 +2257,7 @@ function renderReport() {
   });
   h += `<tr class="newrow">
     <td><select class="rin" id="nr_g_prod" onchange="nrGiftSync()"><option value=""></option>${prodOpt("")}</select></td>
-    <td class="num"><input class="rin" id="nr_g_qty" type="number" min="1" step="1" placeholder="qty" style="width:72px" ${enter("addReportGift")}></td>
+    <td class="num"><input class="rin" id="nr_g_qty" type="number" min="1" step="1" value="1" placeholder="qty" style="width:72px" ${enter("addReportGift")}></td>
     <td><select class="rin" id="nr_g_pos">${locOpt("")}</select></td>
     <td><input class="rin" id="nr_g_note" placeholder="Person / comment — e.g. Marie (PR)" ${enter("addReportGift")}></td>
     <td><button class="btn small gold" onclick="addReportGift()">+ Add</button></td></tr>`;
@@ -2354,7 +2350,8 @@ window.updDraft = (kind, i, field, val) => {
 };
 /* (single-line sale entry replaced by the product x POS sales grid above) */
 window.addReportGift = () => {
-  const product_id = gv("nr_g_prod"), qty = Number(gv("nr_g_qty"));
+  const product_id = gv("nr_g_prod");
+  const qty = gv("nr_g_qty") === "" ? 1 : Number(gv("nr_g_qty")); // default 1
   const pos_id = gv("nr_g_pos") || "";
   if (!product_id) { alert("Pick a product."); return; }
   if (!(qty > 0)) { alert("Enter the quantity gifted."); return; }
