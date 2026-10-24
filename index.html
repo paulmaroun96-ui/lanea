@@ -815,7 +815,21 @@ function prodLabel(p) {
 const prodLabelById = id => { const p = prodById(id); return p ? prodLabel(p) : "(deleted)"; };
 const prodMatch = (p, q) => !q || prodShort(p).toLowerCase().includes(q)
   || (p.name || "").toLowerCase().includes(q) || (p.ref || "").toLowerCase().includes(q);
-const prodSort = (a, b) => (isFreebie(a) - isFreebie(b)) || prodShort(a).localeCompare(prodShort(b));
+/* family-aware A→Z: sort by the base name (before "·"), then by the scent —
+   "Nature" first, the rest alphabetical. So "Gel Douche · Monoï" follows
+   "Gel Douche · Nature" directly, BEFORE the "Gel Douche Limonade" family. */
+const prodKey = p => {
+  const s = prodShort(p);
+  const i = s.indexOf("·");
+  if (i < 0) return [s.trim(), ""];
+  const v = s.slice(i + 1).trim();
+  return [s.slice(0, i).trim(), /^nature\b/i.test(v) ? " " : v];
+};
+const prodSort = (a, b) => {
+  if (isFreebie(a) !== isFreebie(b)) return isFreebie(a) - isFreebie(b);
+  const A = prodKey(a), B = prodKey(b);
+  return A[0].localeCompare(B[0]) || A[1].localeCompare(B[1]);
+};
 
 /* product <option>s — ALWAYS the same flat A→Z order as the daily report
    sales grid (gift/free items last), everywhere in the app */
