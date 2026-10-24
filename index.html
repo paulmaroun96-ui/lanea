@@ -347,15 +347,11 @@
     </div>
     <div class="scrollbox" style="max-height:600px" id="invGrid"></div>
     <details class="no-print" style="margin-top:12px">
-      <summary class="hint" style="cursor:pointer;display:inline-block">⚙ One-time setup tools — baseline reset · Book1 · old history</summary>
-      <p class="hint" id="importState" style="margin-top:6px"></p>
+      <summary class="hint" style="cursor:pointer;display:inline-block">⚙ Maintenance</summary>
       <div class="rowform" style="margin-top:8px">
-        <button class="btn danger" type="button" onclick="resetInventoriesBaseline()">RESET all inventories → June 28 baseline (Home 444 · Teta 66 · rest 0)</button>
-        <button class="btn gold" type="button" onclick="addJuneDeliveryHome()">Add the CMD-2026-06-26 delivery (+1,568 units) into Home</button>
-        <button class="btn ghost" type="button" onclick="importBook1History()">Import Book1 sales &amp; gifts (history) + re-count</button>
-        <button class="btn ghost" type="button" onclick="importOldHistory()">Import OLD history (Old Inv Test: 1,130 sold + expenses) + re-count</button>
+        <button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>
       </div>
-      <p class="hint">These overwrite inventory counts — one-time setup only. Day to day, edit the table above.</p>
+      <p class="hint">Removes every old / overwriting count and replaces them with ONE clean count of your current stock. Your quantities do not change by a single unit.</p>
     </details>
   </section>
 </div>
@@ -2578,8 +2574,9 @@ window.nrGiftSync = () => {
   const el = document.getElementById("nr_g_prod");
   if (!el) return;
   const prod = el.value, hint = document.getElementById("nr_g_hint");
-  if (!prod) { hint.textContent = ""; return; }
-  const c = productCalc(prodById(prod));
+  const p = prod ? prodById(prod) : null;
+  if (!p) { if (hint) hint.textContent = ""; return; }
+  const c = productCalc(p);
   hint.textContent = `In stock: ${fmtN(c.stock - pendingOut(prod))} · cost value ${eurF.format(c.avgCost)}/unit`;
 };
 window.updDraft = (kind, i, field, val) => {
@@ -2830,6 +2827,38 @@ window.resetInventoriesBaseline = async () => {
   activeInv = d.id;
   await submitInventory();
   toast("Inventories reset ✓ — ONE baseline dated 28 Jun 2026: Home 444 · Teta 66 · Pharma St.Rita 0. Log your sales from here.");
+  render();
+};
+/* CONSOLIDATE: delete every old / overwriting inventory count, then submit
+   ONE clean count equal to today's stock — quantities do not move at all. */
+window.consolidateInventories = async () => {
+  if (!state.products.length) { alert("Nothing to clean up yet."); return; }
+  if (!(await niceConfirm("Delete all old inventory counts?",
+    "Every old or overwriting count is permanently deleted and replaced by ONE clean count of your CURRENT stock, dated today. Your quantities stay exactly the same — this only removes the history clutter.", "Clean up"))) return;
+  // snapshot today's stock BEFORE touching anything
+  const hp = homePos();
+  const locs = [...state.pos.map(p => ({ key: p.id })), ...(hp ? [] : [{ key: "wh" }])];
+  const snap = {};
+  for (const p of state.products)
+    for (const l of locs)
+      snap[p.id + "|" + l.key] = Math.max(l.key === "wh" ? warehouseOf(p) : posStockOf(p.id, l.key), 0);
+  // delete all counts
+  if (remote) {
+    const r1 = await client.from("inventory_lines").delete().not("id", "is", null);
+    if (r1.error) { alert("Cloud error: " + r1.error.message); return; }
+    const r2 = await client.from("inventories").delete().not("id", "is", null);
+    if (r2.error) { alert("Cloud error: " + r2.error.message); return; }
+  }
+  state.inventory_lines = []; state.inventories = [];
+  invDrafts = []; activeInv = null; saveInvDrafts();
+  if (!remote) saveLocal();
+  // one clean count = the snapshot (only real lines are stored on submit)
+  const d = { id: uid(), date: todayISO(), pos_id: "ALL", counts: {} };
+  for (const [k, v] of Object.entries(snap)) d.counts[k] = String(v);
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  await submitInventory();
+  toast("Old counts deleted ✓ — one clean count saved, quantities unchanged");
   render();
 };
 /* Add the CMD-2026-06-26 delivery (1,568 units, 67 products) ON TOP of the
