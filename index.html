@@ -104,6 +104,7 @@
   .chip { padding: 2px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
   .empty { color: var(--muted); font-style: italic; padding: 12px 2px; }
   .scrollbox { max-height: 430px; overflow-y: auto; }
+  .scrollbox table tr:first-child th { position: sticky; top: 0; background: #fff; z-index: 2; box-shadow: 0 1px 0 #e5e7eb; }
   .st { font-size: 10.5px; padding: 2px 9px; border-radius: 999px; font-weight: 700; letter-spacing: .5px; }
   .st-ok { background: #d9ecdd; color: #1e5c2a; } .st-low { background: #fdeeca; color: #8a5a06; } .st-out { background: var(--red-soft); color: var(--red); }
   .modal-ov { position: fixed; inset: 0; background: rgba(25,28,30,.45); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -2583,7 +2584,7 @@ function renderReport() {
         || state.pos.some(pos => lineOf(p.id, pos.id) || savedQ[p.id + "|" + pos.id]);
     }).sort(prodSort);
     const spos = sortedPos();
-    h += '<div style="overflow-x:auto"><table><tr><th>Product</th>'
+    h += '<div class="scrollbox" style="max-height:420px;overflow-x:auto"><table><tr><th>Product</th>'
       + spos.map(p => `<th class="num">${esc(p.name)}</th>`).join("")
       + '<th class="num">Total ($)</th></tr>';
     for (const p of rowsP) {
