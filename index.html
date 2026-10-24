@@ -349,6 +349,7 @@
     <details class="no-print" style="margin-top:12px">
       <summary class="hint" style="cursor:pointer;display:inline-block">⚙ Maintenance</summary>
       <div class="rowform" style="margin-top:8px">
+        <button class="btn gold" type="button" onclick="addJuneDeliveryHome()">Add the CMD-2026-06-26 delivery (+1,568 units) into Home</button>
         <button class="btn gold" type="button" onclick="importJulySales()">Import the July WhatsApp sales (204 units · $5,691 + 2 gifts)</button>
         <button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>
       </div>
@@ -2900,6 +2901,9 @@ const deliveryAdded = () => state.inventories.some(i => i.date === DELIV_DATE &&
 window.addJuneDeliveryHome = async () => {
   if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
   if (deliveryAdded()) { alert(`The ${DELIV_REF} delivery is already added (count dated ${fmtD(DELIV_DATE)}).`); return; }
+  // after a count cleanup the date marker is gone — make the double-add risk explicit
+  if (!state.inventories.some(i => i.date === (typeof BASELINE_0628 !== "undefined" ? BASELINE_0628.date : "")) && state.inventories.length
+      && !confirm("Careful: your counts were cleaned up or re-based since the baseline. Only continue if you are SURE the June 26 delivery is NOT already inside your current numbers — pressing this twice doubles 1,568 units.")) return;
   const rows = state.purchases.filter(u => u.invoice_ref === DELIV_REF);
   if (!rows.length) { alert(`No purchases found with ref ${DELIV_REF} — import the invoices first.`); return; }
   const byProd = {};
