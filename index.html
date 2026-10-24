@@ -351,6 +351,7 @@
       <div class="rowform" style="margin-top:8px">
         <button class="btn gold" type="button" onclick="addJuneDeliveryHome()">Add the CMD-2026-06-26 delivery (+1,568 units) into Home</button>
         <button class="btn gold" type="button" onclick="importAllSales()">Import ALL WhatsApp sales Jul–Oct (364 units · $9,151 + 8 gifts)</button>
+        <button class="btn gold" type="button" onclick="importMamBatch()">Import Mam's (Teta) batch — 20 transfers + 22 sales at website prices</button>
         <button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>
       </div>
       <p class="hint">Removes every old / overwriting count and replaces them with ONE clean count of your current stock. Your quantities do not change by a single unit.</p>
@@ -2876,6 +2877,44 @@ window.importJulySales = async () => {
     if (!(await addRow("gifts", { date: g.date, product_id: p.id, qty: g.qty, note: g.note }))) return;
   }
   toast(`July imported ✓ — ${fmtN(units)} units sold ($5,691) + 2 gifts, stock deducted`);
+  render();
+};
+/* Mam's boutique batch (= TETA, per the user): 21 sales at Teta + 1 at Home
+   + 20 transfers Home→Teta — all sale prices from the WEBSITE price list
+   (the POS's saved price, else the LANEA list), never the message prices. */
+window.importMamBatch = async () => {
+  if (typeof MAM_BATCH === "undefined") { alert("Batch data not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  const D = MAM_BATCH.date;
+  if (state.transfers.some(t => t.date === D)) {
+    alert(`This batch is already imported (transfers dated ${fmtD(D)}).`); return;
+  }
+  let hp = homePos();
+  if (!hp) hp = await addRow("pos", { name: "Home" });
+  let teta = state.pos.find(x => normPosName(x.name) === "teta");
+  if (!teta) teta = await addRow("pos", { name: "Teta" });
+  if (!hp || !teta) return;
+  const nS = MAM_BATCH.salesTeta.reduce((a, l) => a + l.qty, 0) + MAM_BATCH.salesHome.reduce((a, l) => a + l.qty, 0);
+  const nT = MAM_BATCH.transfers.reduce((a, l) => a + l.qty, 0);
+  if (!(await niceConfirm("Import the Mam's (Teta) batch?",
+    `${fmtN(nT)} units transferred Home → Teta, then ${fmtN(nS)} units sold (${fmtN(nS - 1)} at Teta, 1 at Home) — every sale at the WEBSITE price, dated ${fmtD(D)}.`, "Import batch"))) return;
+  const byRef = {};
+  for (const p of state.products) if (p.ref) byRef[p.ref] = p;
+  for (const l of MAM_BATCH.transfers) {
+    const p = byRef[l.ref]; if (!p) { alert("Unknown ref " + l.ref); return; }
+    if (!(await addRow("transfers", { date: D, product_id: p.id, pos_id: teta.id, qty: l.qty }))) return;
+  }
+  let rev = 0;
+  const sellAt = async (pos, l) => {
+    const p = byRef[l.ref]; if (!p) { alert("Unknown ref " + l.ref); return false; }
+    const price = priceFor(pos.id, p.id) ?? (typeof RETAIL_USD !== "undefined" ? RETAIL_USD[l.ref] : 0) ?? 0;
+    if (!(await addRow("sales", { date: D, pos_id: pos.id, product_id: p.id, qty: l.qty, price_per_unit: price }))) return false;
+    rev += l.qty * price;
+    return true;
+  };
+  for (const l of MAM_BATCH.salesTeta) if (!(await sellAt(teta, l))) return;
+  for (const l of MAM_BATCH.salesHome) if (!(await sellAt(hp, l))) return;
+  toast(`Teta batch imported ✓ — ${fmtN(nT)} transferred, ${fmtN(nS)} sold (${usdF.format(rev)} at website prices)`);
   render();
 };
 /* ALL WhatsApp sales (July 1 – Oct 24) as SALES at Home: real dates, real
