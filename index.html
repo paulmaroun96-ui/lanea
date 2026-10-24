@@ -734,6 +734,10 @@
     Signed in = every save syncs to the cloud and appears on all your devices. Settings keeps a JSON backup as a safety net.</p>
   </section>
 </div>
+<div id="undoWrap" class="no-print" style="position:fixed;left:16px;bottom:16px;z-index:70;display:flex;gap:8px">
+  <button class="btn ghost" id="undoBtn" style="display:none;box-shadow:0 2px 10px rgba(0,0,0,.12)" onclick="appUndo()"></button>
+  <button class="btn ghost" id="redoBtn" style="display:none;box-shadow:0 2px 10px rgba(0,0,0,.12)" onclick="appRedo()"></button>
+</div>
 <div id="toast"></div>
 </main>
 
@@ -1007,23 +1011,122 @@ function filteredLosses() {
 }
 
 /* ================= CRUD ================= */
+/* ================= undo / redo (Ctrl+Z / Ctrl+Y) ================= */
+const UNDO_KINDNAME = { sales: "sale", gifts: "gift", expenses: "expense", transfers: "transfer", losses: "loss", products: "product", pos: "location", pos_prices: "price", purchases: "purchase", inventories: "inventory count", inventory_lines: "inventory count", recurring_expenses: "recurring rule" };
+let UNDO_STACK = [], REDO_STACK = [], UNDO_LAST = 0, UNDO_SUSPEND = false;
+function recordUndo(kind, op) {
+  if (UNDO_SUSPEND) return;
+  const now = Date.now();
+  if (!UNDO_STACK.length || now - UNDO_LAST > 3000) UNDO_STACK.push({ kinds: {}, ops: [] });
+  const g = UNDO_STACK[UNDO_STACK.length - 1];
+  g.ops.push(op); g.kinds[UNDO_KINDNAME[kind] || kind] = 1;
+  UNDO_LAST = now;
+  if (UNDO_STACK.length > 30) UNDO_STACK.shift();
+  REDO_STACK = [];
+  renderUndo();
+}
+function clearUndo() { UNDO_STACK = []; REDO_STACK = []; UNDO_LAST = 0; renderUndo(); }
+const undoLabel = g => Object.keys(g.kinds).join(" + ") + (g.ops.length > 1 ? ` (${g.ops.length})` : "");
+function renderUndo() {
+  const u = document.getElementById("undoBtn"), r = document.getElementById("redoBtn");
+  if (!u) return;
+  const g = UNDO_STACK[UNDO_STACK.length - 1];
+  u.style.display = g ? "" : "none";
+  if (g) u.textContent = `\u21b6 Undo ${undoLabel(g)}`;
+  const rg = REDO_STACK[REDO_STACK.length - 1];
+  if (r) { r.style.display = rg ? "" : "none"; if (rg) r.textContent = `\u21b7 Redo ${undoLabel(rg)}`; }
+}
+async function reinsertRow(kind, row) {
+  if (remote) {
+    const { error } = await client.from(kind).insert(row);
+    if (error) { alert("Cloud error while undoing: " + error.message); return false; }
+  }
+  state[kind].push(row);
+  if (!remote) saveLocal();
+  return true;
+}
+async function applyOp(op, dir) {
+  if (op.type === "insert") return dir === "undo" ? deleteRow(op.kind, op.row.id) : reinsertRow(op.kind, { ...op.row });
+  if (op.type === "delete") return dir === "undo" ? reinsertRow(op.kind, { ...op.row }) : deleteRow(op.kind, op.row.id);
+  return updateRow(op.kind, op.id, dir === "undo" ? op.prev : op.next);
+}
+window.appUndo = async () => {
+  const g = UNDO_STACK.pop();
+  if (!g) return;
+  UNDO_SUSPEND = true;
+  try { for (const op of [...g.ops].reverse()) await applyOp(op, "undo"); }
+  finally { UNDO_SUSPEND = false; UNDO_LAST = 0; }
+  REDO_STACK.push(g);
+  if (REDO_STACK.length > 30) REDO_STACK.shift();
+  toast(`Undone: ${undoLabel(g)} \u21b6`);
+  renderUndo(); render();
+};
+window.appRedo = async () => {
+  const g = REDO_STACK.pop();
+  if (!g) return;
+  UNDO_SUSPEND = true;
+  try { for (const op of g.ops) await applyOp(op, "redo"); }
+  finally { UNDO_SUSPEND = false; UNDO_LAST = 0; }
+  UNDO_STACK.push(g);
+  toast(`Redone: ${undoLabel(g)} \u21b7`);
+  renderUndo(); render();
+};
+document.addEventListener("keydown", e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const t = e.target;
+  if (t && /INPUT|TEXTAREA|SELECT/.test(t.tagName || "")) return; // fields keep native undo
+  const k = (e.key || "").toLowerCase();
+  if (k === "z" && !e.shiftKey) { e.preventDefault(); appUndo(); }
+  else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); appRedo(); }
+});
 async function addRow(kind, row) {
   if (remote) {
     const { data, error } = await client.from(kind).insert(row).select().single();
     if (error) { alert("Cloud error: " + error.message); return null; }
-    state[kind].push(data); return data;
+    state[kind].push(data);
+    recordUndo(kind, { type: "insert", kind, row: { ...data } });
+    return data;
   }
-  const r = { id: uid(), ...row }; state[kind].push(r); saveLocal(); return r;
+  const r = { id: uid(), ...row }; state[kind].push(r); saveLocal();
+  recordUndo(kind, { type: "insert", kind, row: { ...r } });
+  return r;
 }
 async function updateRow(kind, id, fields) {
+  const __b = state[kind].find(r => r.id === id);
+  const __prev = {};
+  if (__b) for (const k in fields) __prev[k] = __b[k];
   if (remote) {
     const { data, error } = await client.from(kind).update(fields).eq("id", id).select().single();
     if (error) { alert("Cloud error: " + error.message); return false; }
-    const i = state[kind].findIndex(r => r.id === id); if (i >= 0) state[kind][i] = data; return true;
+    const i = state[kind].findIndex(r => r.id === id); if (i >= 0) state[kind][i] = data;
+    recordUndo(kind, { type: "update", kind, id, prev: __prev, next: { ...fields } });
+    return true;
   }
-  const r = state[kind].find(r => r.id === id); if (r) Object.assign(r, fields); saveLocal(); return true;
+  const r = state[kind].find(r => r.id === id); if (r) Object.assign(r, fields); saveLocal();
+  recordUndo(kind, { type: "update", kind, id, prev: __prev, next: { ...fields } });
+  return true;
 }
 async function deleteRow(kind, id) {
+  const __snap = [];
+  if (!UNDO_SUSPEND) {
+    const push = (k, r) => __snap.push({ type: "delete", kind: k, row: { ...r } });
+    if (kind === "products")
+      for (const k of ["purchases", "sales", "gifts", "pos_prices", "transfers", "inventory_lines", "losses"])
+        for (const r of state[k]) if (r.product_id === id) push(k, r);
+    if (kind === "pos") {
+      for (const k of ["pos_prices", "transfers", "losses"])
+        for (const r of state[k]) if (r.pos_id === id) push(k, r);
+      const dead = state.inventories.filter(i => i.pos_id === id);
+      for (const l of state.inventory_lines) if (dead.some(i => i.id === l.inventory_id)) push("inventory_lines", l);
+      for (const i of dead) push("inventories", i);
+      for (const sl of state.sales) if (sl.pos_id === id)
+        __snap.push({ type: "update", kind: "sales", id: sl.id, prev: { pos_id: sl.pos_id }, next: { pos_id: null } });
+    }
+    if (kind === "inventories")
+      for (const l of state.inventory_lines) if (l.inventory_id === id) push("inventory_lines", l);
+    const main = state[kind].find(r => r.id === id);
+    if (main) push(kind, main);
+  }
   if (remote) {
     const { error } = await client.from(kind).delete().eq("id", id);
     if (error) { alert("Cloud error: " + error.message); return false; }
@@ -1045,17 +1148,21 @@ async function deleteRow(kind, id) {
     state.inventory_lines = state.inventory_lines.filter(l => l.inventory_id !== id);
   }
   if (!remote) saveLocal();
+  for (const op of __snap) recordUndo(op.kind, op);
   return true;
 }
 async function upsertPosPrice(pos_id, product_id, price) {
   const existing = state.pos_prices.find(r => r.pos_id === pos_id && r.product_id === product_id);
+  const __prev = existing ? Number(existing.price) : null;
   if (remote) {
     const { data, error } = await client.from("pos_prices")
       .upsert({ pos_id, product_id, price }, { onConflict: "pos_id,product_id" }).select().single();
     if (error) { console.error(error); return; }
-    if (existing) Object.assign(existing, data); else state.pos_prices.push(data);
+    if (existing) { Object.assign(existing, data); recordUndo("pos_prices", { type: "update", kind: "pos_prices", id: existing.id, prev: { price: __prev }, next: { price } }); }
+    else { state.pos_prices.push(data); recordUndo("pos_prices", { type: "insert", kind: "pos_prices", row: { ...data } }); }
   } else {
-    if (existing) existing.price = price; else state.pos_prices.push({ id: uid(), pos_id, product_id, price });
+    if (existing) { existing.price = price; recordUndo("pos_prices", { type: "update", kind: "pos_prices", id: existing.id, prev: { price: __prev }, next: { price } }); }
+    else { const nr = { id: uid(), pos_id, product_id, price }; state.pos_prices.push(nr); recordUndo("pos_prices", { type: "insert", kind: "pos_prices", row: { ...nr } }); }
     saveLocal();
   }
 }
@@ -2651,7 +2758,11 @@ window.saveDay = async () => {
         renderDay(); return;
       }
       state[kind].push(...data);
-    } else state[kind].push(...rows);
+      for (const r of data) recordUndo(kind, { type: "insert", kind, row: { ...r } });
+    } else {
+      state[kind].push(...rows);
+      for (const r of rows) recordUndo(kind, { type: "insert", kind, row: { ...r } });
+    }
     saved += rows.length;
     if (kind === "sales") for (const s of rows) {
       await upsertPosPrice(s.pos_id, s.product_id, Number(s.price_per_unit));
@@ -2826,6 +2937,7 @@ window.resetInventoriesBaseline = async () => {
     if (r2.error) { alert("Cloud error: " + r2.error.message); return; }
   }
   state.inventory_lines = []; state.inventories = [];
+  clearUndo(); // bulk wipe cannot be undone
   invDrafts = []; activeInv = null; saveInvDrafts();
   if (!remote) saveLocal();
   // make sure the three baseline locations exist, then one full count over
@@ -3054,6 +3166,7 @@ window.consolidateInventories = async () => {
     if (r2.error) { alert("Cloud error: " + r2.error.message); return; }
   }
   state.inventory_lines = []; state.inventories = [];
+  clearUndo(); // bulk wipe cannot be undone
   invDrafts = []; activeInv = null; saveInvDrafts();
   if (!remote) saveLocal();
   // one clean count = the snapshot (only real lines are stored on submit)
@@ -3239,11 +3352,15 @@ async function persistInventory(invRow, lines) {
     let { data, error } = await client.from("inventories").insert(invRow).select().single();
     if (error) { alert("Cloud error: " + error.message); return false; }
     state.inventories.push(data);
+    recordUndo("inventories", { type: "insert", kind: "inventories", row: { ...data } });
     ({ data, error } = await client.from("inventory_lines").insert(lines).select());
     if (error) { alert("Cloud error: " + error.message); return false; }
     state.inventory_lines.push(...data);
+    for (const l of data) recordUndo("inventory_lines", { type: "insert", kind: "inventory_lines", row: { ...l } });
   } else {
     state.inventories.push(invRow); state.inventory_lines.push(...lines); saveLocal();
+    recordUndo("inventories", { type: "insert", kind: "inventories", row: { ...invRow } });
+    for (const l of lines) recordUndo("inventory_lines", { type: "insert", kind: "inventory_lines", row: { ...l } });
   }
   return true;
 }
