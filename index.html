@@ -3011,15 +3011,29 @@ window.importNamedGifts = async () => {
   }
   const units = GIFTS_NAMED.gifts.reduce((a, l) => a + l.qty, 0);
   if (!(await niceConfirm("Import the named gifts?",
-    `${fmtN(units)} units gifted from Home, each logged with the person's name (Adlibitum, Christina, Maya, Dr. Boustani, Rosy…), dated ${fmtD(GIFTS_NAMED.date)}. Their cost value reduces net profit.`, "Import gifts"))) return;
+    `${fmtN(units)} units gifted from Home, each logged with the person's name (Adlibitum, Christina, Maya, Dr. Boustani, Rosy…). They are OLD gifts: their cost reduces net profit but today's stock does NOT move.`, "Import gifts"))) return;
   const byRef = {};
   for (const p of state.products) if (p.ref) byRef[p.ref] = p;
+  // OLD gifts (pre-baseline): records + cost only — today's stock must NOT move
+  let hp = homePos();
+  if (!hp) hp = await addRow("pos", { name: "Home" });
+  if (!hp) return;
+  const snap = {};
+  for (const l of GIFTS_NAMED.gifts) {
+    const p = byRef[l.ref];
+    if (p && snap[p.id] === undefined) snap[p.id] = Math.max(posStockOf(p.id, hp.id), 0);
+  }
   for (const l of GIFTS_NAMED.gifts) {
     const p = byRef[l.ref];
     if (!p) { alert("Unknown ref " + l.ref); return; }
     if (!(await addRow("gifts", { date: GIFTS_NAMED.date, product_id: p.id, qty: l.qty, note: l.note || "" }))) return;
   }
-  toast(`Named gifts imported ✓ — ${fmtN(units)} units with their recipients`);
+  const d = { id: uid(), date: todayISO(), pos_id: "ALL", counts: {} };
+  for (const [pid, v] of Object.entries(snap)) d.counts[pid + "|" + hp.id] = String(v);
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  await submitInventory();
+  toast(`Named gifts imported ✓ — ${fmtN(units)} units with their recipients; stock unchanged (old gifts)`);
   render();
 };
 /* Pharmacie Ste Rita placement (handwritten invoices 26/27/28, 25 Jul 2026):
