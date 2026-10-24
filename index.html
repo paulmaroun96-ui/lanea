@@ -337,50 +337,25 @@
 
 <!-- ================= INVENTORY ================= -->
 <div class="tab" id="tab-inv" style="display:none">
-  <div class="pagehead"><h1>Inventory</h1><p>Physical inventory counts (fiches d'inventaire). A sheet stays a <b>draft</b> until you submit it — submitting updates the stock levels of all counted products.</p></div>
-  <section class="card no-print" id="invStart">
-    <h2>Fiche d'inventaire — start a count</h2>
-    <p class="hint">One sheet counts everything: <b>rows = products, columns = your locations (Home first, then the resellers)</b>. Type the real balance in the cells you count (leave the rest blank), then submit — stock adjusts per location and every difference is kept in the list below.</p>
-    <div class="rowform">
-      <label>Date<input id="inv_date" type="date"></label>
-      <button class="btn gold" type="button" onclick="startInventoryCurrent()">New count — prefilled with my current stock</button>
-      <button class="btn ghost" type="button" onclick="startInventory()">Start a BLANK count</button>
+  <div class="pagehead"><h1>Inventory</h1><p>What you have right now, per location. Type a correction in any cell, then press <b>Save changes</b>.</p></div>
+  <section class="card">
+    <div class="rowform no-print">
+      <label>Search<input id="ig_search" oninput="renderInvGrid()" placeholder="product…" style="min-width:220px"></label>
+      <button class="btn gold" id="igSave" onclick="saveInvGrid()">Save changes</button>
+      <button class="btn ghost" id="igDiscardBtn" onclick="igDiscard()" style="display:none">Discard changes</button>
+      <button class="btn ghost" onclick="exportInvGridCSV()">Export CSV</button>
     </div>
-    <p class="hint" id="importState" style="margin-top:6px"></p>
-    <details class="no-print" style="margin-top:8px">
-      <summary class="hint" style="cursor:pointer;display:inline-block">⚙ One-time setup tools — baseline reset · Book1 · old history (don't use these day to day)</summary>
+    <div class="scrollbox" style="max-height:600px" id="invGrid"></div>
+    <details class="no-print" style="margin-top:12px">
+      <summary class="hint" style="cursor:pointer;display:inline-block">⚙ One-time setup tools — baseline reset · Book1 · old history</summary>
+      <p class="hint" id="importState" style="margin-top:6px"></p>
       <div class="rowform" style="margin-top:8px">
         <button class="btn danger" type="button" onclick="resetInventoriesBaseline()">RESET all inventories → June 28 baseline (Home 444 · Teta 66 · rest 0)</button>
         <button class="btn ghost" type="button" onclick="importBook1History()">Import Book1 sales &amp; gifts (history) + re-count</button>
         <button class="btn ghost" type="button" onclick="importOldHistory()">Import OLD history (Old Inv Test: 1,130 sold + expenses) + re-count</button>
-        <button class="btn ghost" type="button" onclick="startPosInventoryPrefilled()">Prefill a fiche from the Book1 counts</button>
       </div>
-      <p class="hint">These create or overwrite inventory counts — one-time setup only. Day to day, use the two buttons above.</p>
+      <p class="hint">These overwrite inventory counts — one-time setup only. Day to day, edit the table above.</p>
     </details>
-  </section>
-  <section class="card" id="invSheet" style="display:none">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
-      <h2 style="margin:0" id="invTitle"></h2>
-    </div>
-    <p class="hint">Type the <b>actual counted quantity</b> for each product. Blank = not counted (no change). The sheet stays a draft — even if you close the browser — until you submit it.</p>
-    <div class="rowform no-print"><label>Search<input id="inv_search" oninput="renderInventory()" placeholder="product…" style="min-width:220px"></label></div>
-    <div class="scrollbox" style="max-height:420px" id="invTable"></div>
-    <div class="rep-tot" id="invTotals"></div>
-    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap" class="no-print">
-      <button class="btn gold" style="padding:12px 26px;font-size:14.5px" onclick="submitInventory()">Submit inventory</button>
-      <button class="btn ghost" onclick="closeInvSheet()">Close (keep as draft)</button>
-      <button class="btn ghost" onclick="discardInventory()">Discard sheet</button>
-    </div>
-  </section>
-  <section class="card"><h2>Inventory list</h2>
-    <p class="hint">Every inventory with its status — continue a draft anytime; submitted sheets show their theoretical vs actual differences.</p>
-    <div id="invHistory"></div>
-  </section>
-  <section class="card">
-    <h2>Variance analysis — écarts d'inventaire</h2>
-    <p class="hint">Each submitted count is compared to the theoretical stock at that moment (last count + purchases − sales − gifts − losses since).
-    <b>Negative variance = units missing</b> — a possible unrecorded sale, gift, loss or theft; positive = more found than expected. Valued at average cost, worst first.</p>
-    <div class="scrollbox" id="varianceTable"></div>
   </section>
 </div>
 
@@ -733,10 +708,9 @@
   </section>
   <section class="card">
     <h2>Counting &amp; reconciling</h2>
-    <p style="line-height:1.8"><b>Inventory</b> tab → <b>"New count — prefilled with my current stock"</b>: the fiche opens already filled with
-    today's quantities (your last count carried forward) — change only the lines that differ, <b>Submit</b>, and that becomes your single
-    <b>CURRENT ✓</b> inventory. Older counts collapse into the <b>Archive</b> (kept for the math, out of the way). A blank fiche is also available
-    for counting from scratch, and the one-time setup tools (baseline reset, Book1, old history) are tucked under ⚙.</p>
+    <p style="line-height:1.8"><b>Inventory</b> tab = ONE table: what you have right now — products A→Z, one column per location
+    (resellers highlighted), <b>Total per product</b> and <b>TOTAL per place</b>. To correct anything, type the real quantity in its cell
+    and press <b>Save changes</b> — only the cells you touched are recorded. The one-time setup tools (baseline reset, Book1, old history) live under ⚙.</p>
   </section>
   <section class="card">
     <h2>Reading the business</h2>
@@ -1854,6 +1828,94 @@ function renderCFO() {
   tb.innerHTML = h + "</table>";
 }
 
+/* ================= THE inventory grid: one plain, editable table =================
+   Rows = products A→Z, columns = Home + resellers (highlighted) + Total per
+   product, bottom row = TOTAL per place. Edit any cell, Save — that submits a
+   count for the changed cells only. */
+let IG_EDIT = {};
+const IG_RS_BG = "background:#f1f7f3";
+window.igSet = (pid, loc, val) => {
+  const k = pid + "|" + loc;
+  const p = prodById(pid);
+  const cur = String(loc === "wh" ? warehouseOf(p) : posStockOf(pid, loc));
+  if (val === "" || val === cur) delete IG_EDIT[k];
+  else IG_EDIT[k] = val;
+  renderInvGrid();
+};
+window.igDiscard = () => { IG_EDIT = {}; renderInvGrid(); };
+window.renderInvGrid = () => {
+  const el = document.getElementById("invGrid");
+  if (!el) return;
+  if (!state.products.length) { el.innerHTML = '<p class="empty">Import your invoices first (Purchases tab).</p>'; return; }
+  const hp = homePos();
+  const locs = [...sortedPos().map(p => ({ key: p.id, name: p.name, home: !!(hp && p.id === hp.id) })),
+                ...(hp ? [] : [{ key: "wh", name: "Home", home: true }])];
+  if (!locs.length) { el.innerHTML = '<p class="empty">Create your locations first (Sales & prices tab).</p>'; return; }
+  const q = (gv("ig_search") || "").toLowerCase();
+  const n = Object.keys(IG_EDIT).length;
+  const sv = document.getElementById("igSave"), di = document.getElementById("igDiscardBtn");
+  if (sv) { sv.textContent = n ? `Save changes (${n})` : "Save changes"; sv.disabled = !n; }
+  if (di) di.style.display = n ? "" : "none";
+  const stockAt = (p, l) => l.key === "wh" ? warehouseOf(p) : posStockOf(p.id, l.key);
+  const eff = (p, l) => { const e = IG_EDIT[p.id + "|" + l.key]; return e !== undefined ? Number(e) : stockAt(p, l); };
+  let h = `<table><tr><th>Product</th>`
+    + locs.map(l => `<th class="num" style="${l.home ? "" : IG_RS_BG}">${esc(l.name)}${l.home ? "" : '<div style="font-size:9.5px;font-weight:400;color:var(--muted)">reseller</div>'}</th>`).join("")
+    + `<th class="num">Total</th></tr>`;
+  const colTot = {}; let grand = 0;
+  for (const p of [...state.products].sort(prodSort)) {
+    let rowTot = 0;
+    const cells = locs.map(l => {
+      const v = eff(p, l);
+      rowTot += v; colTot[l.key] = (colTot[l.key] || 0) + v;
+      const k = p.id + "|" + l.key;
+      const edited = IG_EDIT[k] !== undefined;
+      return { l, v, edited, k };
+    });
+    grand += rowTot;
+    if (!prodMatch(p, q)) continue;
+    h += `<tr><td>${prodLabel(p)}</td>`
+      + cells.map(c => `<td class="num" style="${c.l.home ? "" : IG_RS_BG}">
+          <input class="rin ${c.edited ? "chg" : ""}" type="number" min="0" step="1" value="${c.v}" style="width:68px"
+            onchange="igSet('${p.id}','${c.l.key}',this.value)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"></td>`).join("")
+      + `<td class="num calc" style="font-weight:700">${fmtN(rowTot)}</td></tr>`;
+  }
+  h += `<tr class="total"><td>TOTAL per place</td>`
+    + locs.map(l => `<td class="num" style="${l.home ? "" : IG_RS_BG}">${fmtN(colTot[l.key] || 0)}</td>`).join("")
+    + `<td class="num">${fmtN(grand)}</td></tr>`;
+  el.innerHTML = h + "</table>";
+};
+window.saveInvGrid = async () => {
+  const n = Object.keys(IG_EDIT).length;
+  if (!n) { toast("Nothing changed — edit a cell first"); return; }
+  const d = { id: uid(), date: todayISO(), pos_id: "ALL", counts: { ...IG_EDIT } };
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  await submitInventory();
+  if (!invDrafts.some(x => x.id === d.id)) {
+    IG_EDIT = {};
+    toast("Inventory updated ✓");
+  } else {
+    invDrafts = invDrafts.filter(x => x.id !== d.id);
+    activeInv = null; saveInvDrafts();
+  }
+  render();
+};
+window.exportInvGridCSV = () => {
+  const hp = homePos();
+  const locs = [...sortedPos().map(p => ({ key: p.id, name: p.name })), ...(hp ? [] : [{ key: "wh", name: "Home" }])];
+  const rows = [["LANEA — Inventory"], ["Product", ...locs.map(l => l.name), "Total"]];
+  const totals = {}; let grand = 0;
+  for (const p of [...state.products].sort(prodSort)) {
+    const vals = locs.map(l => l.key === "wh" ? warehouseOf(p) : posStockOf(p.id, l.key));
+    const t = vals.reduce((a, v) => a + v, 0);
+    grand += t; vals.forEach((v, i) => totals[i] = (totals[i] || 0) + v);
+    rows.push([prodShort(p), ...vals, t]);
+  }
+  rows.push(["TOTAL per place", ...locs.map((l, i) => totals[i] || 0), grand]);
+  downloadFile("lanea-inventory.csv", "text/csv", toCSV(rows));
+};
+
 /* ================= location performance chart (Home / Teta / Pharma) ================= */
 let LC_POS = null;
 window.setLocChart = id => { LC_POS = id; renderLocChart(); };
@@ -2258,7 +2320,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderImportState(); renderVariance(); renderStocks(); renderPosStock(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
+  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInvGrid(); renderImportState(); renderStocks(); renderPosStock(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
@@ -2849,6 +2911,7 @@ window.invCountM = (pid, loc, val) => {
   saveInvDrafts(); renderInventory();
 };
 function renderInvTotals() {
+  if (!document.getElementById("invTotals")) return;
   const el = document.getElementById("invTotals");
   const invDraft = activeDraft();
   if (!invDraft) { el.innerHTML = ""; return; }
@@ -2873,6 +2936,7 @@ function renderInvTotals() {
     <span class="chip" style="background:${dValue >= 0 ? "#d9ecdd" : "#ffdad6"}">Value impact ${showE(dValue)}</span>`;
 }
 function renderInventory() {
+  if (!document.getElementById("invTable")) return;
   const startEl = document.getElementById("invStart"), sheetEl = document.getElementById("invSheet");
   const invDraft = activeDraft();
   if (!invDraft) { startEl.style.display = ""; sheetEl.style.display = "none"; renderInvList(); return; }
@@ -2973,6 +3037,7 @@ window.submitInventory = async () => {
 };
 window.discardInventory = () => { if (activeInv) deleteInvDraft(activeInv); };
 function renderInvList() {
+  if (!document.getElementById("invHistory")) return;
   const el = document.getElementById("invHistory");
   const items = [
     ...invDrafts.map(d => ({ type: "draft", date: d.date, obj: d })),
@@ -3054,6 +3119,7 @@ window.reopenInventory = async id => {
 
 /* ================= variance analysis (écarts d'inventaire) ================= */
 function renderVariance() {
+  if (!document.getElementById("varianceTable")) return;
   const el = document.getElementById("varianceTable");
   if (!el) return;
   if (!state.inventory_lines.length) {
