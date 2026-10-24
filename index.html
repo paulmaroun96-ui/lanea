@@ -405,10 +405,11 @@
       <label>Product<select id="t_product" required onchange="transferHint()"></select></label>
       <label>From<select id="t_from" onchange="transferHint()"></select></label>
       <label>To<select id="t_to" onchange="transferHint()"></select></label>
-      <label>Qty<input id="t_qty" type="number" min="1" step="1" required style="width:90px"></label>
+      <label>Qty<input id="t_qty" type="number" min="1" step="1" value="1" style="width:90px"></label>
       <button class="btn gold" type="submit">Transfer</button>
+      <button class="btn ghost" type="button" id="t_again" onclick="repeatTransfer()" style="display:none">↻ Same again</button>
     </form>
-    <p class="hint" id="t_hint"></p>
+    <p class="hint" id="t_hint">Defaults: quantity <b>1</b>, from <b>Home</b>, to <b>Teta</b> — pick the product and press Transfer. "Same again" repeats the last transfer in one click.</p>
   </section>
   <section class="card">
     <h2>Stock by location</h2>
@@ -2305,6 +2306,10 @@ function refreshSelects() {
     sel.innerHTML = '<option value="">Home</option>' + posOptsNoHome;
     sel.value = cur;
   }
+  { // transfers default TO Teta (one-tap restocking)
+    const sel = document.getElementById("t_to");
+    if (sel && !sel.value) { const t = state.pos.find(x => normPosName(x.name) === "teta"); if (t) sel.value = t.id; }
+  }
   const posOpts = sortedPos().map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
   {
     const sel = document.getElementById("sp_pos"); const cur = sel.value;
@@ -3526,26 +3531,40 @@ window.transferHint = () => {
   const nm = loc => loc ? (posById(loc)?.name || "?") : "Home";
   hint.textContent = `${nm(from)}: ${fmtN(at(from))} in stock   →   ${nm(to)}: ${fmtN(at(to))} in stock`;
 };
+/* transfers are one-tap like the gift line: qty defaults to 1, destination
+   defaults to Teta, and the last transfer can be repeated with one click */
+let LAST_TRANSFER = null;
+async function doTransfer(product_id, from, to, qty, date) {
+  if (!product_id) { alert("Pick a product."); return false; }
+  if (from === to) { alert("Choose two different locations."); return false; }
+  const p = prodById(product_id);
+  const avail = from ? posStockOf(product_id, from) : (homePos() ? posStockOf(product_id, homePos().id) : warehouseOf(p));
+  const fromName = from ? (posById(from)?.name || "this POS") : "Home";
+  const toName = to ? (posById(to)?.name || "this POS") : "Home";
+  if (qty > avail && !confirm(`${fromName} only holds ${fmtN(avail)} of this product — transfer anyway?`)) return false;
+  if (from) { if (!(await addRow("transfers", { date, product_id, pos_id: from, qty: -qty }))) return false; }
+  if (to) { if (!(await addRow("transfers", { date, product_id, pos_id: to, qty }))) return false; }
+  LAST_TRANSFER = { product_id, from, to, qty, date };
+  const again = document.getElementById("t_again");
+  if (again) { again.style.display = ""; again.textContent = `↻ Same again (${prodShort(p)} ×${fmtN(qty)} → ${toName})`; }
+  toast(`Transferred ${fmtN(qty)} × ${prodShort(p)}: ${fromName} → ${toName} ✓`);
+  render();
+  return true;
+}
 document.getElementById("transferForm").addEventListener("submit", async ev => {
   ev.preventDefault();
   if (!state.products.length) { alert("Add products first (Purchases or Catalog tab)."); return; }
-  const product_id = gv("t_product");
-  const from = gv("t_from") || null, to = gv("t_to") || null;
-  const qty = Number(gv("t_qty"));
+  const qty = gv("t_qty") === "" ? 1 : Number(gv("t_qty")); // default 1, like gifts
   if (!(qty > 0)) return;
-  if (from === to) { alert("Choose two different locations."); return; }
-  const p = prodById(product_id);
-  const avail = from ? posStockOf(product_id, from) : warehouseOf(p);
-  const fromName = from ? (posById(from)?.name || "this POS") : "Home";
-  const toName = to ? (posById(to)?.name || "this POS") : "Home";
-  if (qty > avail && !confirm(`${fromName} only holds ${fmtN(avail)} of this product — transfer anyway?`)) return;
-  const date = gv("t_date");
-  if (from) { if (!(await addRow("transfers", { date, product_id, pos_id: from, qty: -qty }))) return; }
-  if (to) { if (!(await addRow("transfers", { date, product_id, pos_id: to, qty }))) return; }
-  document.getElementById("t_qty").value = "";
-  toast(`Transferred ${fmtN(qty)}: ${fromName} → ${toName} ✓`);
-  render();
+  await doTransfer(gv("t_product"), gv("t_from") || null, gv("t_to") || null, qty, gv("t_date") || todayISO());
+  // keep the selections so the next Add is one tap; qty back to the default 1
+  document.getElementById("t_qty").value = "1";
 });
+window.repeatTransfer = async () => {
+  if (!LAST_TRANSFER) return;
+  const t = LAST_TRANSFER;
+  await doTransfer(t.product_id, t.from, t.to, t.qty, gv("t_date") || t.date || todayISO());
+};
 window.renderPosStock = () => {
   const view = gv("sp_pos");
   const q = (gv("sp_search") || "").toLowerCase();
