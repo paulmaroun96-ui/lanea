@@ -587,7 +587,8 @@
       <label>Date<input id="ex_date" type="date" required></label>
       <label>Description<input id="ex_desc" required style="min-width:220px" placeholder="e.g. DHL shipment, exhibition stand…"></label>
       <label>Category<select id="ex_cat"></select></label>
-      <label>Amount (€)<input id="ex_amount" type="number" min="0.01" step="0.01" required style="width:110px"></label>
+      <label>Amount<input id="ex_amount" type="number" min="0.01" step="0.01" required style="width:110px"></label>
+      <label>Currency<select id="ex_cur" style="width:70px"><option value="USD" selected>$</option><option value="EUR">€</option></select></label>
       <button class="btn gold" type="submit">Add expense</button>
     </form>
     <p class="hint">Any date works — use it to back-fill old expenses. Today's small costs can also go through the Daily report.</p>
@@ -602,7 +603,8 @@
     <form class="rowform" id="recForm">
       <label>Description<input id="rc_desc" required style="min-width:220px" placeholder="e.g. Rent + utilities"></label>
       <label>Category<select id="rc_cat"></select></label>
-      <label>Amount (€)<input id="rc_amount" type="number" min="0.01" step="0.01" required style="width:110px"></label>
+      <label>Amount<input id="rc_amount" type="number" min="0.01" step="0.01" required style="width:110px"></label>
+      <label>Currency<select id="rc_cur" style="width:70px"><option value="USD" selected>$</option><option value="EUR">€</option></select></label>
       <label>Day of month<input id="rc_day" type="number" min="1" max="31" value="1" style="width:80px"></label>
       <label>Starts<input id="rc_start" type="month"></label>
       <button class="btn gold" type="submit">Add recurring expense</button>
@@ -1644,9 +1646,9 @@ document.getElementById("recForm").addEventListener("submit", async ev => {
   ev.preventDefault();
   const start = (gv("rc_start") || todayISO().slice(0, 7)) + "-01";
   const ok = await addRow("recurring_expenses", {
-    description: gv("rc_desc").trim(),
+    description: gv("rc_desc").trim() + expToEUR(Number(gv("rc_amount")), gv("rc_cur") || "USD").suffix,
     category: gv("rc_cat"),
-    amount: Number(gv("rc_amount")),
+    amount: expToEUR(Number(gv("rc_amount")), gv("rc_cur") || "USD").amount,
     day_of_month: Number(gv("rc_day") || 1),
     start_date: start,
     active: true,
@@ -1659,6 +1661,11 @@ document.getElementById("recForm").addEventListener("submit", async ev => {
     render();
   }
 });
+/* expenses are BOOKED in EUR; typing in $ (the default) converts at the app
+   rate and keeps the original $ amount visible in the description */
+window.expToEUR = (amount, cur) => cur === "EUR"
+  ? { amount: Math.round(amount * 100) / 100, suffix: "" }
+  : { amount: Math.round((amount / USD_RATE) * 100) / 100, suffix: ` ($${Math.round(amount * 100) / 100})` };
 /* one-click import of ONLY the old expenses from Old Inv Test.xlsx —
    independent of the sales-history import, idempotent */
 window.importOldExpenses = async () => {
@@ -1675,13 +1682,15 @@ window.importOldExpenses = async () => {
 };
 document.getElementById("expForm").addEventListener("submit", async ev => {
   ev.preventDefault();
+  const raw = Number(gv("ex_amount"));
+  const cv = expToEUR(raw, gv("ex_cur") || "USD");
   const row = {
     date: gv("ex_date") || todayISO(),
-    description: gv("ex_desc").trim(),
+    description: gv("ex_desc").trim() + cv.suffix,
     category: gv("ex_cat"),
-    amount: Number(gv("ex_amount")),
+    amount: cv.amount,
   };
-  if (!row.description || !(row.amount > 0)) return;
+  if (!gv("ex_desc").trim() || !(row.amount > 0)) return;
   if (await addRow("expenses", row)) {
     document.getElementById("expForm").reset();
     document.getElementById("ex_date").value = todayISO();
@@ -2175,7 +2184,7 @@ function renderDay() {
 
 /* ================= interactive daily report ================= */
 const gv = id => { const el = document.getElementById(id); return el ? el.value : ""; };
-const NR_IDS = ["nr_g_prod", "nr_g_qty", "nr_g_pos", "nr_g_note", "nr_e_desc", "nr_e_cat", "nr_e_amt"];
+const NR_IDS = ["nr_g_prod", "nr_g_qty", "nr_g_pos", "nr_g_note", "nr_e_desc", "nr_e_cat", "nr_e_amt", "nr_e_cur"];
 function renderReport() {
   document.getElementById("repDate").textContent = fmtD(selectedDay);
   const n = draftCount();
@@ -2275,7 +2284,8 @@ function renderReport() {
   h += `<tr class="newrow">
     <td><input class="rin" id="nr_e_desc" placeholder="e.g. DHL shipment to Paris" ${enter("addReportExpense")}></td>
     <td><select class="rin" id="nr_e_cat">${catOpt("")}</select></td>
-    <td class="num"><input class="rin" id="nr_e_amt" type="number" min="0" step="0.01" placeholder="amount" style="width:95px" ${enter("addReportExpense")}></td>
+    <td class="num"><input class="rin" id="nr_e_amt" type="number" min="0" step="0.01" placeholder="amount" style="width:95px" ${enter("addReportExpense")}>
+      <select class="rin" id="nr_e_cur" style="width:52px"><option value="USD" selected>$</option><option value="EUR">€</option></select></td>
     <td><button class="btn small gold" onclick="addReportExpense()">+ Add</button></td></tr>`;
   h += `</table></div>`;
 
@@ -2364,10 +2374,11 @@ window.addReportGift = () => {
   saveDraft(); renderDay();
 };
 window.addReportExpense = () => {
-  const description = gv("nr_e_desc").trim(), amount = Number(gv("nr_e_amt"));
+  const description = gv("nr_e_desc").trim(), raw = Number(gv("nr_e_amt"));
   if (!description) { alert("Enter a description."); return; }
-  if (!(amount > 0)) { alert("Enter the amount."); return; }
-  draft.expenses.push({ date: selectedDay, description, category: gv("nr_e_cat"), amount });
+  if (!(raw > 0)) { alert("Enter the amount."); return; }
+  const cv = expToEUR(raw, gv("nr_e_cur") || "USD");
+  draft.expenses.push({ date: selectedDay, description: description + cv.suffix, category: gv("nr_e_cat"), amount: cv.amount });
   saveDraft(); renderDay();
   const el = document.getElementById("nr_e_desc"); if (el) el.focus();
 };
