@@ -347,6 +347,7 @@
       <button class="btn ghost" type="button" onclick="startPosInventoryPrefilled()">Prefill actual inventory — Home + Teta + Pharma St.Rita (Book1)</button>
       <button class="btn ghost" type="button" onclick="importBook1History()">Import Book1 sales &amp; gifts (history) + re-count</button>
       <button class="btn ghost" type="button" onclick="importOldHistory()">Import OLD history (Old Inv Test: 1,130 sold + expenses) + re-count</button>
+      <button class="btn danger" type="button" onclick="resetInventoriesBaseline()">RESET all inventories → June 28 baseline (Home 444 · Teta 66)</button>
     </div>
     <p class="hint" id="importState" style="margin-top:6px"></p>
   </section>
@@ -2637,6 +2638,7 @@ window.startPosInventoryPrefilled = async () => {
    the sheet's Qt Remaining so stock stays exactly the sheet. */
 const BOOK1_DATE = "2026-09-12";
 window.importBook1History = async () => {
+  if (baselineApplied()) { alert("You are on the June 28 baseline — this import would overwrite it with the old Book1 counts, so it is blocked."); return; }
   if (typeof POS_SHEETS === "undefined") { alert("Book1 data not loaded — reload the page."); return; }
   if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
   if (state.sales.some(s => s.date === BOOK1_DATE) || state.gifts.some(g => g.date === BOOK1_DATE)) {
@@ -2690,15 +2692,53 @@ function renderImportState() {
   const oldExp = typeof OLD_HISTORY !== "undefined" ? state.expenses.filter(e => OLD_HISTORY.expenses.some(o => o.description === e.description)).length : 0;
   el.innerHTML =
     chip(!!remote, remote ? "Signed in — saving to the cloud" : "NOT signed in — anything imported now stays in this browser only") +
-    chip(b1, b1 ? "Book1 sales & gifts: imported" : "Book1 sales & gifts: not imported yet") +
-    chip(oldOk, oldOk ? `OLD history: imported (${oldExp}/${typeof OLD_HISTORY !== "undefined" ? OLD_HISTORY.expenses.length : 0} expenses)` : "OLD history (1,130 sold + 55 expenses): not imported yet");
+    (baselineApplied()
+      ? chip(true, "June 28 baseline ACTIVE — Home 444 · Teta 66 · Pharma 0 (old imports are blocked)")
+      : chip(b1, b1 ? "Book1 sales & gifts: imported" : "Book1 sales & gifts: not imported yet") +
+        chip(oldOk, oldOk ? `OLD history: imported (${oldExp}/${typeof OLD_HISTORY !== "undefined" ? OLD_HISTORY.expenses.length : 0} expenses)` : "OLD history (1,130 sold + 55 expenses): not imported yet"));
 }
+/* FULL RESET: delete every inventory count ever made and submit THE single
+   June 28 baseline (sales, purchases, gifts, losses, expenses are untouched).
+   From then on, the daily reports move stock from this one reference. */
+const baselineApplied = () => typeof BASELINE_0628 !== "undefined" && state.inventories.some(i => i.date === BASELINE_0628.date);
+window.resetInventoriesBaseline = async () => {
+  if (typeof BASELINE_0628 === "undefined") { alert("Baseline data not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  if (!(await niceConfirm("DELETE ALL inventories & load the June 28 baseline?",
+    "Every inventory count ever submitted is PERMANENTLY deleted (sales, purchases, gifts, losses and expenses are kept). Then one count dated 28 Jun 2026 is submitted: Home 444 units · Teta 66 · Pharma St.Rita 0 — products not in your list count as 0. This cannot be undone.",
+    "DELETE & reset"))) return;
+  if (remote) {
+    const r1 = await client.from("inventory_lines").delete().not("id", "is", null);
+    if (r1.error) { alert("Cloud error: " + r1.error.message); return; }
+    const r2 = await client.from("inventories").delete().not("id", "is", null);
+    if (r2.error) { alert("Cloud error: " + r2.error.message); return; }
+  }
+  state.inventory_lines = []; state.inventories = [];
+  invDrafts = []; activeInv = null; saveInvDrafts();
+  if (!remote) saveLocal();
+  // make sure the three locations exist, then one full count (missing = 0)
+  const d = { id: uid(), date: BASELINE_0628.date, pos_id: "ALL", counts: {} };
+  for (const [name, sheet] of Object.entries(BASELINE_0628.locations)) {
+    let pos = state.pos.find(x => normPosName(x.name) === normPosName(name))
+           || state.pos.find(x => posSheetFor(x) === (typeof POS_SHEETS !== "undefined" ? POS_SHEETS[name] : null));
+    if (!pos) pos = await addRow("pos", { name });
+    if (!pos) return;
+    for (const p of state.products)
+      d.counts[p.id + "|" + pos.id] = String((p.ref != null && sheet[p.ref] !== undefined) ? sheet[p.ref] : 0);
+  }
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  await submitInventory();
+  toast("Inventories reset ✓ — ONE baseline dated 28 Jun 2026: Home 444 · Teta 66 · Pharma St.Rita 0. Log your sales from here.");
+  render();
+};
 /* OLD pre-app history (Old Inv Test.xlsx): everything sold/gifted before daily
    recording, at the OLD prices and OLD unit costs, plus the old operating
    expenses. Sales carry unit_cost so COGS uses the real historical cost
    (needs supabase/migration-v7-sale-cost.sql in the cloud). After importing,
    every location is re-counted to Book1 so stock stays exact. */
 window.importOldHistory = async () => {
+  if (baselineApplied()) { alert("You are on the June 28 baseline — this import would overwrite it with the old Book1 counts, so it is blocked."); return; }
   if (typeof OLD_HISTORY === "undefined") { alert("Old-history data not loaded — reload the page."); return; }
   if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
   const D = OLD_HISTORY.date;

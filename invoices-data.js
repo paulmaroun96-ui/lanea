@@ -3410,3 +3410,80 @@ const OLD_HISTORY = {
   }
  ]
 };
+
+// June 28 baseline counts given by Rudy on 2026-10-24: THE single inventory
+// after the full reset. Products not listed count as 0 everywhere;
+// Pharma St.Rita was not provided -> 0.
+const BASELINE_0628 = {
+ "date": "2026-06-28",
+ "locations": {
+  "Home": {
+   "CREJOU100": 24,
+   "CRENUI100": 31,
+   "MASQUEBEAU100": 13,
+   "GOMVIS100": 17,
+   "CREMARA100": 19,
+   "SERUM30": 6,
+   "GDNAT500": 4,
+   "CREPIE75": 4,
+   "BAINMOUSSANT500": 2,
+   "SAVAYRUVEDANE": 11,
+   "SMONOIH": 33,
+   "GDMONOI200H": 15,
+   "LCMONOI200H": 1,
+   "SHAMPMONOI200H": 6,
+   "SHAMPALOE200H": 8,
+   "LCALOE200H": 4,
+   "GDALOE200H": 15,
+   "ECOSLFDC500": 6,
+   "ECOGDN500": 5,
+   "MASQAF20": 8,
+   "MASQCE20": 21,
+   "MASQHY20": 27,
+   "MASQREL20": 11,
+   "MASQA-A20": 10,
+   "SAVONMONOI": 30,
+   "SAVONHELAV": 3,
+   "SAVONMIEL": 1,
+   "SAVONARGAN": 12,
+   "SAVONAMAN": 22,
+   "SAVONCOQ": 12,
+   "SAVONKARI": 12,
+   "GELLIMAMDO100": 13,
+   "GELLIMIEL100": 1,
+   "GDLIMO100": 3,
+   "GDLIMOMONOI": 15,
+   "GELLIMABRI100": 5,
+   "GDMONOI30H": 6,
+   "SHAMPMONOI30H": 8
+  },
+  "Teta": {
+   "CREJOU100": 3,
+   "CRENUI100": 3,
+   "MASQUEBEAU100": 4,
+   "GOMVIS100": 4,
+   "CREMARA100": 3,
+   "SERUM30": 2,
+   "LAIDEM250": 2,
+   "GOMMCORPS200": 1,
+   "CREPIE75": 2,
+   "BAUMLEVRES": 2,
+   "SMONOIH": 2,
+   "SAVAYRUVEDANE": 2,
+   "MASQAF20": 4,
+   "MASQCE20": 4,
+   "MASQHY20": 4,
+   "MASQREL20": 4,
+   "MASQA-A20": 4,
+   "SAVONMONOI": 2,
+   "SAVONARGAN": 1,
+   "SAVONCOQ": 4,
+   "GELLIMAMDO100": 2,
+   "GELLIMIEL100": 2,
+   "GDLIMO100": 2,
+   "GDLIMOMONOI": 1,
+   "GELLIMABRI100": 2
+  },
+  "Pharma St.Rita": {}
+ }
+};
