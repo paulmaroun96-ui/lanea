@@ -380,6 +380,13 @@
 <div class="tab" id="tab-stk" style="display:none">
   <div class="pagehead"><h1>Stocks</h1><p>Your actual stock levels — globally, per location, and per reseller with what they sold.</p></div>
   <section class="card">
+    <h2>Location performance</h2>
+    <div class="rowform no-print" id="lcBtns" style="margin-bottom:6px"></div>
+    <div class="cards" id="lcStats" style="margin-bottom:4px"></div>
+    <div id="lcLegend"></div>
+    <div class="scrollbox" style="max-height:520px" id="lcChart"></div>
+  </section>
+  <section class="card">
     <h2>Reseller tracking — given · sold · in hand · revenue</h2>
     <p class="hint">For each reseller: everything you <b>sent them</b> (transfers from Home), what they <b>sold</b> and the <b>revenue</b> it made,
     gifts/losses recorded there, count corrections, and what is <b>in their hands now</b> (valued at cost).</p>
@@ -1837,6 +1844,68 @@ function renderCFO() {
   tb.innerHTML = h + "</table>";
 }
 
+/* ================= location performance chart (Home / Teta / Pharma) ================= */
+let LC_POS = null;
+window.setLocChart = id => { LC_POS = id; renderLocChart(); };
+window.renderLocChart = () => {
+  const btns = document.getElementById("lcBtns");
+  if (!btns) return;
+  const locs = sortedPos();
+  if (!locs.length) { btns.innerHTML = ""; document.getElementById("lcChart").innerHTML = '<p class="empty">Create your locations first.</p>'; return; }
+  const hp = homePos();
+  if (!LC_POS || !locs.some(p => p.id === LC_POS)) LC_POS = (hp || locs[0]).id;
+  btns.innerHTML = locs.map(p =>
+    `<button type="button" class="btn small ${p.id === LC_POS ? "gold" : "ghost"}" onclick="setLocChart('${p.id}')">${esc(p.name)}</button>`).join("");
+  const pos = posById(LC_POS);
+  const isHome = hp && pos.id === hp.id;
+  const homePrice = p => (hp ? priceFor(hp.id, p.id) : null)
+    ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0);
+  const rows = [];
+  let tSold = 0, tHand = 0, tRev = 0, tMargin = 0;
+  for (const p of state.products) {
+    let sold = 0, rev = 0;
+    for (const s of state.sales) if (s.pos_id === pos.id && s.product_id === p.id) { sold += Number(s.qty); rev += Number(s.qty) * Number(s.price_per_unit); }
+    const hand = Math.max(posStockOf(p.id, pos.id), 0);
+    if (!sold && !hand) continue;
+    const margin = isHome ? 0 : Math.max(homePrice(p) * sold - rev, 0);
+    rows.push({ p, sold, hand, rev, margin });
+    tSold += sold; tHand += hand; tRev += rev; tMargin += margin;
+  }
+  const stats = [
+    ["inventory_2", "Total handled", fmtN(tSold + tHand), "units sold + in hand"],
+    ["sell", "Qty sold", fmtN(tSold), ""],
+    ["inventory", "Qty left", fmtN(tHand), "in hand now"],
+    ["payments", "I earned", showU(tRev), tSold ? "avg price " + showU(tRev / tSold) : "at this location's prices"],
+  ];
+  if (!isHome) stats.push(["storefront", `${pos.name} earned`, showU(tMargin), "their markup vs the Home price on what they sold"]);
+  document.getElementById("lcStats").innerHTML = stats.map(([ic, k, v, s]) =>
+    `<div class="stat"><div class="ich"><span class="ms">${ic}</span></div><div class="k">${esc(k)}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+  document.getElementById("lcLegend").innerHTML = rows.length ? `<p class="hint" style="margin:4px 0 8px">
+    <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#36656e;vertical-align:-1px"></span> Sold&nbsp;&nbsp;&nbsp;
+    <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#b9d2d8;vertical-align:-1px"></span> In hand
+    &nbsp;·&nbsp; bar length = units handled · right column = ${esc(pos.name)} price and revenue per product</p>` : "";
+  rows.sort((a, b) => (b.sold + b.hand) - (a.sold + a.hand));
+  const max = Math.max(1, ...rows.map(r => r.sold + r.hand));
+  const top = rows.slice(0, 30);
+  let h = "";
+  for (const r of top) {
+    const wS = (r.sold / max) * 100, wH = (r.hand / max) * 100;
+    const price = priceFor(pos.id, r.p.id);
+    h += `<div style="display:flex;align-items:center;gap:8px;padding:3px 0"
+        title="${esc(prodShort(r.p))} — sold ${r.sold} · in hand ${r.hand} · revenue ${usdF.format(r.rev)}${isHome || !r.margin ? "" : " · " + pos.name + " earned " + usdF.format(r.margin)}">
+      <div style="flex:0 0 235px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${prodLabel(r.p)}</div>
+      <div style="flex:1;display:flex;gap:2px;align-items:center;min-width:120px">
+        ${r.sold ? `<div style="width:${wS}%;min-width:3px;height:16px;background:#36656e;border-radius:${r.hand ? "0" : "0 4px 4px 0"}"></div>` : ""}
+        ${r.hand ? `<div style="width:${wH}%;min-width:3px;height:16px;background:#b9d2d8;border-radius:0 4px 4px 0"></div>` : ""}
+        <span style="font-size:11px;color:var(--muted);white-space:nowrap">${fmtN(r.sold + r.hand)}</span>
+      </div>
+      <div style="flex:0 0 160px;text-align:right;font-size:11.5px;color:var(--muted);white-space:nowrap">${price != null ? usdF.format(price) : "—"} · ${r.rev ? showU(r.rev) : "·"}</div>
+    </div>`;
+  }
+  if (rows.length > top.length) h += `<p class="empty">+ ${rows.length - top.length} more products — use the tables below for the full list</p>`;
+  document.getElementById("lcChart").innerHTML = h || `<p class="empty">Nothing sold or stocked at ${esc(pos.name)} yet.</p>`;
+};
+
 /* ================= reseller tracking: given / sold / in hand / revenue ================= */
 const resellerPosList = () => { const hp = homePos(); return sortedPos().filter(p => !hp || p.id !== hp.id); };
 window.resellerStats = (posId, pid) => {
@@ -2179,7 +2248,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderImportState(); renderVariance(); renderStocks(); renderPosStock(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
+  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInventory(); renderImportState(); renderVariance(); renderStocks(); renderPosStock(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
