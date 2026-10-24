@@ -628,6 +628,12 @@
 <div class="tab" id="tab-set" style="display:none">
   <div class="pagehead"><h1>Settings</h1><p>Cloud sync and backups.</p></div>
   <section class="card">
+    <h2>Show / hide pages &amp; buttons</h2>
+    <p class="hint">Untick a page to remove it from the menu (saved in this browser). Removed Maintenance buttons come back with the restore button.</p>
+    <div id="tabToggles" class="rowform"></div>
+    <button class="btn ghost" onclick="showEverything()" style="margin-top:6px">Restore everything (pages + removed buttons)</button>
+  </section>
+  <section class="card">
     <h2>Cloud sync (Supabase)</h2>
     <div class="settings-grid">
       <input id="sb_url" placeholder="https://xxxxxxxx.supabase.co">
@@ -2441,7 +2447,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInvGrid(); renderImportState(); renderMaintenance(); renderStocks(); renderPosStock(); renderTrfDraft(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
+  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInvGrid(); renderImportState(); renderMaintenance(); renderTabToggles(); renderStocks(); renderPosStock(); renderTrfDraft(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
@@ -2993,38 +2999,60 @@ window.importJulySales = async () => {
 };
 /* Maintenance panel: each one-time import shows ONLY until it is done —
    pressed buttons disappear by themselves. */
+let HIDDEN = { mnt: [], tabs: [] };
+try { HIDDEN = Object.assign({ mnt: [], tabs: [] }, JSON.parse(localStorage.getItem("lanea-hidden") || "{}")); } catch {}
+const saveHidden = () => localStorage.setItem("lanea-hidden", JSON.stringify(HIDDEN));
+window.hideMnt = key => { if (!HIDDEN.mnt.includes(key)) HIDDEN.mnt.push(key); saveHidden(); renderMaintenance(); toast("Button removed — restore it anytime in Settings"); };
+window.toggleTabVis = (key, show) => {
+  HIDDEN.tabs = HIDDEN.tabs.filter(t => t !== key);
+  if (!show) HIDDEN.tabs.push(key);
+  saveHidden(); applyHiddenTabs(); renderTabToggles();
+};
+window.showEverything = () => { HIDDEN = { mnt: [], tabs: [] }; saveHidden(); applyHiddenTabs(); render(); toast("All pages and buttons restored ✓"); };
+function applyHiddenTabs() {
+  document.querySelectorAll("#nav button").forEach(btn => {
+    btn.style.display = HIDDEN.tabs.includes(btn.dataset.tab) ? "none" : "";
+  });
+}
+const TAB_NAMES = { dash: "Dashboard", pur: "Purchases", day: "Daily report", inv: "Inventory", trf: "Transfers", los: "Losses", exp: "Expenses", stk: "Stocks", sal: "Sales & prices", his: "History", cat: "Catalog", help: "Guide" };
+window.renderTabToggles = () => {
+  const el = document.getElementById("tabToggles");
+  if (!el) return;
+  el.innerHTML = Object.entries(TAB_NAMES).map(([k, n]) =>
+    `<label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" style="width:auto" ${HIDDEN.tabs.includes(k) ? "" : "checked"} onchange="toggleTabVis('${k}', this.checked)">${n}</label>`).join("");
+};
 function renderMaintenance() {
   const el = document.getElementById("mntBox");
   if (!el) return;
   const hasSale = (dt, ref) => state.sales.some(s => s.date === dt && (!ref || (prodById(s.product_id) || {}).ref === ref));
   const items = [
-    { fn: "addJuneDeliveryHome()", label: "Add the CMD-2026-06-26 delivery (+1,568 units) into Home",
+    { key: "delivery", fn: "addJuneDeliveryHome()", label: "Add the CMD-2026-06-26 delivery (+1,568 units) into Home",
       done: typeof deliveryAdded === "function" && deliveryAdded() },
-    { fn: "importAllSales()", label: "Import ALL WhatsApp sales Jul–Oct (364 units · $9,151 + 8 gifts)",
+    { key: "allsales", fn: "importAllSales()", label: "Import ALL WhatsApp sales Jul–Oct (364 units · $9,151 + 8 gifts)",
       done: hasSale("2026-07-12") && hasSale("2026-10-04", "SHAMPMONOI30H") },
-    { fn: "importMamBatch()", label: "Import Mam's (Teta) batch — 20 transfers + 22 sales at website prices",
+    { key: "mam", fn: "importMamBatch()", label: "Import Mam's (Teta) batch — 20 transfers + 22 sales at website prices",
       done: state.transfers.some(t => t.date === "2026-10-22") },
-    { fn: "importMamExpenses()", label: "Import the exhibition expenses ($2,886.41 — LBP at 89,500/$)",
+    { key: "mexp", fn: "importMamExpenses()", label: "Import the exhibition expenses ($2,886.41 — LBP at 89,500/$)",
       done: state.expenses.some(e => e.description === "Nicole Kamel (04) ($200)") },
-    { fn: "importPharmaBatch()", label: "Import Pharmacie St.Rita placement (25 Jul — 137 units → Pharma)",
+    { key: "pharma", fn: "importPharmaBatch()", label: "Import Pharmacie St.Rita placement (25 Jul — 137 units → Pharma)",
       done: state.transfers.some(t => t.date === "2026-07-25") },
-    { fn: "importNamedGifts()", label: "Import the named gifts (102 units — Adlibitum, Christina, Maya…)",
+    { key: "gifts", fn: "importNamedGifts()", label: "Import the named gifts (102 units — Adlibitum, Christina, Maya…)",
       done: state.gifts.some(g => g.note === "Lidea") },
   ];
-  const open = items.filter(i => !i.done);
+  const wrap = (key, btnHtml) => `<span style="display:inline-flex;align-items:stretch;gap:2px">${btnHtml}<button class="btn small ghost" title="Remove this button (restore in Settings)" onclick="hideMnt('${key}')">✕</button></span>`;
+  const open = items.filter(i => !i.done && !HIDDEN.mnt.includes(i.key));
   let h = "";
   if (open.length) {
     h += '<div class="rowform">' + open.map(i =>
-      `<button class="btn gold" type="button" onclick="${i.fn}">${i.label}</button>`).join("") + "</div>";
-    h += `<p class="hint">One-time imports — each button disappears once its data is in. ${items.length - open.length}/${items.length} already done.</p>`;
+      wrap(i.key, `<button class="btn gold" type="button" onclick="${i.fn}">${i.label}</button>`)).join("") + "</div>";
+    h += `<p class="hint">One-time imports — a button disappears once its data is in, or press ✕ to remove it yourself. ${items.filter(i => i.done).length}/${items.length} done.</p>`;
   } else {
-    h += '<p class="hint">✓ All one-time imports are done — nothing pending here.</p>';
+    h += '<p class="hint">✓ Nothing pending here.</p>';
   }
-  h += `<div class="rowform" style="margin-top:6px">
-    <button class="btn ghost" type="button" onclick="fixTetaPrices()">Set Teta at reseller prices (−15%) + re-price her existing sales</button>
-    <button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>
-  </div>
-  <p class="hint">The cleanup intentionally changes NO quantities — it only replaces the old count history with one clean count.</p>`;
+  const tools = [];
+  if (!HIDDEN.mnt.includes("fixteta")) tools.push(wrap("fixteta", `<button class="btn ghost" type="button" onclick="fixTetaPrices()">Set Teta at reseller prices (−15%) + re-price her existing sales</button>`));
+  if (!HIDDEN.mnt.includes("consolidate")) tools.push(wrap("consolidate", `<button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>`));
+  if (tools.length) h += `<div class="rowform" style="margin-top:6px">${tools.join("")}</div>`;
   el.innerHTML = h;
 }
 /* Named gifts dictated by the user: 102 units from Home, each with the
@@ -4420,6 +4448,7 @@ window.saveLowStock = () => {
 };
 setVal("rc_start", todayISO().slice(0, 7));
 setVal("ex_date", todayISO());
+applyHiddenTabs();
 try { setVal("gm_key", localStorage.getItem(LS_GMKEY) || ""); } catch {}
 loadLocal(); setBadge(); render(); initSupabase();
 if (!remote) ensureRecurring();
