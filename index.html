@@ -351,6 +351,7 @@
       <p class="hint" id="importState" style="margin-top:6px"></p>
       <div class="rowform" style="margin-top:8px">
         <button class="btn danger" type="button" onclick="resetInventoriesBaseline()">RESET all inventories → June 28 baseline (Home 444 · Teta 66 · rest 0)</button>
+        <button class="btn gold" type="button" onclick="addJuneDeliveryHome()">Add the CMD-2026-06-26 delivery (+1,568 units) into Home</button>
         <button class="btn ghost" type="button" onclick="importBook1History()">Import Book1 sales &amp; gifts (history) + re-count</button>
         <button class="btn ghost" type="button" onclick="importOldHistory()">Import OLD history (Old Inv Test: 1,130 sold + expenses) + re-count</button>
       </div>
@@ -2783,7 +2784,8 @@ function renderImportState() {
   el.innerHTML =
     chip(!!remote, remote ? "Signed in — saving to the cloud" : "NOT signed in — anything imported now stays in this browser only") +
     (baselineApplied()
-      ? chip(true, "June 28 baseline ACTIVE — Home 444 · Teta 66 · Pharma 0 (old imports are blocked)")
+      ? chip(true, "June 28 baseline ACTIVE (old imports are blocked)")
+        + chip(deliveryAdded(), deliveryAdded() ? "CMD-2026-06-26 delivery (+1,568): added to Home" : "CMD-2026-06-26 delivery (+1,568 units): NOT added yet")
       : chip(b1, b1 ? "Book1 sales & gifts: imported" : "Book1 sales & gifts: not imported yet") +
         chip(oldOk, oldOk ? `OLD history: imported (${oldExp}/${typeof OLD_HISTORY !== "undefined" ? OLD_HISTORY.expenses.length : 0} expenses)` : "OLD history (1,130 sold + 55 expenses): not imported yet"));
 }
@@ -2828,6 +2830,33 @@ window.resetInventoriesBaseline = async () => {
   activeInv = d.id;
   await submitInventory();
   toast("Inventories reset ✓ — ONE baseline dated 28 Jun 2026: Home 444 · Teta 66 · Pharma St.Rita 0. Log your sales from here.");
+  render();
+};
+/* Add the CMD-2026-06-26 delivery (1,568 units, 67 products) ON TOP of the
+   June 28 baseline, as Home inventory. One count dated 2026-06-29:
+   counted = current Home stock + delivered units, per product. */
+const DELIV_REF = "CMD-2026-06-26", DELIV_DATE = "2026-06-29";
+const deliveryAdded = () => state.inventories.some(i => i.date === DELIV_DATE && !i.deleted);
+window.addJuneDeliveryHome = async () => {
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  if (deliveryAdded()) { alert(`The ${DELIV_REF} delivery is already added (count dated ${fmtD(DELIV_DATE)}).`); return; }
+  const rows = state.purchases.filter(u => u.invoice_ref === DELIV_REF);
+  if (!rows.length) { alert(`No purchases found with ref ${DELIV_REF} — import the invoices first.`); return; }
+  const byProd = {};
+  for (const u of rows) byProd[u.product_id] = (byProd[u.product_id] || 0) + Number(u.qty);
+  const units = Object.values(byProd).reduce((a, v) => a + v, 0);
+  if (!(await niceConfirm(`Add the ${DELIV_REF} delivery to Home?`,
+    `${fmtN(units)} units across ${Object.keys(byProd).length} products are ADDED on top of your current Home stock (one count dated ${fmtD(DELIV_DATE)}). Nothing else changes.`, "Add to Home"))) return;
+  let hp = homePos();
+  if (!hp) hp = await addRow("pos", { name: "Home" });
+  if (!hp) return;
+  const d = { id: uid(), date: DELIV_DATE, pos_id: "ALL", counts: {} };
+  for (const [pid, qty] of Object.entries(byProd))
+    d.counts[pid + "|" + hp.id] = String(Math.max(posStockOf(pid, hp.id), 0) + qty);
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  await submitInventory();
+  toast(`${DELIV_REF} delivery added into Home ✓ — +${fmtN(units)} units`);
   render();
 };
 /* OLD pre-app history (Old Inv Test.xlsx): everything sold/gifted before daily
