@@ -391,8 +391,9 @@
   </section>
   <section class="card">
     <h2>Product P&amp;L — purchased · sold · remaining · profit</h2>
-    <p class="hint"><b>Stock = last count + purchases − sales − gifts − losses.</b> Profit = what its sales earned (revenue − cost);
-    <b>Stock diff</b> is the net correction your inventory counts applied. Click any header to sort.</p>
+    <p class="hint">Pick a location (or all combined). <b>Purchased</b> at a reseller = units received from Home; <b>Profit</b> = that location's sales revenue − cost;
+    <b>Stock diff</b> = the net correction your inventory counts applied there. Click any header to sort.</p>
+    <div class="rowform no-print" id="stBtns" style="margin-bottom:6px"></div>
     <div class="rowform no-print" style="margin-bottom:10px">
       <label>Search<input id="st_search" oninput="renderStocks()" placeholder="product…" style="min-width:220px"></label>
       <button class="btn ghost" onclick="exportStocksCSV()">Export CSV</button>
@@ -1263,9 +1264,13 @@ function renderDash() {
     ["savings", "NET PROFIT", showE(net), `${fmtP(revEUR > 0 ? net / revEUR : null)} margin — after COGS, expenses, gifts & losses`, net < 0 ? "red" : ""],
   ].map(mkCard).join("");
   const cards = [
+    ["shopping_bag", "Units bought", fmtN(purUnits), `goods received · ${showE(purCost)} paid`, ""],
+    ["sell", "Units sold", fmtN(units), `brought in ${showU(revenue)}`, ""],
+    ["inventory_2", "Units remaining", fmtN(stockUnits), `≈ ${showU(stockRetail)} retail · ${showE(stockValue)} at cost`, ""],
+    ["query_stats", "Est. profit in stock", showE(stockProfit), "if every remaining unit sells at current prices", ""],
+    ["rocket_launch", "Projected total profit", showE(net + stockProfit), `today's net ${showE(net)} + the stock upside`, (net + stockProfit) < 0 ? "red" : ""],
     ["shopping_cart", "COGS", showE(cogs), `cost of the ${fmtN(units)} units sold · gross ${showE(gross)} (${fmtP(revEUR > 0 ? gross / revEUR : null)})`, ""],
     ["volunteer_activism", "Gifts (at cost)", showE(giftCost), `${fmtN(giftUnits)} units given`, giftCost > 0 ? "red" : ""],
-    ["inventory_2", "Stock remaining", fmtN(stockUnits) + " u", `≈ ${showU(stockRetail)} if sold — est. profit ${showE(stockProfit)} (cost ${showE(stockValue)})`, ""],
     ["flag", "Break-even (cash)", showE(cash), cash >= 0 ? "money in ≥ purchases + expenses ✓" : "still to recover before break-even", cash < 0 ? "red" : ""],
     ["report", "Losses", showE(lossVal), `${fmtN(lossUnits)} units written off`, lossVal > 0 ? "red" : ""],
     ["warning", "Low stock", fmtN(lowList.length), `products at ≤ ${LOW_STOCK} units`, lowList.length ? "red" : ""],
@@ -3829,43 +3834,59 @@ function renderVariance() {
 }
 
 /* ================= stock statement ================= */
+let ST_POS = null; // null = all locations combined
+window.setStPos = id => { ST_POS = id || null; renderStocks(); };
 window.renderStocks = () => {
   const q = (gv("st_search") || "").toLowerCase();
   const el = document.getElementById("stocksTable");
+  const hp = homePos();
+  const locs = sortedPos();
+  if (ST_POS && !locs.some(p => p.id === ST_POS)) ST_POS = null;
+  const btns = document.getElementById("stBtns");
+  if (btns) btns.innerHTML = `<button type="button" class="btn small ${!ST_POS ? "gold" : "ghost"}" onclick="setStPos('')">All locations</button>` +
+    locs.map(p => `<button type="button" class="btn small ${p.id === ST_POS ? "gold" : "ghost"}" onclick="setStPos('${p.id}')">${esc(p.name)}</button>`).join("");
   const list = state.products.filter(p => prodMatch(p, q))
     .sort(prodSort);
   if (!list.length) { el.innerHTML = '<p class="empty">No products yet — import your invoices from the Purchases tab.</p>'; return; }
   let h = `<table><tr><th>Product</th><th class="num">Purchased</th><th class="num">Sold</th>
-    <th class="num">Gifted</th><th class="num">Lost</th><th class="num">Remaining</th><th>Status</th>
-    <th class="num">Cost €/u</th><th class="num">Sale $</th><th class="num">Revenue ($)</th><th class="num">Profit (€)</th><th class="num">Stock diff</th><th class="num">Value at cost</th></tr>`;
-  const hp = homePos();
-  let tP = 0, tS = 0, tG = 0, tL = 0, tA = 0, tSt = 0, tV = 0, tR = 0, tPr = 0;
+    <th class="num">Remaining</th><th>Status</th>
+    <th class="num">Cost €/u</th><th class="num">Sale $</th><th class="num">Profit (€)</th><th class="num">Stock diff</th></tr>`;
+  let tP = 0, tS = 0, tA = 0, tSt = 0, tPr = 0, shown = 0;
   for (const p of list) {
     const c = productCalc(p);
-    const adj = invDelta(p.id, "all");
-    const price = (hp ? priceFor(hp.id, p.id) : null) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0);
-    const profit = toE(c.revenue) - c.cogs;
-    tP += c.iq + c.purQty; tS += c.sold; tG += c.gifted; tL += c.lost; tA += adj; tSt += c.stock; tV += c.stockValue; tR += c.revenue; tPr += profit;
-    const tracked = (c.iq + c.purQty) > 0;
-    const st = !tracked ? "—" : c.stock <= 0 ? '<span class="st st-out">OUT</span>'
-      : c.stock <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
-    h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtN(c.iq + c.purQty)}</td>
-      <td class="num calc">${fmtN(c.sold)}</td><td class="num calc">${fmtN(c.gifted)}</td>
-      <td class="num calc ${c.lost > 0 ? "neg" : ""}">${fmtN(c.lost)}</td>
-      <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}"><b>${fmtN(c.stock)}</b></td>
+    let purch, sold, rem, adj, revenue, cogs, price, tracked;
+    if (!ST_POS) {
+      purch = c.iq + c.purQty; sold = c.sold; rem = c.stock; adj = invDelta(p.id, "all");
+      revenue = c.revenue; cogs = c.cogs; tracked = purch > 0;
+      price = (hp ? priceFor(hp.id, p.id) : null) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0);
+    } else {
+      purch = (hp && ST_POS === hp.id) ? c.iq + c.purQty : transferredTo(p.id, ST_POS);
+      sold = soldAtPos(p.id, ST_POS); rem = posStockOf(p.id, ST_POS); adj = invDelta(p.id, ST_POS);
+      revenue = 0; cogs = 0;
+      for (const s of state.sales) if (s.product_id === p.id && s.pos_id === ST_POS) {
+        const qn = Number(s.qty); revenue += qn * Number(s.price_per_unit); cogs += qn * saleCostOf(s);
+      }
+      price = priceFor(ST_POS, p.id) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0);
+      if (!purch && !sold && !rem && !adj) continue; // never at this location
+      tracked = true;
+    }
+    const profit = toE(revenue) - cogs;
+    tP += purch; tS += sold; tSt += rem; tPr += profit; tA += adj; shown++;
+    const st = !tracked ? "—" : rem <= 0 ? '<span class="st st-out">OUT</span>'
+      : rem <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
+    h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtN(purch)}</td>
+      <td class="num calc">${fmtN(sold)}</td>
+      <td class="num calc ${rem < 0 ? "stock-neg" : ""}"><b>${fmtN(rem)}</b></td>
       <td>${st}</td>
       <td class="num calc">${eurF.format(c.avgCost)}</td>
       <td class="num calc">${price ? showU(price) : "—"}</td>
-      <td class="num calc">${showU(c.revenue)}</td>
       <td class="num calc ${profit < 0 ? "neg" : ""}">${showE(profit)}</td>
-      <td class="num calc ${adj !== 0 ? "neg" : ""}">${adj > 0 ? "+" : ""}${fmtN(adj)}</td>
-      <td class="num calc">${showE(c.stockValue)}</td></tr>`;
+      <td class="num calc ${adj !== 0 ? "neg" : ""}">${adj > 0 ? "+" : ""}${fmtN(adj)}</td></tr>`;
   }
-  h += `<tr class="total"><td>TOTAL (${list.length})</td><td class="num">${fmtN(tP)}</td>
-    <td class="num">${fmtN(tS)}</td><td class="num">${fmtN(tG)}</td><td class="num ${tL > 0 ? "neg" : ""}">${fmtN(tL)}</td>
-    <td class="num">${fmtN(tSt)}</td><td></td><td></td><td></td>
-    <td class="num">${showU(tR)}</td><td class="num ${tPr < 0 ? "neg" : ""}">${showE(tPr)}</td>
-    <td class="num">${tA > 0 ? "+" : ""}${fmtN(tA)}</td><td class="num">${showE(tV)}</td></tr></table>`;
+  h += `<tr class="total"><td>TOTAL (${shown})</td><td class="num">${fmtN(tP)}</td>
+    <td class="num">${fmtN(tS)}</td><td class="num">${fmtN(tSt)}</td><td></td><td></td><td></td>
+    <td class="num ${tPr < 0 ? "neg" : ""}">${showE(tPr)}</td>
+    <td class="num">${tA > 0 ? "+" : ""}${fmtN(tA)}</td></tr></table>`;
   el.innerHTML = h;
 };
 window.exportStocksCSV = () => {
