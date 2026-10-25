@@ -154,6 +154,9 @@
   .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
   .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .cards.hero { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 14px; }
+  .cards.hero .stat { border-width: 2px; border-color: var(--gold, #36656e); }
+  .cards.hero .v { font-size: 30px; }
   .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 17px; box-shadow: var(--shadow); transition: box-shadow .15s; }
   .stat:hover { box-shadow: 0 2px 4px rgba(25,28,30,.06), 0 8px 24px rgba(25,28,30,.09); }
   .stat .ich { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; background: var(--gold-light); color: var(--gold-dark); }
@@ -231,11 +234,9 @@
     <button data-tab="dash" class="active"><span class="ms">dashboard</span>Dashboard</button>
     <button data-tab="pur"><span class="ms">receipt_long</span>Purchases</button>
     <button data-tab="day"><span class="ms">edit_square</span>Daily report</button>
-    <button data-tab="inv"><span class="ms">fact_check</span>Inventory</button>
-    <button data-tab="trf"><span class="ms">sync_alt</span>Transfers</button>
+    <button data-tab="stk"><span class="ms">warehouse</span>Stocks &amp; Inventory</button>
     <button data-tab="los"><span class="ms">report</span>Losses</button>
     <button data-tab="exp"><span class="ms">account_balance_wallet</span>Expenses</button>
-    <button data-tab="stk"><span class="ms">warehouse</span>Stocks</button>
     <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
     <button data-tab="his"><span class="ms">history</span>History</button>
     <div class="nav-sec">Setup &amp; help</div>
@@ -267,7 +268,6 @@
 <!-- ================= DASHBOARD ================= -->
 <div class="tab" id="tab-dash">
   <div class="pagehead"><h1>Dashboard</h1><p>Cumulative performance — filter by period, point of sale or product.</p></div>
-  <div id="setupCard"></div>
   <div class="filters no-print">
     <button class="btn ghost small" onclick="setPeriod('this')">This month</button>
     <button class="btn ghost small" onclick="setPeriod('last')">Last month</button>
@@ -280,13 +280,8 @@
     <button class="btn ghost" onclick="exportDashboardCSV()">Export CSV</button>
     <button class="btn ghost" onclick="printDash()">Print / PDF</button>
   </div>
+  <div class="cards hero" id="dashHero"></div>
   <div class="cards" id="dashCards"></div>
-  <section class="card">
-    <h2>CFO report — lifetime, where every unit and euro went</h2>
-    <p class="hint">Always all-time (ignores the filters above): purchases vs what is sold, gifted, lost, in stock — and what is <b>unaccounted</b> (left stock with no record, mostly the pre-app period).</p>
-    <div id="cfoHighlights"></div>
-    <div class="scrollbox" style="max-height:420px" id="cfoTable"></div>
-  </section>
   <section class="card"><h2>Monthly performance</h2><div id="dashMonthly"></div></section>
   <div class="grid2">
     <section class="card"><h2>Sales by point of sale</h2><div id="dashPos"></div></section>
@@ -296,6 +291,12 @@
     <section class="card"><h2>Top products</h2><div id="dashTop"></div></section>
     <section class="card"><h2>Low stock</h2><div id="dashLow"></div></section>
   </div>
+  <section class="card">
+    <h2>CFO report — lifetime, where every unit and euro went</h2>
+    <p class="hint">Always all-time (ignores the filters above): purchases vs what is sold, gifted, lost, in stock — and what is <b>unaccounted</b> (left stock with no record, mostly the pre-app period).</p>
+    <div id="cfoHighlights"></div>
+    <div class="scrollbox" style="max-height:420px" id="cfoTable"></div>
+  </section>
 </div>
 
 <!-- ================= DAILY ENTRY ================= -->
@@ -336,10 +337,12 @@
   </section>
 </div>
 
-<!-- ================= INVENTORY ================= -->
-<div class="tab" id="tab-inv" style="display:none">
-  <div class="pagehead"><h1>Inventory</h1><p>What you have right now, per location. Type a correction in any cell, then press <b>Save changes</b>.</p></div>
+<!-- ============ STOCKS & INVENTORY (merged: inventory + transfers + stocks) ============ -->
+<div class="tab" id="tab-stk" style="display:none">
+  <div class="pagehead"><h1>Stocks &amp; Inventory</h1><p>Everything stock in one place: your live inventory per location, moving stock to resellers, and what each product earned.</p></div>
   <section class="card">
+    <h2>Inventory — what you have right now</h2>
+    <p class="hint">Type a correction in any cell, then press <b>Save changes</b>.</p>
     <div class="rowform no-print">
       <label>Search<input id="ig_search" oninput="renderInvGrid()" placeholder="product…" style="min-width:220px"></label>
       <button class="btn gold" id="igSave" onclick="saveInvGrid()">Save changes</button>
@@ -352,11 +355,21 @@
       <div id="mntBox" style="margin-top:8px"></div>
     </details>
   </section>
-</div>
-
-<!-- ================= STOCKS ================= -->
-<div class="tab" id="tab-stk" style="display:none">
-  <div class="pagehead"><h1>Stocks</h1><p>Your actual stock levels — globally, per location, and per reseller with what they sold.</p></div>
+  <section class="card no-print">
+    <h2>Move stock — Home → resellers</h2>
+    <form class="rowform" id="transferForm">
+      <label>Date<input id="t_date" type="date" required></label>
+      <label>Product<select id="t_product" required onchange="transferHint()"></select></label>
+      <label>From<select id="t_from" onchange="transferHint()"></select></label>
+      <label>To<select id="t_to" onchange="transferHint()"></select></label>
+      <label>Qty<input id="t_qty" type="number" min="1" step="1" value="1" style="width:90px"></label>
+      <button class="btn gold" type="submit">+ Add to list</button>
+    </form>
+    <p class="hint" id="t_hint">Defaults: quantity <b>1</b>, from <b>Home</b>, to <b>Teta</b>. Lines pile up below so you can double-check — nothing moves until <b>Save all transfers</b>.</p>
+    <div id="trfDraftBox"></div>
+    <details class="inv" style="margin-top:12px"><summary><span class="ref">Transfer history</span><span class="meta" id="transferCount"></span></summary>
+      <div class="lines" id="transfersLog"></div></details>
+  </section>
   <section class="card">
     <h2>Location performance</h2>
     <div class="rowform no-print" id="lcBtns" style="margin-bottom:6px"></div>
@@ -377,33 +390,14 @@
     <div class="scrollbox" style="max-height:440px" id="resellerTable"></div>
   </section>
   <section class="card">
-    <h2>Stock statement</h2>
-    <p class="hint"><b>How stock is calculated:</b> Stock = your <b>last submitted inventory count</b> (per location)
-    <b>+ purchases − sales − gifts − losses</b> since that count. Before any count it starts from initial stock + purchases.
-    Each column below shows one component, so every number can be traced to its tab.</p>
+    <h2>Product P&amp;L — purchased · sold · remaining · profit</h2>
+    <p class="hint"><b>Stock = last count + purchases − sales − gifts − losses.</b> Profit = what its sales earned (revenue − cost);
+    <b>Stock diff</b> is the net correction your inventory counts applied. Click any header to sort.</p>
     <div class="rowform no-print" style="margin-bottom:10px">
       <label>Search<input id="st_search" oninput="renderStocks()" placeholder="product…" style="min-width:220px"></label>
       <button class="btn ghost" onclick="exportStocksCSV()">Export CSV</button>
     </div>
     <div class="scrollbox" style="max-height:460px" id="stocksTable"></div>
-  </section>
-</div>
-
-<!-- ================= TRANSFERS ================= -->
-<div class="tab" id="tab-trf" style="display:none">
-  <div class="pagehead"><h1>Transfers</h1><p>Distribute stock from Home to your resellers, bring leftovers back to Home, or move stock between resellers.</p></div>
-  <section class="card no-print">
-    <h2>Move stock</h2>
-    <form class="rowform" id="transferForm">
-      <label>Date<input id="t_date" type="date" required></label>
-      <label>Product<select id="t_product" required onchange="transferHint()"></select></label>
-      <label>From<select id="t_from" onchange="transferHint()"></select></label>
-      <label>To<select id="t_to" onchange="transferHint()"></select></label>
-      <label>Qty<input id="t_qty" type="number" min="1" step="1" value="1" style="width:90px"></label>
-      <button class="btn gold" type="submit">+ Add to list</button>
-    </form>
-    <p class="hint" id="t_hint">Defaults: quantity <b>1</b>, from <b>Home</b>, to <b>Teta</b>. Lines pile up below so you can double-check — nothing moves until <b>Save all transfers</b>.</p>
-    <div id="trfDraftBox"></div>
   </section>
   <section class="card">
     <h2>Stock by location</h2>
@@ -415,10 +409,9 @@
       <label>Search<input id="sp_search" oninput="renderPosStock()" placeholder="product…" style="min-width:200px"></label>
     </div>
     <div class="scrollbox" id="posStockTable"></div>
-    <details class="inv" style="margin-top:12px"><summary><span class="ref">Transfer history</span><span class="meta" id="transferCount"></span></summary>
-      <div class="lines" id="transfersLog"></div></details>
   </section>
 </div>
+
 
 <!-- ================= LOSSES ================= -->
 <div class="tab" id="tab-los" style="display:none">
@@ -1233,7 +1226,6 @@ async function importInvoices() {
 
 /* ================= rendering: dashboard ================= */
 function renderDash() {
-  renderSetup();
   const sales = filteredSales(), expenses = filteredExpenses();
   let revenue = 0, units = 0, cogs = 0;
   for (const s of sales) { const q = Number(s.qty); units += q; revenue += q * Number(s.price_per_unit); cogs += q * saleCostOf(s); }
@@ -1261,21 +1253,24 @@ function renderDash() {
   const lowList = state.products.map(p => ({ p, c: productCalc(p) }))
     .filter(x => (x.c.iq + x.c.purQty) > 0 && x.c.stock <= LOW_STOCK)
     .sort((a, b) => a.c.stock - b.c.stock);
+  const spent = purCost + expTotal;
+  const stockProfit = toE(stockRetail) - stockValue; // if remaining stock sells at current prices
+  const mkCard = ([ic, k, v, s, cls]) =>
+    `<div class="stat"><div class="ich ${cls}"><span class="ms">${ic}</span></div><div class="k">${k}</div><div class="v ${String(v).startsWith("(") || cls === "red" ? "neg" : ""}">${v}</div><div class="s">${s}</div></div>`;
+  document.getElementById("dashHero").innerHTML = [
+    ["payments", "Total revenue", showU(revenue), `≈ ${showE(revEUR)} · ${fmtN(units)} units sold`, ""],
+    ["local_shipping", "Total spent", showE(spent), `goods ${showE(purCost)} (${fmtN(purUnits)} u) + expenses ${showE(expTotal)}`, ""],
+    ["savings", "NET PROFIT", showE(net), `${fmtP(revEUR > 0 ? net / revEUR : null)} margin — after COGS, expenses, gifts & losses`, net < 0 ? "red" : ""],
+  ].map(mkCard).join("");
   const cards = [
-    ["payments", "Revenue", showU(revenue), `≈ ${showE(revEUR)} · ${fmtN(units)} units`, ""],
-    ["local_shipping", "Purchases (goods)", showE(purCost), `${fmtN(purUnits)} units bought — what you paid suppliers`, ""],
-    ["shopping_cart", "COGS", showE(cogs), "avg cost basis (€)", ""],
-    ["trending_up", "Gross profit", showE(gross), fmtP(revEUR > 0 ? gross / revEUR : null) + " margin", ""],
-    ["account_balance_wallet", "Expenses", showE(expTotal), `${expenses.length} entries`, ""],
+    ["shopping_cart", "COGS", showE(cogs), `cost of the ${fmtN(units)} units sold · gross ${showE(gross)} (${fmtP(revEUR > 0 ? gross / revEUR : null)})`, ""],
+    ["volunteer_activism", "Gifts (at cost)", showE(giftCost), `${fmtN(giftUnits)} units given`, giftCost > 0 ? "red" : ""],
+    ["inventory_2", "Stock remaining", fmtN(stockUnits) + " u", `≈ ${showU(stockRetail)} if sold — est. profit ${showE(stockProfit)} (cost ${showE(stockValue)})`, ""],
     ["flag", "Break-even (cash)", showE(cash), cash >= 0 ? "money in ≥ purchases + expenses ✓" : "still to recover before break-even", cash < 0 ? "red" : ""],
     ["report", "Losses", showE(lossVal), `${fmtN(lossUnits)} units written off`, lossVal > 0 ? "red" : ""],
-    ["volunteer_activism", "Gifts (at cost)", showE(giftCost), `${fmtN(giftUnits)} units given`, giftCost > 0 ? "red" : ""],
-    ["savings", "Net profit", showE(net), fmtP(revEUR > 0 ? net / revEUR : null) + " net margin", ""],
-    ["inventory_2", "Stock on hand", fmtN(stockUnits), `${showE(stockValue)} at cost · ≈ ${showU(stockRetail)} at retail`, ""],
     ["warning", "Low stock", fmtN(lowList.length), `products at ≤ ${LOW_STOCK} units`, lowList.length ? "red" : ""],
   ];
-  document.getElementById("dashCards").innerHTML = cards.map(([ic, k, v, s, cls]) =>
-    `<div class="stat"><div class="ich ${cls}"><span class="ms">${ic}</span></div><div class="k">${k}</div><div class="v ${String(v).startsWith("(") ? "neg" : ""}">${v}</div><div class="s">${s}</div></div>`).join("");
+  document.getElementById("dashCards").innerHTML = cards.map(mkCard).join("");
   document.getElementById("dashLow").innerHTML = lowList.length
     ? "<table><tr><th>Product</th><th class='num'>Stock</th><th></th></tr>" + lowList.slice(0, 12).map(x =>
         `<tr><td>${prodLabel(x.p)}</td><td class="num calc">${fmtN(x.c.stock)}</td>
@@ -1381,8 +1376,9 @@ window.setPeriod = mode => {
   document.getElementById("f_to").value = filters.to;
   renderDash();
 };
-function renderSetup() {
+function renderSetup() { // v52: getting-started card removed from the dashboard
   const el = document.getElementById("setupCard");
+  if (!el) return;
   const steps = [
     ["Import your supplier invoices", state.purchases.length > 0, "pur"],
     ["Create your points of sale", state.pos.length > 0, "sal"],
@@ -3051,7 +3047,7 @@ function applyHiddenTabs() {
     btn.style.display = HIDDEN.tabs.includes(btn.dataset.tab) ? "none" : "";
   });
 }
-const TAB_NAMES = { dash: "Dashboard", pur: "Purchases", day: "Daily report", inv: "Inventory", trf: "Transfers", los: "Losses", exp: "Expenses", stk: "Stocks", sal: "Sales & prices", his: "History", cat: "Catalog", help: "Guide" };
+const TAB_NAMES = { dash: "Dashboard", pur: "Purchases", day: "Daily report", stk: "Stocks & Inventory", los: "Losses", exp: "Expenses", sal: "Sales & prices", his: "History", cat: "Catalog", help: "Guide" };
 window.renderTabToggles = () => {
   const el = document.getElementById("tabToggles");
   if (!el) return;
@@ -3839,26 +3835,37 @@ window.renderStocks = () => {
   const list = state.products.filter(p => prodMatch(p, q))
     .sort(prodSort);
   if (!list.length) { el.innerHTML = '<p class="empty">No products yet — import your invoices from the Purchases tab.</p>'; return; }
-  let h = `<table><tr><th>Product</th><th class="num">Initial</th><th class="num">+ Purchased</th><th class="num">− Sold</th>
-    <th class="num">− Gifted</th><th class="num">− Losses</th><th class="num">± Inventory adj.</th><th class="num">= Stock</th><th>Status</th><th class="num">Value at cost</th></tr>`;
-  let tI = 0, tP = 0, tS = 0, tG = 0, tL = 0, tA = 0, tSt = 0, tV = 0;
+  let h = `<table><tr><th>Product</th><th class="num">Purchased</th><th class="num">Sold</th>
+    <th class="num">Gifted</th><th class="num">Lost</th><th class="num">Remaining</th><th>Status</th>
+    <th class="num">Cost €/u</th><th class="num">Sale $</th><th class="num">Revenue ($)</th><th class="num">Profit (€)</th><th class="num">Stock diff</th><th class="num">Value at cost</th></tr>`;
+  const hp = homePos();
+  let tP = 0, tS = 0, tG = 0, tL = 0, tA = 0, tSt = 0, tV = 0, tR = 0, tPr = 0;
   for (const p of list) {
     const c = productCalc(p);
     const adj = invDelta(p.id, "all");
-    tI += c.iq; tP += c.purQty; tS += c.sold; tG += c.gifted; tL += c.lost; tA += adj; tSt += c.stock; tV += c.stockValue;
+    const price = (hp ? priceFor(hp.id, p.id) : null) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0);
+    const profit = toE(c.revenue) - c.cogs;
+    tP += c.iq + c.purQty; tS += c.sold; tG += c.gifted; tL += c.lost; tA += adj; tSt += c.stock; tV += c.stockValue; tR += c.revenue; tPr += profit;
     const tracked = (c.iq + c.purQty) > 0;
     const st = !tracked ? "—" : c.stock <= 0 ? '<span class="st st-out">OUT</span>'
       : c.stock <= LOW_STOCK ? '<span class="st st-low">LOW</span>' : '<span class="st st-ok">OK</span>';
-    h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtN(c.iq)}</td><td class="num calc">${fmtN(c.purQty)}</td>
+    h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtN(c.iq + c.purQty)}</td>
       <td class="num calc">${fmtN(c.sold)}</td><td class="num calc">${fmtN(c.gifted)}</td>
       <td class="num calc ${c.lost > 0 ? "neg" : ""}">${fmtN(c.lost)}</td>
-      <td class="num calc ${adj !== 0 ? "neg" : ""}">${adj > 0 ? "+" : ""}${fmtN(adj)}</td>
       <td class="num calc ${c.stock < 0 ? "stock-neg" : ""}"><b>${fmtN(c.stock)}</b></td>
-      <td>${st}</td><td class="num calc">${showE(c.stockValue)}</td></tr>`;
+      <td>${st}</td>
+      <td class="num calc">${eurF.format(c.avgCost)}</td>
+      <td class="num calc">${price ? showU(price) : "—"}</td>
+      <td class="num calc">${showU(c.revenue)}</td>
+      <td class="num calc ${profit < 0 ? "neg" : ""}">${showE(profit)}</td>
+      <td class="num calc ${adj !== 0 ? "neg" : ""}">${adj > 0 ? "+" : ""}${fmtN(adj)}</td>
+      <td class="num calc">${showE(c.stockValue)}</td></tr>`;
   }
-  h += `<tr class="total"><td>TOTAL (${list.length})</td><td class="num">${fmtN(tI)}</td><td class="num">${fmtN(tP)}</td>
-    <td class="num">${fmtN(tS)}</td><td class="num">${fmtN(tG)}</td><td class="num ${tL > 0 ? "neg" : ""}">${fmtN(tL)}</td><td class="num">${tA > 0 ? "+" : ""}${fmtN(tA)}</td>
-    <td class="num">${fmtN(tSt)}</td><td></td><td class="num">${showE(tV)}</td></tr></table>`;
+  h += `<tr class="total"><td>TOTAL (${list.length})</td><td class="num">${fmtN(tP)}</td>
+    <td class="num">${fmtN(tS)}</td><td class="num">${fmtN(tG)}</td><td class="num ${tL > 0 ? "neg" : ""}">${fmtN(tL)}</td>
+    <td class="num">${fmtN(tSt)}</td><td></td><td></td><td></td>
+    <td class="num">${showU(tR)}</td><td class="num ${tPr < 0 ? "neg" : ""}">${showE(tPr)}</td>
+    <td class="num">${tA > 0 ? "+" : ""}${fmtN(tA)}</td><td class="num">${showE(tV)}</td></tr></table>`;
   el.innerHTML = h;
 };
 window.exportStocksCSV = () => {
@@ -4254,6 +4261,7 @@ document.getElementById("f_prod").addEventListener("change", ev => { filters.pro
 
 /* tabs */
 function showTab(name) {
+  if (name === "inv" || name === "trf") name = "stk"; // merged into Stocks & Inventory (v52)
   document.querySelectorAll("#nav button").forEach(x => x.classList.toggle("active", x.dataset.tab === name));
   document.querySelectorAll(".tab").forEach(t => t.style.display = "none");
   document.getElementById("tab-" + name).style.display = "";
