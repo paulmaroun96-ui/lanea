@@ -3038,6 +3038,8 @@ function renderMaintenance() {
       done: state.transfers.some(t => t.date === "2026-07-25") },
     { key: "gifts", fn: "importNamedGifts()", label: "Import the named gifts (102 units — Adlibitum, Christina, Maya…)",
       done: state.gifts.some(g => g.note === "Lidea") },
+    { key: "oldmj", fn: "importOldMayJun()", label: "Import the Apr–Jun history (94 units · $2,409 + 26 gifts + 10 expenses)",
+      done: hasSale("2026-04-26") },
   ];
   const wrap = (key, btnHtml) => `<span style="display:inline-flex;align-items:stretch;gap:2px">${btnHtml}<button class="btn small ghost" title="Remove this button (restore in Settings)" onclick="hideMnt('${key}')">✕</button></span>`;
   const open = items.filter(i => !i.done && !HIDDEN.mnt.includes(i.key));
@@ -3088,6 +3090,52 @@ window.importNamedGifts = async () => {
   activeInv = d.id;
   await submitInventory();
   toast(`Named gifts imported ✓ — ${fmtN(units)} units with their recipients; stock unchanged (old gifts)`);
+  render();
+};
+/* WhatsApp log 26 Apr – 24 Jun 2026: PRE-baseline sales + gifts + expenses,
+   all at Home (user). Records + revenue/costs only — today's stock is pinned. */
+window.importOldMayJun = async () => {
+  if (typeof OLD_SALES_MAYJUN === "undefined") { alert("Apr–Jun data not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  if (state.sales.some(s => s.date === "2026-04-26")) {
+    alert("The Apr–Jun history is already imported (a sale dated 26 Apr 2026 exists)."); return;
+  }
+  const su = OLD_SALES_MAYJUN.sales.reduce((a, l) => a + l.qty, 0);
+  const sv = OLD_SALES_MAYJUN.sales.reduce((a, l) => a + l.qty * l.price, 0);
+  const gu = OLD_SALES_MAYJUN.gifts.reduce((a, l) => a + l.qty, 0);
+  const ev = OLD_SALES_MAYJUN.expenses.reduce((a, e) => a + e.amount, 0);
+  if (!(await niceConfirm("Import the Apr–Jun history?",
+    `${fmtN(su)} units sold ($${fmtN(sv)}) + ${fmtN(gu)} gifts + ${OLD_SALES_MAYJUN.expenses.length} expenses (€${ev.toFixed(2)}), all at Home with their real dates and message prices. They are OLD (before the June-28 baseline): revenue and costs appear, today's stock does NOT move.`, "Import history"))) return;
+  const byRef = {};
+  for (const p of state.products) if (p.ref) byRef[p.ref] = p;
+  let hp = homePos();
+  if (!hp) hp = await addRow("pos", { name: "Home" });
+  if (!hp) return;
+  // pin: snapshot Home stock of every touched product before inserting
+  const snap = {};
+  for (const l of [...OLD_SALES_MAYJUN.sales, ...OLD_SALES_MAYJUN.gifts]) {
+    const p = byRef[l.ref];
+    if (!p) { alert("Unknown ref " + l.ref); return; }
+    if (snap[p.id] === undefined) snap[p.id] = Math.max(posStockOf(p.id, hp.id), 0);
+  }
+  for (const l of OLD_SALES_MAYJUN.sales) {
+    const p = byRef[l.ref];
+    if (!(await addRow("sales", { date: l.date, pos_id: hp.id, product_id: p.id, qty: l.qty, price_per_unit: l.price }))) return;
+  }
+  for (const l of OLD_SALES_MAYJUN.gifts) {
+    const p = byRef[l.ref];
+    if (!(await addRow("gifts", { date: l.date, product_id: p.id, qty: l.qty, note: l.note || "" }))) return;
+  }
+  for (const e of OLD_SALES_MAYJUN.expenses) {
+    if (state.expenses.some(x => x.description === e.desc && Number(x.amount) === e.amount)) continue;
+    if (!(await addRow("expenses", { date: e.date, description: e.desc, category: e.cat, amount: e.amount }))) return;
+  }
+  const d = { id: uid(), date: todayISO(), pos_id: "ALL", counts: {} };
+  for (const [pid, v] of Object.entries(snap)) d.counts[pid + "|" + hp.id] = String(v);
+  invDrafts.push(d); saveInvDrafts();
+  activeInv = d.id;
+  await submitInventory();
+  toast(`Apr–Jun history imported ✓ — $${fmtN(sv)} revenue, ${fmtN(gu)} gifts, €${ev.toFixed(2)} expenses; stock unchanged (old records)`);
   render();
 };
 /* Pharmacie Ste Rita placement (handwritten invoices 26/27/28, 25 Jul 2026):
