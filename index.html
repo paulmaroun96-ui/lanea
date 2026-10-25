@@ -3080,7 +3080,7 @@ function renderMaintenance() {
     { key: "recur3", fn: "addMyRecurring()", label: "Add the 3 recurring payments ($27.7 monthly + Ad Libitum $700 + Qudra $800)",
       done: state.recurring_expenses.some(r => r.description === "Qudra ($800)") },
     { key: "dedup", fn: "cleanRecurringDupes()", label: "Delete the old Adlibitum / Shopify rows the recurring rules now cover",
-      done: !state.expenses.some(e => /^(Shopify .*\(\$27\.7\)|Adlibitum .*\(\$(700|1000)\))$/.test(e.description || ""))
+      done: !state.expenses.some(e => /^(Shopify .+\(\$[0-9.]+\)|Adlibitum .*\(\$(700|1000)\))$/.test(e.description || ""))
             && !state.recurring_expenses.some(r => r.description === "Monthly payment ($27.7)") },
   ];
   const wrap = (key, btnHtml) => `<span style="display:inline-flex;align-items:stretch;gap:2px">${btnHtml}<button class="btn small ghost" title="Remove this button (restore in Settings)" onclick="hideMnt('${key}')">✕</button></span>`;
@@ -3167,7 +3167,9 @@ window.cleanRecurringDupes = async () => {
   if (!state.recurring_expenses.some(r => r.description === "Qudra ($800)")) {
     alert("Press “Add the 3 recurring payments” first — the duplicates are deleted once the rules cover those months."); return;
   }
-  const isOldShop = e => /^Shopify .*\(\$27\.7\)$/.test(e.description || "");
+  // any month-labeled Shopify row ("Shopify Dec 2025 ($27.7)", "Shopify November 2025 ($8.85)"):
+  // user says ALL Shopify = $27.7, the rule books that, so every old row is a duplicate
+  const isOldShop = e => /^Shopify .+\(\$[0-9.]+\)$/.test(e.description || "");
   const isOldAd = e => /^Adlibitum .*\(\$(700|1000)\)$/.test(e.description || "");
   const del = state.expenses.filter(e => isOldShop(e) || isOldAd(e));
   const m1000 = [...new Set(state.expenses.filter(e => /^Adlibitum .*\(\$1000\)$/.test(e.description || "")).map(e => String(e.date).slice(0, 7)))].sort();
