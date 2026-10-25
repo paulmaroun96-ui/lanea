@@ -605,6 +605,7 @@
       <label>Currency<select id="rc_cur" style="width:70px"><option value="USD" selected>$</option><option value="EUR">€</option></select></label>
       <label>Day of month<input id="rc_day" type="number" min="1" max="31" value="1" style="width:80px"></label>
       <label>Starts<input id="rc_start" type="month"></label>
+      <label>Ends (optional)<input id="rc_end" type="month"></label>
       <button class="btn gold" type="submit">Add recurring expense</button>
     </form>
     <div id="recurringList"></div>
@@ -1756,7 +1757,8 @@ async function ensureRecurring() {
         const dim = new Date(y, m, 0).getDate();
         const day = Math.min(Math.max(1, Number(r.day_of_month || 1)), dim);
         const date = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        if (date >= start && date <= today) {
+        const end = r.end_date ? String(r.end_date).slice(0, 10) : null;
+        if (date >= start && date <= today && (!end || date <= end)) {
           const exists = state.expenses.some(e => e.date === date && e.description === r.description
             && Number(e.amount) === Number(r.amount) && e.category === r.category);
           if (!exists && await addRow("expenses", { date, description: r.description, category: r.category, amount: Number(r.amount) })) created++;
@@ -1771,14 +1773,21 @@ async function ensureRecurring() {
 document.getElementById("recForm").addEventListener("submit", async ev => {
   ev.preventDefault();
   const start = (gv("rc_start") || todayISO().slice(0, 7)) + "-01";
-  const ok = await addRow("recurring_expenses", {
+  const row = {
     description: gv("rc_desc").trim() + expToEUR(Number(gv("rc_amount")), gv("rc_cur") || "USD").suffix,
     category: gv("rc_cat"),
     amount: expToEUR(Number(gv("rc_amount")), gv("rc_cur") || "USD").amount,
     day_of_month: Number(gv("rc_day") || 1),
     start_date: start,
     active: true,
-  });
+  };
+  const endYm = gv("rc_end");
+  if (endYm) {
+    const [ey, em] = endYm.split("-").map(Number);
+    row.end_date = `${endYm}-${String(new Date(ey, em, 0).getDate()).padStart(2, "0")}`;
+  }
+  const ok = await addRow("recurring_expenses", row);
+  if (!ok && row.end_date) { alert("Could not save — if the error mentions end_date, run supabase/migration-v8-recurring-end.sql in the Supabase SQL editor first."); return; }
   if (ok) {
     document.getElementById("recForm").reset();
     document.getElementById("rc_day").value = 1;
@@ -1827,13 +1836,16 @@ document.getElementById("expForm").addEventListener("submit", async ev => {
 function renderRecurring() {
   const el = document.getElementById("recurringList");
   if (!state.recurring_expenses.length) { el.innerHTML = '<p class="empty">No recurring expenses yet — e.g. your ~€1,000/month operating costs.</p>'; return; }
-  el.innerHTML = "<table><tr><th>Description</th><th>Category</th><th class='num'>Amount (€)</th><th class='num'>Day</th><th>Status</th><th class='no-print'></th></tr>" +
+  el.innerHTML = "<table><tr><th>Description</th><th>Category</th><th class='num'>Amount (€)</th><th class='num'>Day</th><th>From</th><th>Until</th><th>Status</th><th class='no-print'></th></tr>" +
     state.recurring_expenses.map(r => `<tr class="${r.active === false ? "row-deleted" : ""}">
       <td>${esc(r.description)}</td>
       <td><span class="chip" style="background:${CAT_CHIPS[r.category] || "#f3f4f6"}">${esc(r.category)}</span></td>
       <td class="num">${showE(Number(r.amount))}</td>
       <td class="num">${fmtN(r.day_of_month || 1)}</td>
-      <td>${r.active === false ? '<span class="st st-del" style="text-decoration:none">PAUSED</span>' : '<span class="st st-ok">ACTIVE</span>'}</td>
+      <td>${r.start_date ? fmtD(String(r.start_date).slice(0, 10)) : "—"}</td>
+      <td>${r.end_date ? fmtD(String(r.end_date).slice(0, 10)) : "∞"}</td>
+      <td>${r.active === false ? '<span class="st st-del" style="text-decoration:none">PAUSED</span>'
+           : (r.end_date && String(r.end_date).slice(0, 10) < todayISO() ? '<span class="st st-del" style="text-decoration:none">ENDED</span>' : '<span class="st st-ok">ACTIVE</span>')}</td>
       <td class="no-print">
         <button class="btn small ghost" onclick="toggleRecurring('${r.id}')">${r.active === false ? "Resume" : "Pause"}</button>
         <button class="btn small danger" onclick="delRecurring('${r.id}')">Del</button>
@@ -3040,6 +3052,8 @@ function renderMaintenance() {
       done: state.gifts.some(g => g.note === "Lidea") },
     { key: "oldmj", fn: "importOldMayJun()", label: "Import the Apr–Jun history (94 units · $2,409 + 26 gifts + 10 expenses)",
       done: hasSale("2026-04-26") },
+    { key: "recur3", fn: "addMyRecurring()", label: "Add the 3 recurring payments ($27.7 monthly + Ad Libitum $700 + Qudra $800)",
+      done: state.recurring_expenses.some(r => r.description === "Qudra ($800)") },
   ];
   const wrap = (key, btnHtml) => `<span style="display:inline-flex;align-items:stretch;gap:2px">${btnHtml}<button class="btn small ghost" title="Remove this button (restore in Settings)" onclick="hideMnt('${key}')">✕</button></span>`;
   const open = items.filter(i => !i.done && !HIDDEN.mnt.includes(i.key));
@@ -3090,6 +3104,30 @@ window.importNamedGifts = async () => {
   activeInv = d.id;
   await submitInventory();
   toast(`Named gifts imported ✓ — ${fmtN(units)} units with their recipients; stock unchanged (old gifts)`);
+  render();
+};
+/* The user's 3 recurring payments (dictated 2026-10-25): $27.7/month since
+   Aug 2025 open-ended, Ad Libitum $700/month Oct 2025 – Jul 2026 (Marketing),
+   Qudra $800/month Sept – Dec 2026 (Marketing). EUR at the app rate, $ kept
+   in the description. Requires migration-v8-recurring-end.sql for end_date. */
+window.addMyRecurring = async () => {
+  if (state.recurring_expenses.some(r => r.description === "Qudra ($800)")) {
+    alert("These 3 recurring rules already exist."); return;
+  }
+  if (!(await niceConfirm("Add the 3 recurring payments?",
+    "$27.7 every month since Aug 2025 (no end) + Ad Libitum $700/month Oct 2025 – Jul 2026 + Qudra $800/month Sept – Dec 2026. Past months are added to the expense log right away; future months appear automatically.", "Add rules"))) return;
+  const rules = [
+    { description: "Monthly payment ($27.7)", category: "Other", amount: 24.09, day_of_month: 1, start_date: "2025-08-01", active: true },
+    { description: "Ad Libitum ($700)", category: "Marketing", amount: 608.70, day_of_month: 1, start_date: "2025-10-01", end_date: "2026-07-31", active: true },
+    { description: "Qudra ($800)", category: "Marketing", amount: 695.65, day_of_month: 1, start_date: "2026-09-01", end_date: "2026-12-31", active: true },
+  ];
+  for (const r of rules) {
+    if (!(await addRow("recurring_expenses", r))) {
+      alert("Could not save — run supabase/migration-v8-recurring-end.sql in the Supabase SQL editor, then press this button again."); return;
+    }
+  }
+  const n = await ensureRecurring();
+  toast(`3 recurring rules added ✓ — ${n} past months booked, the rest will appear automatically`);
   render();
 };
 /* WhatsApp log 26 Apr – 24 Jun 2026: PRE-baseline sales + gifts + expenses,
