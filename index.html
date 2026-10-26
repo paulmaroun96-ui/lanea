@@ -282,6 +282,15 @@
   </div>
   <div class="cards hero" id="dashHero"></div>
   <div class="cards" id="dashCards"></div>
+  <section class="card">
+    <h2>Profitability calculator — how much must I sell?</h2>
+    <p class="hint">Margins come from your last 90 days of sales. Fixed costs are prefilled from your active recurring rules — change them, or add a % commission per sale, and the target updates live.</p>
+    <div class="rowform no-print">
+      <label>Monthly fixed costs ($)<input id="be_fix" type="number" step="0.01" min="0" style="width:130px" oninput="renderBreakEven()"></label>
+      <label>Commission per sale (%)<input id="be_comm" type="number" step="0.5" min="0" max="95" value="0" style="width:90px" oninput="renderBreakEven()"></label>
+    </div>
+    <div id="beOut"></div>
+  </section>
   <section class="card"><h2>Monthly performance</h2><div id="dashMonthly"></div></section>
   <div class="grid2">
     <section class="card"><h2>Sales by point of sale</h2><div id="dashPos"></div></section>
@@ -591,6 +600,7 @@
       <button class="btn gold" type="submit">Add expense</button>
     </form>
     <p class="hint">Any date works — use it to back-fill old expenses. Today's small costs can also go through the Daily report.</p>
+    <div class="hint no-print" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">Categories (click one to rename): <span id="catManager" style="display:contents"></span></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
       <button class="btn gold" type="button" onclick="importOldExpenses()">Import the 55 old expenses from the Excel (€21,064.87)</button>
       <span class="hint" style="margin:0">One click — safe to press twice, already-imported lines are skipped. Supplier invoices are excluded (they live in Purchases).</span>
@@ -747,7 +757,37 @@
 <script>
 "use strict";
 /* ================= constants & state ================= */
-const CATEGORIES = ["Marketing", "Logistics", "Shipment", "Exhibitions", "Accounting", "Shopify Website", "Phone", "Other"];
+const BASE_CATEGORIES = ["Marketing", "Logistics", "Shipment", "Exhibitions", "Accounting", "Shopify Website", "Phone", "Other"];
+let CATEGORIES = (() => {
+  try { const s = JSON.parse(localStorage.getItem("lanea-cats") || "null"); if (Array.isArray(s) && s.length) return s; } catch {}
+  return [...BASE_CATEGORIES];
+})();
+const saveCats = () => localStorage.setItem("lanea-cats", JSON.stringify(CATEGORIES));
+window.addCategory = () => {
+  const n = (prompt("New category name:") || "").trim();
+  if (!n) return;
+  if (CATEGORIES.some(c => c.toLowerCase() === n.toLowerCase())) { alert("That category already exists."); return; }
+  CATEGORIES.push(n); saveCats(); refreshSelects(); render(); toast(`Category “${n}” added ✓`);
+};
+window.renameCategory = async i => {
+  const old = CATEGORIES[i]; if (!old) return;
+  const n = (prompt(`Rename “${old}” to:`, old) || "").trim();
+  if (!n || n === old) return;
+  if (CATEGORIES.some(c => c.toLowerCase() === n.toLowerCase())) { alert("That name already exists."); return; }
+  CATEGORIES[i] = n; saveCats();
+  let moved = 0;
+  for (const e of state.expenses.filter(x => x.category === old)) if (await updateRow("expenses", e.id, { category: n })) moved++;
+  for (const r of state.recurring_expenses.filter(x => x.category === old)) await updateRow("recurring_expenses", r.id, { category: n });
+  refreshSelects(); render();
+  toast(`“${old}” → “${n}” ✓ — ${moved} expense${moved === 1 ? "" : "s"} updated`);
+};
+window.renderCatManager = () => {
+  const el = document.getElementById("catManager");
+  if (!el) return;
+  el.innerHTML = CATEGORIES.map((c, i) =>
+    `<span class="chip" style="background:${CAT_CHIPS[c] || "#f3f4f6"};cursor:pointer" title="Click to rename" onclick="renameCategory(${i})">${esc(c)} ✎</span>`).join(" ") +
+    ` <button class="btn small ghost" type="button" onclick="addCategory()">+ New category</button>`;
+};
 const CAT_CHIPS = {
   "Marketing": "#fce7f3", "Logistics": "#dbeafe", "Shipment": "#d1fae5", "Exhibitions": "#ede9fe",
   "Accounting": "#fef3c7", "Shopify Website": "#ccfbf1", "Phone": "#fee2e2", "Other": "#f3f4f6",
@@ -1373,6 +1413,48 @@ function renderDash() {
       }).join("") + "</table>"
     : '<p class="empty">No sales in this selection.</p>';
 }
+/* Break-even calculator: real margins from the last 90 days of sales, fixed
+   costs prefilled from active recurring rules, optional % commission per sale
+   (e.g. a marketplace fee). Shows units + revenue needed and the verdict at
+   the current sales pace. */
+window.renderBreakEven = () => {
+  const el = document.getElementById("beOut");
+  if (!el) return;
+  const fixEl = document.getElementById("be_fix");
+  if (fixEl && fixEl.value === "") {
+    const recMonthly = state.recurring_expenses
+      .filter(r => r.active !== false && (!r.end_date || String(r.end_date).slice(0, 10) >= todayISO()))
+      .reduce((a, r) => a + Number(r.amount), 0);
+    if (recMonthly > 0) fixEl.value = (recMonthly * USD_RATE).toFixed(2);
+  }
+  const fix = Number(gv("be_fix")) || 0;
+  const comm = Math.min(95, Math.max(0, Number(gv("be_comm")) || 0)) / 100;
+  const cut = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
+  let rows = state.sales.filter(s => s.date >= cut);
+  if (!rows.length) rows = state.sales;
+  let rev = 0, units = 0, cogs = 0;
+  for (const s of rows) { const q = Number(s.qty); units += q; rev += q * Number(s.price_per_unit); cogs += q * saleCostOf(s); }
+  if (!units) { el.innerHTML = '<p class="empty">No sales yet — margins can\'t be measured.</p>'; return; }
+  const avgP = rev / units, costU = (cogs / units) * USD_RATE;
+  const mU = avgP * (1 - comm) - costU;
+  const mPct = avgP > 0 ? mU / avgP : 0;
+  const monthsSpan = Math.max(1, new Set(rows.map(s => String(s.date).slice(0, 7))).size);
+  const runRev = rev / monthsSpan, runUnits = units / monthsSpan;
+  const needU = mU > 0 ? fix / mU : Infinity;
+  const needRev = mPct > 0 ? fix / mPct : Infinity;
+  const profit = runRev * mPct - fix;
+  el.innerHTML = `<table>
+    <tr><td>Average sale (last ${monthsSpan} month${monthsSpan > 1 ? "s" : ""})</td><td class="num calc">${showU(avgP)}/u</td>
+      <td>cost ${showU(costU)}/u → margin <b>${showU(Math.max(mU, 0))}</b>/u (${fmtP(mPct)})${comm ? ` after the ${(comm * 100).toFixed(1)}% commission` : ""}</td></tr>
+    <tr><td><b>Break-even target</b></td><td class="num calc"><b>${isFinite(needU) ? fmtN(Math.ceil(needU)) + " units" : "—"}</b></td>
+      <td>= <b>${isFinite(needRev) ? showU(needRev) : "—"}</b> of sales per month to cover ${showU(fix)} of fixed costs</td></tr>
+    <tr><td>Your current pace</td><td class="num calc">${fmtN(Math.round(runUnits))} units</td><td>${showU(runRev)} of sales per month</td></tr>
+    <tr class="total"><td>Verdict at this pace</td><td class="num ${profit < 0 ? "neg" : ""}">${showU(profit)}/mo</td>
+      <td>${mU <= 0 ? "✗ the commission eats the whole margin — impossible at any volume"
+        : profit >= 0 ? `✓ PROFITABLE — ${fmtN(Math.max(0, Math.round(runUnits - needU)))} units/month above break-even`
+        : `✗ below break-even — sell ${fmtN(Math.ceil(needU - runUnits))} more units/month or cut ${showU(-profit)} of monthly costs`}</td></tr>
+  </table>`;
+};
 window.clearFilters = () => {
   filters = { from: "", to: "", pos: "", prod: "" };
   for (const id of ["f_from", "f_to", "f_pos", "f_prod"]) document.getElementById(id).value = "";
@@ -2492,7 +2574,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInvGrid(); renderImportState(); renderMaintenance(); renderTabToggles(); renderStocks(); renderSellerMatrix(); renderPosStock(); renderTrfDraft(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
+  renderDash(); renderBreakEven(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInvGrid(); renderImportState(); renderMaintenance(); renderTabToggles(); renderStocks(); renderSellerMatrix(); renderPosStock(); renderTrfDraft(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderCatManager(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
