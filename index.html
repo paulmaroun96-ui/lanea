@@ -414,8 +414,9 @@
   <section class="card">
     <h2>Reseller matrix — who has what, by product</h2>
     <p class="hint">One row per product that exists somewhere (no 0-rows). Per seller: <b>Given · Sold · Left</b> — <b>✖ missing</b> means that reseller never received it.
-    <b>His (€)</b> = the margin that reseller earned (their sales × the gap between your price and theirs); <b>My profit</b> = your realized profit on the product everywhere.
-    Note: stock a reseller already had at your June-28 baseline (or any count correction) shows in <b>Left</b> but not in <b>Given</b> — Given counts transfers only.</p>
+    Per seller the math always adds up: <b>Trf</b> (what you transferred) <b>+ Count</b> (stock that arrived via an inventory count, e.g. the June-28 baseline)
+    <b>= TOTAL</b> ever with them, then <b>TOTAL − Sold = Left</b>. <b>His (€)</b> = the margin that reseller earned; <b>My profit</b> = your realized profit on the product everywhere.
+    Pick one seller for the full detail (gifted &amp; lost there too).</p>
     <div class="rowform no-print" id="smBtns" style="margin-bottom:6px"></div>
     <div class="rowform no-print"><label>Search<input id="sm_search" oninput="renderSellerMatrix()" placeholder="product…" style="min-width:220px"></label></div>
     <div class="scrollbox" style="max-height:520px" id="sellerMatrix"></div>
@@ -4023,54 +4024,68 @@ window.renderSellerMatrix = () => {
     allRes.map(r => `<button type="button" class="btn small ${r.id === SM_POS ? "gold" : "ghost"}" onclick="setSmPos('${r.id}')">${esc(r.name)}</button>`).join("");
   const q = (gv("sm_search") || "").toLowerCase();
   const homePrice = p => ((hp ? priceFor(hp.id, p.id) : null) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0));
+  /* per reseller the math is always: Transferred + From counts = TOTAL in,
+     then TOTAL − Sold − Gifted − Lost = Left — no hidden source of stock */
+  const cell = (p, r) => {
+    const trf = transferredTo(p.id, r.id), adj = invDelta(p.id, r.id);
+    const sold = soldAtPos(p.id, r.id), gift = giftedAt(p.id, r.id), lost = lostAt(p.id, r.id);
+    const left = posStockOf(p.id, r.id), totalIn = trf + adj;
+    const theirPrice = priceFor(r.id, p.id) ?? 0;
+    const his = toE(Math.max(homePrice(p) - theirPrice, 0) * sold);
+    return { trf, adj, totalIn, sold, gift, lost, left, his };
+  };
   const rows = [];
   for (const p of [...state.products].sort(prodSort)) {
     if (!prodMatch(p, q)) continue;
     const c = productCalc(p);
     const homePur = c.iq + c.purQty;
-    const given = res.map(r => transferredTo(p.id, r.id));
-    if (homePur <= 0 && !given.some(g => g > 0)) continue; // hide 0-rows
-    rows.push({ p, c, homePur, given });
+    const cells = res.map(r => cell(p, r));
+    if (homePur <= 0 && !cells.some(x => x.totalIn || x.sold || x.left)) continue; // hide 0-rows
+    rows.push({ p, c, homePur, cells });
   }
   if (!rows.length) { el.innerHTML = '<p class="empty">Nothing purchased or given yet.</p>'; return; }
   const RS = 'style="background:#f1f7f3"';
+  const single = !!SM_POS; // single seller = full detail incl. gifted/lost
+  const subCols = single ? ["Trf", "+Count", "= TOTAL in", "Sold", "Gifted", "Lost", "= Left", "His (€)"]
+                         : ["Trf", "+Count", "= TOTAL", "Sold", "= Left", "His (€)"];
   let h = `<table><tr><th>Product</th><th colspan="3" style="text-align:center">${hp ? esc(hp.name) : "Home"}</th>`
-    + res.map(r => `<th colspan="4" style="text-align:center;background:#f1f7f3">${esc(r.name)}</th>`).join("")
-    + `<th class="num">Cost €/u</th><th class="num">Sale $</th><th class="num">My profit (€)</th><th class="num">Stock diff</th></tr>`;
+    + res.map(r => `<th colspan="${subCols.length}" style="text-align:center;background:#f1f7f3">${esc(r.name)}</th>`).join("")
+    + `<th class="num">Cost €/u</th><th class="num">Sale $</th><th class="num">My profit (€)</th></tr>`;
   h += `<tr><th></th><th class="num">Purch.</th><th class="num">Sold</th><th class="num">Left</th>`
-    + res.map(() => `<th class="num" ${RS}>Given</th><th class="num" ${RS}>Sold</th><th class="num" ${RS}>Left</th><th class="num" ${RS}>His (€)</th>`).join("")
-    + `<th></th><th></th><th></th><th></th>`;
-  h += "</tr>";
-  const tot = { pur: 0, hs: 0, hl: 0, my: 0, adj: 0, res: res.map(() => ({ g: 0, s: 0, l: 0, e: 0 })) };
-  for (const { p, c, homePur, given } of rows) {
+    + res.map(() => subCols.map(cn => `<th class="num" ${RS}>${cn}</th>`).join("")).join("")
+    + `<th></th><th></th><th></th></tr>`;
+  const tot = { pur: 0, hs: 0, hl: 0, my: 0, res: res.map(() => ({ trf: 0, adj: 0, tin: 0, s: 0, g: 0, lo: 0, l: 0, e: 0 })) };
+  for (const { p, c, homePur, cells } of rows) {
     const hSold = hp ? soldAtPos(p.id, hp.id) : 0;
     const hLeft = hp ? posStockOf(p.id, hp.id) : 0;
     const myProfit = toE(c.revenue) - c.cogs;
-    const adj = invDelta(p.id, "all");
-    tot.pur += homePur; tot.hs += hSold; tot.hl += hLeft; tot.my += myProfit; tot.adj += adj;
+    tot.pur += homePur; tot.hs += hSold; tot.hl += hLeft; tot.my += myProfit;
     h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtN(homePur)}</td><td class="num calc">${fmtN(hSold)}</td>
       <td class="num calc ${hLeft < 0 ? "stock-neg" : ""}">${fmtN(hLeft)}</td>`;
-    res.forEach((r, i) => {
-      const g = given[i], sSold = soldAtPos(p.id, r.id), sLeft = posStockOf(p.id, r.id);
-      if (!g && !sSold && !sLeft) {
-        h += `<td colspan="4" style="background:#fff3e0;color:#b45309;text-align:center" title="never given to ${esc(r.name)}">✖</td>`;
+    cells.forEach((x, i) => {
+      if (!x.totalIn && !x.sold && !x.left) {
+        h += `<td colspan="${subCols.length}" style="background:#fff3e0;color:#b45309;text-align:center" title="never at ${esc(res[i].name)}">✖</td>`;
         return;
       }
-      const theirPrice = priceFor(r.id, p.id) ?? 0;
-      const hisEur = toE(Math.max(homePrice(p) - theirPrice, 0) * sSold);
-      tot.res[i].g += g; tot.res[i].s += sSold; tot.res[i].l += sLeft; tot.res[i].e += hisEur;
-      h += `<td class="num calc" ${RS}>${fmtN(g)}</td><td class="num calc" ${RS}>${fmtN(sSold)}</td>
-        <td class="num calc ${sLeft < 0 ? "stock-neg" : sLeft === 0 && g > 0 ? "neg" : ""}" ${RS}>${fmtN(sLeft)}</td>
-        <td class="num calc" ${RS}>${showE(hisEur)}</td>`;
+      const t = tot.res[i];
+      t.trf += x.trf; t.adj += x.adj; t.tin += x.totalIn; t.s += x.sold; t.g += x.gift; t.lo += x.lost; t.l += x.left; t.e += x.his;
+      h += `<td class="num calc" ${RS}>${fmtN(x.trf)}</td>
+        <td class="num calc ${x.adj < 0 ? "neg" : ""}" ${RS}>${x.adj > 0 ? "+" : ""}${fmtN(x.adj)}</td>
+        <td class="num calc" ${RS}><b>${fmtN(x.totalIn)}</b></td>
+        <td class="num calc" ${RS}>${fmtN(x.sold)}</td>`
+        + (single ? `<td class="num calc" ${RS}>${fmtN(x.gift)}</td><td class="num calc ${x.lost > 0 ? "neg" : ""}" ${RS}>${fmtN(x.lost)}</td>` : "")
+        + `<td class="num calc ${x.left < 0 ? "stock-neg" : x.left === 0 && x.totalIn > 0 ? "neg" : ""}" ${RS}><b>${fmtN(x.left)}</b></td>
+        <td class="num calc" ${RS}>${showE(x.his)}</td>`;
     });
     h += `<td class="num calc">${eurF.format(c.avgCost)}</td>
       <td class="num calc">${homePrice(p) ? showU(homePrice(p)) : "—"}</td>
-      <td class="num calc ${myProfit < 0 ? "neg" : ""}">${showE(myProfit)}</td>
-      <td class="num calc ${adj !== 0 ? "neg" : ""}">${adj > 0 ? "+" : ""}${fmtN(adj)}</td></tr>`;
+      <td class="num calc ${myProfit < 0 ? "neg" : ""}">${showE(myProfit)}</td></tr>`;
   }
   h += `<tr class="total"><td>TOTAL (${rows.length})</td><td class="num">${fmtN(tot.pur)}</td><td class="num">${fmtN(tot.hs)}</td><td class="num">${fmtN(tot.hl)}</td>`
-    + tot.res.map(t => `<td class="num">${fmtN(t.g)}</td><td class="num">${fmtN(t.s)}</td><td class="num">${fmtN(t.l)}</td><td class="num">${showE(t.e)}</td>`).join("")
-    + `<td></td><td></td><td class="num ${tot.my < 0 ? "neg" : ""}">${showE(tot.my)}</td><td class="num">${tot.adj > 0 ? "+" : ""}${fmtN(tot.adj)}</td></tr></table>`;
+    + tot.res.map(t => `<td class="num">${fmtN(t.trf)}</td><td class="num">${t.adj > 0 ? "+" : ""}${fmtN(t.adj)}</td><td class="num"><b>${fmtN(t.tin)}</b></td><td class="num">${fmtN(t.s)}</td>`
+        + (single ? `<td class="num">${fmtN(t.g)}</td><td class="num">${fmtN(t.lo)}</td>` : "")
+        + `<td class="num"><b>${fmtN(t.l)}</b></td><td class="num">${showE(t.e)}</td>`).join("")
+    + `<td></td><td></td><td class="num ${tot.my < 0 ? "neg" : ""}">${showE(tot.my)}</td></tr></table>`;
   el.innerHTML = h;
 };
 window.exportStocksCSV = () => {
