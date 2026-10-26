@@ -88,7 +88,7 @@
   button.btn.danger { background: none; color: var(--red); border: 1px solid var(--red-soft); }
 
   /* ---------- tables ---------- */
-  table { border-collapse: collapse; width: 100%; }
+  table { border-collapse: collapse; width: auto; min-width: min(420px, 100%); max-width: 100%; }
   th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; white-space: nowrap; font-size: 13px; }
   th { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: #8b8578; background: #faf8f3; position: sticky; top: 0; }
   tbody tr:hover td { background: #faf8f2; }
@@ -414,7 +414,9 @@
   <section class="card">
     <h2>Reseller matrix — who has what, by product</h2>
     <p class="hint">One row per product that exists somewhere (no 0-rows). Per seller: <b>Given · Sold · Left</b> — <b>✖ missing</b> means that reseller never received it.
-    <b>His (€)</b> = the margin that reseller earned (their sales × the gap between your price and theirs); <b>My profit</b> = your realized profit on the product everywhere.</p>
+    <b>His (€)</b> = the margin that reseller earned (their sales × the gap between your price and theirs); <b>My profit</b> = your realized profit on the product everywhere.
+    Note: stock a reseller already had at your June-28 baseline (or any count correction) shows in <b>Left</b> but not in <b>Given</b> — Given counts transfers only.</p>
+    <div class="rowform no-print" id="smBtns" style="margin-bottom:6px"></div>
     <div class="rowform no-print"><label>Search<input id="sm_search" oninput="renderSellerMatrix()" placeholder="product…" style="min-width:220px"></label></div>
     <div class="scrollbox" style="max-height:520px" id="sellerMatrix"></div>
   </section>
@@ -4006,12 +4008,19 @@ window.renderStocks = () => {
 /* Reseller matrix: every product that exists somewhere × every seller —
    Given/Sold/Left per seller (✖ when never given), cost, my sale price,
    my realized profit, the reseller's earned margin, global stock diff. */
+let SM_POS = null; // null = all sellers side by side
+window.setSmPos = id => { SM_POS = id || null; renderSellerMatrix(); };
 window.renderSellerMatrix = () => {
   const el = document.getElementById("sellerMatrix");
   if (!el) return;
   const hp = homePos();
   const locs = sortedPos();
-  const res = locs.filter(x => !hp || x.id !== hp.id);
+  const allRes = locs.filter(x => !hp || x.id !== hp.id);
+  if (SM_POS && !allRes.some(r => r.id === SM_POS)) SM_POS = null;
+  const res = SM_POS ? allRes.filter(r => r.id === SM_POS) : allRes;
+  const bEl = document.getElementById("smBtns");
+  if (bEl) bEl.innerHTML = `<button type="button" class="btn small ${!SM_POS ? "gold" : "ghost"}" onclick="setSmPos('')">All sellers side by side</button>` +
+    allRes.map(r => `<button type="button" class="btn small ${r.id === SM_POS ? "gold" : "ghost"}" onclick="setSmPos('${r.id}')">${esc(r.name)}</button>`).join("");
   const q = (gv("sm_search") || "").toLowerCase();
   const homePrice = p => ((hp ? priceFor(hp.id, p.id) : null) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0));
   const rows = [];
