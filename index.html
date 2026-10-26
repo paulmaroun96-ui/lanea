@@ -401,6 +401,13 @@
     <div class="scrollbox" style="max-height:460px" id="stocksTable"></div>
   </section>
   <section class="card">
+    <h2>Reseller matrix — who has what, by product</h2>
+    <p class="hint">One row per product that exists somewhere (no 0-rows). Per seller: <b>Given · Sold · Left</b> — <b>✖ missing</b> means that reseller never received it.
+    <b>His (€)</b> = the margin that reseller earned (their sales × the gap between your price and theirs); <b>My profit</b> = your realized profit on the product everywhere.</p>
+    <div class="rowform no-print"><label>Search<input id="sm_search" oninput="renderSellerMatrix()" placeholder="product…" style="min-width:220px"></label></div>
+    <div class="scrollbox" style="max-height:520px" id="sellerMatrix"></div>
+  </section>
+  <section class="card">
     <h2>Stock by location</h2>
     <p class="hint"><b>Home holds everything not sent to a reseller</b> — purchases and initial stock land at Home
     (− gifts − losses − transfers out, corrected by your Home counts). <b>Global stock = Home + resellers.</b>
@@ -2485,7 +2492,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInvGrid(); renderImportState(); renderMaintenance(); renderTabToggles(); renderStocks(); renderPosStock(); renderTrfDraft(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
+  renderDash(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInvGrid(); renderImportState(); renderMaintenance(); renderTabToggles(); renderStocks(); renderSellerMatrix(); renderPosStock(); renderTrfDraft(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
@@ -3887,6 +3894,67 @@ window.renderStocks = () => {
     <td class="num">${fmtN(tS)}</td><td class="num">${fmtN(tSt)}</td><td></td><td></td><td></td>
     <td class="num ${tPr < 0 ? "neg" : ""}">${showE(tPr)}</td>
     <td class="num">${tA > 0 ? "+" : ""}${fmtN(tA)}</td></tr></table>`;
+  el.innerHTML = h;
+};
+/* Reseller matrix: every product that exists somewhere × every seller —
+   Given/Sold/Left per seller (✖ when never given), cost, my sale price,
+   my realized profit, the reseller's earned margin, global stock diff. */
+window.renderSellerMatrix = () => {
+  const el = document.getElementById("sellerMatrix");
+  if (!el) return;
+  const hp = homePos();
+  const locs = sortedPos();
+  const res = locs.filter(x => !hp || x.id !== hp.id);
+  const q = (gv("sm_search") || "").toLowerCase();
+  const homePrice = p => ((hp ? priceFor(hp.id, p.id) : null) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0));
+  const rows = [];
+  for (const p of [...state.products].sort(prodSort)) {
+    if (!prodMatch(p, q)) continue;
+    const c = productCalc(p);
+    const homePur = c.iq + c.purQty;
+    const given = res.map(r => transferredTo(p.id, r.id));
+    if (homePur <= 0 && !given.some(g => g > 0)) continue; // hide 0-rows
+    rows.push({ p, c, homePur, given });
+  }
+  if (!rows.length) { el.innerHTML = '<p class="empty">Nothing purchased or given yet.</p>'; return; }
+  const RS = 'style="background:#f1f7f3"';
+  let h = `<table><tr><th>Product</th><th colspan="3" style="text-align:center">${hp ? esc(hp.name) : "Home"}</th>`
+    + res.map(r => `<th colspan="4" style="text-align:center;background:#f1f7f3">${esc(r.name)}</th>`).join("")
+    + `<th class="num">Cost €/u</th><th class="num">Sale $</th><th class="num">My profit (€)</th><th class="num">Stock diff</th></tr>`;
+  h += `<tr><th></th><th class="num">Purch.</th><th class="num">Sold</th><th class="num">Left</th>`
+    + res.map(() => `<th class="num" ${RS}>Given</th><th class="num" ${RS}>Sold</th><th class="num" ${RS}>Left</th><th class="num" ${RS}>His (€)</th>`).join("")
+    + `<th></th><th></th><th></th><th></th>`;
+  h += "</tr>";
+  const tot = { pur: 0, hs: 0, hl: 0, my: 0, adj: 0, res: res.map(() => ({ g: 0, s: 0, l: 0, e: 0 })) };
+  for (const { p, c, homePur, given } of rows) {
+    const hSold = hp ? soldAtPos(p.id, hp.id) : 0;
+    const hLeft = hp ? posStockOf(p.id, hp.id) : 0;
+    const myProfit = toE(c.revenue) - c.cogs;
+    const adj = invDelta(p.id, "all");
+    tot.pur += homePur; tot.hs += hSold; tot.hl += hLeft; tot.my += myProfit; tot.adj += adj;
+    h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtN(homePur)}</td><td class="num calc">${fmtN(hSold)}</td>
+      <td class="num calc ${hLeft < 0 ? "stock-neg" : ""}">${fmtN(hLeft)}</td>`;
+    res.forEach((r, i) => {
+      const g = given[i], sSold = soldAtPos(p.id, r.id), sLeft = posStockOf(p.id, r.id);
+      if (!g && !sSold && !sLeft) {
+        h += `<td colspan="4" style="background:#fff3e0;color:#b45309;text-align:center" title="never given to ${esc(r.name)}">✖</td>`;
+        return;
+      }
+      const theirPrice = priceFor(r.id, p.id) ?? 0;
+      const hisEur = toE(Math.max(homePrice(p) - theirPrice, 0) * sSold);
+      tot.res[i].g += g; tot.res[i].s += sSold; tot.res[i].l += sLeft; tot.res[i].e += hisEur;
+      h += `<td class="num calc" ${RS}>${fmtN(g)}</td><td class="num calc" ${RS}>${fmtN(sSold)}</td>
+        <td class="num calc ${sLeft < 0 ? "stock-neg" : sLeft === 0 && g > 0 ? "neg" : ""}" ${RS}>${fmtN(sLeft)}</td>
+        <td class="num calc" ${RS}>${showE(hisEur)}</td>`;
+    });
+    h += `<td class="num calc">${eurF.format(c.avgCost)}</td>
+      <td class="num calc">${homePrice(p) ? showU(homePrice(p)) : "—"}</td>
+      <td class="num calc ${myProfit < 0 ? "neg" : ""}">${showE(myProfit)}</td>
+      <td class="num calc ${adj !== 0 ? "neg" : ""}">${adj > 0 ? "+" : ""}${fmtN(adj)}</td></tr>`;
+  }
+  h += `<tr class="total"><td>TOTAL (${rows.length})</td><td class="num">${fmtN(tot.pur)}</td><td class="num">${fmtN(tot.hs)}</td><td class="num">${fmtN(tot.hl)}</td>`
+    + tot.res.map(t => `<td class="num">${fmtN(t.g)}</td><td class="num">${fmtN(t.s)}</td><td class="num">${fmtN(t.l)}</td><td class="num">${showE(t.e)}</td>`).join("")
+    + `<td></td><td></td><td class="num ${tot.my < 0 ? "neg" : ""}">${showE(tot.my)}</td><td class="num">${tot.adj > 0 ? "+" : ""}${fmtN(tot.adj)}</td></tr></table>`;
   el.innerHTML = h;
 };
 window.exportStocksCSV = () => {
