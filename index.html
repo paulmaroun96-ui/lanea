@@ -287,6 +287,7 @@
     <p class="hint">Margins come from your last 90 days of sales. Fixed costs are prefilled from your active recurring rules — change them, or add a % commission per sale, and the target updates live.</p>
     <div class="rowform no-print">
       <label>Monthly fixed costs ($)<input id="be_fix" type="number" step="0.01" min="0" style="width:130px" oninput="renderBreakEven()"></label>
+      <label>Shipping / import per unit ($)<input id="be_ship" type="number" step="0.01" min="0" style="width:110px" oninput="renderBreakEven()"></label>
       <label>Commission per sale (%)<input id="be_comm" type="number" step="0.5" min="0" max="95" value="0" style="width:90px" oninput="renderBreakEven()"></label>
     </div>
     <div id="beOut"></div>
@@ -1427,7 +1428,18 @@ window.renderBreakEven = () => {
       .reduce((a, r) => a + Number(r.amount), 0);
     if (recMonthly > 0) fixEl.value = (recMonthly * USD_RATE).toFixed(2);
   }
+  // shipping/import costs live in Expenses, NOT in unit cost — load them onto
+  // every unit bought so the margin is on true landed cost (user-editable)
+  const shipEl = document.getElementById("be_ship");
+  if (shipEl && shipEl.value === "") {
+    const shipExp = state.expenses.filter(e => e.category === "Shipment" || /shipping|freight/i.test(e.description || ""))
+      .reduce((a, e) => a + Number(e.amount), 0);
+    const bought = state.purchases.reduce((a, u) => a + Number(u.qty), 0)
+      + state.products.reduce((a, p) => a + Number(p.initial_qty || 0), 0);
+    if (shipExp > 0 && bought > 0) shipEl.value = ((shipExp / bought) * USD_RATE).toFixed(2);
+  }
   const fix = Number(gv("be_fix")) || 0;
+  const ship = Math.max(0, Number(gv("be_ship")) || 0);
   const comm = Math.min(95, Math.max(0, Number(gv("be_comm")) || 0)) / 100;
   const cut = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
   let rows = state.sales.filter(s => s.date >= cut);
@@ -1435,7 +1447,7 @@ window.renderBreakEven = () => {
   let rev = 0, units = 0, cogs = 0;
   for (const s of rows) { const q = Number(s.qty); units += q; rev += q * Number(s.price_per_unit); cogs += q * saleCostOf(s); }
   if (!units) { el.innerHTML = '<p class="empty">No sales yet — margins can\'t be measured.</p>'; return; }
-  const avgP = rev / units, costU = (cogs / units) * USD_RATE;
+  const avgP = rev / units, costU = (cogs / units) * USD_RATE + ship;
   const mU = avgP * (1 - comm) - costU;
   const mPct = avgP > 0 ? mU / avgP : 0;
   const monthsSpan = Math.max(1, new Set(rows.map(s => String(s.date).slice(0, 7))).size);
@@ -1445,7 +1457,7 @@ window.renderBreakEven = () => {
   const profit = runRev * mPct - fix;
   el.innerHTML = `<table>
     <tr><td>Average sale (last ${monthsSpan} month${monthsSpan > 1 ? "s" : ""})</td><td class="num calc">${showU(avgP)}/u</td>
-      <td>cost ${showU(costU)}/u → margin <b>${showU(Math.max(mU, 0))}</b>/u (${fmtP(mPct)})${comm ? ` after the ${(comm * 100).toFixed(1)}% commission` : ""}</td></tr>
+      <td>landed cost ${showU(costU)}/u${ship ? ` (goods + ${showU(ship)} shipping)` : ""} → margin <b>${showU(Math.max(mU, 0))}</b>/u (${fmtP(mPct)})${comm ? ` after the ${(comm * 100).toFixed(1)}% commission` : ""}</td></tr>
     <tr><td><b>Break-even target</b></td><td class="num calc"><b>${isFinite(needU) ? fmtN(Math.ceil(needU)) + " units" : "—"}</b></td>
       <td>= <b>${isFinite(needRev) ? showU(needRev) : "—"}</b> of sales per month to cover ${showU(fix)} of fixed costs</td></tr>
     <tr><td>Your current pace</td><td class="num calc">${fmtN(Math.round(runUnits))} units</td><td>${showU(runRev)} of sales per month</td></tr>
