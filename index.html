@@ -2268,7 +2268,12 @@ window.resellerStats = (posId, pid) => {
   // one reseller (or null = all resellers combined), one product (or null = all)
   const posIds = posId ? [posId] : resellerPosList().map(p => p.id);
   const prods = pid ? [prodById(pid)].filter(Boolean) : state.products;
-  const st = { given: 0, sold: 0, rev: 0, gifted: 0, lost: 0, adj: 0, hand: 0, val: 0 };
+  const st = { given: 0, sold: 0, rev: 0, theirRev: 0, theirCut: 0, gifted: 0, lost: 0, adj: 0, hand: 0, val: 0 };
+  const hp0 = homePos();
+  const hpPrice = pid2 => {
+    const p2 = prodById(pid2);
+    return ((hp0 ? priceFor(hp0.id, pid2) : null) ?? ((typeof RETAIL_USD !== "undefined" && p2 && p2.ref && RETAIL_USD[p2.ref]) || 0));
+  };
   for (const id of posIds) {
     for (const p of prods) {
       st.given += transferredTo(p.id, id);
@@ -2279,7 +2284,10 @@ window.resellerStats = (posId, pid) => {
       st.hand += h; st.val += h * avgCostOf(p.id);
     }
     for (const s of state.sales) if (s.pos_id === id && (!pid || s.product_id === pid)) {
-      st.sold += Number(s.qty); st.rev += Number(s.qty) * Number(s.price_per_unit);
+      const q = Number(s.qty), hpP = hpPrice(s.product_id);
+      st.sold += q; st.rev += q * Number(s.price_per_unit);
+      st.theirRev += q * hpP; // what the reseller collects selling at YOUR price
+      st.theirCut += q * Math.max(hpP - Number(s.price_per_unit), 0); // the spread they keep
     }
   }
   st.total = st.given + st.adj; // TOTAL received — same definition as the matrix & P&L
@@ -2290,19 +2298,21 @@ window.renderResellers = () => {
   if (!sumEl) return;
   const rs = resellerPosList();
   if (!rs.length) { sumEl.innerHTML = '<p class="empty">No resellers yet — create them in Sales & prices.</p>'; document.getElementById("resellerTable").innerHTML = ""; return; }
-  let h = `<table><tr><th>Reseller</th><th class="num">TOTAL received</th><th class="num">Sold</th><th class="num">Revenue ($)</th><th class="num">Gifted</th><th class="num">Lost</th><th class="num">= Left</th><th class="num">Value left (€)</th></tr>`;
-  const tot = { total: 0, sold: 0, rev: 0, gifted: 0, lost: 0, hand: 0, val: 0 };
+  let h = `<table><tr><th>Reseller</th><th class="num">TOTAL received</th><th class="num">Sold</th><th class="num">I earn ($)</th><th class="num">Their revenue ($)</th><th class="num">They keep ($)</th><th class="num">Gifted</th><th class="num">Lost</th><th class="num">= Left</th><th class="num">Value left (€)</th></tr>`;
+  const tot = { total: 0, sold: 0, rev: 0, theirRev: 0, theirCut: 0, gifted: 0, lost: 0, hand: 0, val: 0 };
   for (const pos of rs) {
     const s = resellerStats(pos.id, null);
     for (const k in tot) tot[k] += s[k];
     h += `<tr><td><b>${esc(pos.name)}</b></td>
       <td class="num calc"><b>${fmtN(s.total)}</b></td><td class="num calc">${fmtN(s.sold)}</td>
-      <td class="num calc">${showU(s.rev)}</td><td class="num calc">${fmtN(s.gifted)}</td><td class="num calc">${fmtN(s.lost)}</td>
+      <td class="num calc">${showU(s.rev)}</td><td class="num calc">${showU(s.theirRev)}</td><td class="num calc">${showU(s.theirCut)}</td>
+      <td class="num calc">${fmtN(s.gifted)}</td><td class="num calc">${fmtN(s.lost)}</td>
       <td class="num calc ${s.hand < 0 ? "stock-neg" : ""}"><b>${fmtN(s.hand)}</b></td><td class="num calc">${showE(s.val)}</td></tr>`;
   }
   h += `<tr class="total"><td>TOTAL resellers</td>
     <td class="num"><b>${fmtN(tot.total)}</b></td><td class="num">${fmtN(tot.sold)}</td>
-    <td class="num">${showU(tot.rev)}</td><td class="num">${fmtN(tot.gifted)}</td><td class="num">${fmtN(tot.lost)}</td>
+    <td class="num">${showU(tot.rev)}</td><td class="num">${showU(tot.theirRev)}</td><td class="num">${showU(tot.theirCut)}</td>
+    <td class="num">${fmtN(tot.gifted)}</td><td class="num">${fmtN(tot.lost)}</td>
     <td class="num"><b>${fmtN(tot.hand)}</b></td><td class="num">${showE(tot.val)}</td></tr></table>`;
   sumEl.innerHTML = h;
   // per-product detail for one reseller (or all combined)
@@ -2313,11 +2323,14 @@ window.renderResellers = () => {
     .filter(r => r.s.given || r.s.sold || r.s.hand || r.s.gifted || r.s.lost || r.s.adj);
   const el = document.getElementById("resellerTable");
   if (!rows.length) { el.innerHTML = '<p class="empty">Nothing given to or sold by this reseller yet.</p>'; return; }
-  let d = `<table><tr><th>Product</th><th class="num">TOTAL received</th><th class="num">Sold</th><th class="num">Revenue ($)</th><th class="num">Gifted</th><th class="num">Lost</th><th class="num">= Left</th></tr>`;
+  let d = `<table><tr><th>Product</th><th class="num">TOTAL received</th><th class="num">Sold</th><th class="num">I earn ($)</th><th class="num">Their revenue ($)</th><th class="num">They keep ($)</th><th class="num">Gifted</th><th class="num">Lost</th><th class="num">= Left</th></tr>`;
   for (const r of rows) {
     d += `<tr><td>${prodLabel(r.p)}</td>
       <td class="num calc"><b>${fmtN(r.s.total)}</b></td><td class="num calc">${fmtN(r.s.sold)}</td>
-      <td class="num calc">${r.s.rev ? showU(r.s.rev) : "·"}</td><td class="num calc">${r.s.gifted ? fmtN(r.s.gifted) : "·"}</td>
+      <td class="num calc">${r.s.rev ? showU(r.s.rev) : "·"}</td>
+      <td class="num calc">${r.s.theirRev ? showU(r.s.theirRev) : "·"}</td>
+      <td class="num calc">${r.s.theirCut ? showU(r.s.theirCut) : "·"}</td>
+      <td class="num calc">${r.s.gifted ? fmtN(r.s.gifted) : "·"}</td>
       <td class="num calc">${r.s.lost ? fmtN(r.s.lost) : "·"}</td>
       <td class="num calc ${r.s.hand < 0 ? "stock-neg" : ""}"><b>${fmtN(r.s.hand)}</b></td></tr>`;
   }
@@ -2326,11 +2339,11 @@ window.renderResellers = () => {
 window.exportResellersCSV = () => {
   const posId = gv("rt_pos") || null;
   const name = posId ? (posById(posId)?.name || "") : "All resellers";
-  const rows = [["LANEA — Reseller tracking: " + name], ["Product", "TOTAL received", "Sold", "Revenue (USD)", "Gifted", "Lost", "Left"]];
+  const rows = [["LANEA — Reseller tracking: " + name], ["Product", "TOTAL received", "Sold", "I earn (USD)", "Their revenue (USD)", "They keep (USD)", "Gifted", "Lost", "Left"]];
   for (const p of [...state.products].sort(prodSort)) {
     const s = resellerStats(posId, p.id);
     if (!(s.given || s.sold || s.hand || s.gifted || s.lost || s.adj)) continue;
-    rows.push([prodShort(p), s.total, s.sold, s.rev.toFixed(2), s.gifted, s.lost, s.hand]);
+    rows.push([prodShort(p), s.total, s.sold, s.rev.toFixed(2), s.theirRev.toFixed(2), s.theirCut.toFixed(2), s.gifted, s.lost, s.hand]);
   }
   downloadFile("lanea-resellers.csv", "text/csv", toCSV(rows));
 };
