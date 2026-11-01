@@ -2286,7 +2286,7 @@ window.renderResellers = () => {
   const sumEl = document.getElementById("resellerSummary");
   if (!sumEl) return;
   const rs = resellerPosList();
-  if (!rs.length) { sumEl.innerHTML = '<p class="empty">No resellers yet — create them in Sales & prices.</p>'; document.getElementById("resellerTable").innerHTML = ""; return; }
+  if (!rs.length) { sumEl.innerHTML = '<p class="empty">No resellers yet — create them in Sales & prices.</p>'; return; }
   let h = `<table><tr><th>Reseller</th><th class="num">TOTAL received</th><th class="num">Sold</th><th class="num">I earn ($)</th><th class="num">They earn ($)</th><th class="num">Gifted</th><th class="num">Lost</th><th class="num">= Left</th><th class="num">Value left (€)</th></tr>`;
   const tot = { total: 0, sold: 0, rev: 0, theirCut: 0, gifted: 0, lost: 0, hand: 0, val: 0 };
   for (const pos of rs) {
