@@ -369,10 +369,13 @@
     <p class="hint">Sales made at Home or by a reseller, straight from a file — each line becomes a <b>sale dated today</b> at that location's list price unless the line carries its own price.
     You confirm the totals before anything saves; stock deducts automatically; Ctrl+Z undoes the whole import.</p>
     <div class="rowform">
-      <label>File<input type="file" id="si_file" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
+      <label>File or PHOTO<input type="file" id="si_file" accept=".xlsx,.xls,.csv,.tsv,.txt,.pdf,image/*"></label>
       <label>Sold at<select id="si_to"></select></label>
+      <label>Sale date<input type="date" id="si_date" title="Empty = the date on the invoice (photo scan) or today"></label>
       <button class="btn gold" type="button" onclick="importSalesFile()">Read file → import sales</button>
     </div>
+    <p class="hint">A <b>photo or PDF of a handwritten invoice</b> works too — Gemini reads it and matches the products
+    (needs the API key from Purchases → Scan an invoice, saved in this browser). Leave the date empty to use the invoice's own date.</p>
     <label style="display:block;margin-top:8px;max-width:640px;text-transform:none;letter-spacing:0">…or paste lines (Product, Qty — optional: Location, Price $)
       <textarea id="si_paste" rows="4" style="width:100%;margin-top:4px" placeholder="Savon Rond Monoï, 3&#10;Sérum 30ml, 2, Pharma, 59.5"></textarea></label>
     <div class="rowform"><button class="btn ghost" type="button" onclick="importSalesPaste()">Read pasted lines → import sales</button></div>
@@ -4593,24 +4596,43 @@ window.importTransferPaste = () => {
 };
 /* sales-sheet import: Product, Qty[, Reseller][, Price $] → SALES at that
    reseller, dated today, price-list price unless the line has its own */
-async function siAddRows(rawRows) {
+async function siAddRows(rawRows, opts = {}) {
   const hp = homePos();
   const defTo = gv("si_to") || "";
   const miss = [], plan = [];
+  let wDate = null; // date found in a WhatsApp [time, M/D/YYYY] prefix
   for (const raw of rawRows) {
     const cells = raw.map(c => String(c ?? "").trim());
     if (!cells[0]) continue;
     if (/produ|article|item|^ref/i.test(cells[0]) && !/\d/.test(cells[1] || "")) continue;
-    let prodTxt = cells[0], qtyTxt = cells[1];
-    if (qtyTxt === undefined || qtyTxt === "") {
-      const m = prodTxt.match(/^(.*?)[\s,;]+(\d+)$/);
-      if (m) { prodTxt = m[1]; qtyTxt = m[2]; }
-    }
-    const rest = cells.slice(2).filter(c => c !== "");
-    let posTxt = "", priceTxt = "";
-    for (const c of rest) {
-      if (/^[\d.,$]+$/.test(c)) priceTxt = priceTxt || c;
-      else posTxt = posTxt || c;
+    let prodTxt = cells[0], qtyTxt = cells[1], posTxt = "", priceTxt = "";
+    if (cells.filter(c => c !== "").length <= 1 || /^\[/.test(cells[0])) {
+      // WhatsApp-style free text: "[11:23 AM, 10/25/2026] Mam: Shampooing solide 2 30"
+      // (the timestamp's own comma splits it, so re-join bracket-prefixed lines)
+      let txt = /^\[/.test(cells[0]) ? cells.filter(c => c !== "").join(", ") : cells[0];
+      const mD = txt.match(/^\[[^\]]*?(\d{1,2})\/(\d{1,2})\/(\d{4})[^\]]*\]\s*[^:]*:\s*(.*)$/);
+      if (mD) { wDate = `${mD[3]}-${String(mD[1]).padStart(2, "0")}-${String(mD[2]).padStart(2, "0")}`; txt = mD[4].trim(); }
+      if (!txt) continue;
+      if (/^[\d\s+.,=]+$/.test(txt)) continue; // "70+23+…=381" check lines
+      if (/\bpaid\b|\bpay[ée]\b/i.test(txt)) { miss.push(`• "${txt}" — looks like an EXPENSE, add it in Expenses`); continue; }
+      const m2 = txt.match(/^(.+?)\s+(\d+)\s+(\d+(?:[.,]\d+)?)$/);   // name qty price
+      const m1 = txt.match(/^(.+?)\s+(\d+(?:[.,]\d+)?)$/);          // name + one number
+      if (m2) { prodTxt = m2[1]; qtyTxt = m2[2]; priceTxt = m2[3]; }
+      else if (m1) {
+        prodTxt = m1[1];
+        const n = Number(m1[2].replace(",", "."));
+        if (/[.,]/.test(m1[2]) || n >= 8) { qtyTxt = "1"; priceTxt = m1[2]; } // one big number = the price, qty 1
+        else qtyTxt = m1[2];
+      } else { prodTxt = txt; qtyTxt = undefined; }
+    } else {
+      if (qtyTxt === undefined || qtyTxt === "") {
+        const m = prodTxt.match(/^(.*?)[\s,;]+(\d+)$/);
+        if (m) { prodTxt = m[1]; qtyTxt = m[2]; }
+      }
+      for (const c of cells.slice(2).filter(c => c !== "")) {
+        if (/^[\d.,$]+$/.test(c)) priceTxt = priceTxt || c;
+        else posTxt = posTxt || c;
+      }
     }
     const qty = Math.round(Number(String(qtyTxt ?? "").replace(",", ".")));
     const p = tiMatchProduct(prodTxt);
@@ -4629,10 +4651,11 @@ async function siAddRows(rawRows) {
   }
   const units = plan.reduce((a, l) => a + l.qty, 0);
   const totalU = plan.reduce((a, l) => a + l.qty * l.price, 0);
+  const saleDate = gv("si_date") || opts.date || wDate || todayISO();
   if (!(await niceConfirm("Import these sales?",
-    `${plan.length} line${plan.length === 1 ? "" : "s"} · ${fmtN(units)} units · ${usdF.format(totalU)}, dated today, at each seller's list price (or the sheet's own price). Stock deducts at the seller. Ctrl+Z undoes it.`, "Import sales"))) return;
+    `${plan.length} line${plan.length === 1 ? "" : "s"} · ${fmtN(units)} units · ${usdF.format(totalU)}, dated ${fmtD(saleDate)}, at each seller's list price (or the sheet's own price). Stock deducts at the seller. Ctrl+Z undoes it.`, "Import sales"))) return;
   for (const l of plan) {
-    if (!(await addRow("sales", { date: todayISO(), pos_id: l.pos.id, product_id: l.p.id, qty: l.qty, price_per_unit: l.price }))) return;
+    if (!(await addRow("sales", { date: saleDate, pos_id: l.pos.id, product_id: l.p.id, qty: l.qty, price_per_unit: l.price }))) return;
   }
   render();
   alert(`${plan.length} sales imported ✓ — ${fmtN(units)} units · ${usdF.format(totalU)}.`
@@ -4644,12 +4667,54 @@ window.importSalesPaste = () => {
   siAddRows(tiSplitText(t));
   const el = document.getElementById("si_paste"); if (el) el.value = "";
 };
+/* photo/PDF of a handwritten sales invoice → Gemini reads the lines AND picks
+   the matching catalog product name, so the handwriting phrasing doesn't matter */
+async function scanSalesPhoto(f) {
+  const key = localStorage.getItem(LS_GMKEY) || "";
+  if (!key) { alert("Set your Gemini API key first (Purchases → Scan an invoice (AI)) — it stays in this browser only."); return; }
+  toast("Reading the photo with Gemini — a few seconds…");
+  const catalog = [...state.products].sort(prodSort).map(p => prodShort(p)).join("\n");
+  const prompt = `You are reading a handwritten or printed SALES invoice from a cosmetics shop (French product names).
+Extract the invoice date (YYYY-MM-DD) and EVERY product line: qty (units), unit_price (per unit, plain number), and
+match the written description to EXACTLY ONE name from this catalog (return it verbatim in "catalog"; empty if truly none fits):
+${catalog}
+Ignore subtotal/total/signature rows. Crossed-out lines are excluded.`;
+  const schema = { type: "OBJECT", properties: {
+    date: { type: "STRING" },
+    lines: { type: "ARRAY", items: { type: "OBJECT", properties: {
+      catalog: { type: "STRING" }, name: { type: "STRING" }, qty: { type: "NUMBER" }, unit_price: { type: "NUMBER" },
+    }, required: ["name", "qty"] } },
+  }, required: ["lines"] };
+  const b64 = await gmFileToB64(f);
+  const body = {
+    contents: [{ parts: [{ inline_data: { mime_type: f.type || "image/jpeg", data: b64 } }, { text: prompt }] }],
+    generationConfig: { response_mime_type: "application/json", response_schema: schema, temperature: 0 },
+  };
+  let parsed = null, lastErr = "";
+  for (const model of GM_MODELS) {
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body),
+    });
+    if (!resp.ok) { lastErr = `${model}: HTTP ${resp.status}`; continue; }
+    const j = await resp.json();
+    try { parsed = JSON.parse((j.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("")); break; }
+    catch { lastErr = model + ": unreadable response"; }
+  }
+  if (!parsed) { alert("Scan failed — " + (lastErr || "no response") + ". You can paste the lines as text instead."); return; }
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(parsed.date || "") ? parsed.date : undefined;
+  const rows = (parsed.lines || []).filter(l => Number(l.qty) > 0)
+    .map(l => [String(l.catalog || l.name || ""), String(l.qty), "", String(l.unit_price || "")]);
+  if (!rows.length) { alert("Gemini found no product lines on this photo."); return; }
+  await siAddRows(rows, { date });
+}
 window.importSalesFile = async () => {
   const inp = document.getElementById("si_file");
   const f = inp && inp.files && inp.files[0];
-  if (!f) { alert("Choose a file first (.xlsx, .csv or .txt)."); return; }
+  if (!f) { alert("Choose a file first (.xlsx, .csv, .txt — or a photo/PDF)."); return; }
   try {
-    if (/\.xlsx?$/i.test(f.name)) {
+    if (/\.(pdf|png|jpe?g|webp|heic)$/i.test(f.name) || /^image\//.test(f.type || "")) {
+      await scanSalesPhoto(f);
+    } else if (/\.xlsx?$/i.test(f.name)) {
       await loadXlsxLib();
       const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
       await siAddRows(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: "" }));
