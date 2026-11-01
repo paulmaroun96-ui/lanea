@@ -364,7 +364,7 @@
     </div>
     <div id="reportBody"></div>
   </section>
-  <section class="card no-print">
+  <section class="card no-print" data-hideable="salesheet">
     <h2>⇪ Import a sales sheet (Excel / CSV / pasted list)</h2>
     <p class="hint">Sales made at Home or by a reseller, straight from a file — each line becomes a <b>sale dated today</b> at that location's list price unless the line carries its own price.
     You confirm the totals before anything saves; stock deducts automatically; Ctrl+Z undoes the whole import.</p>
@@ -394,7 +394,7 @@
     </form>
     <p class="hint" id="t_hint">Defaults: quantity <b>1</b>, from <b>Home</b>, to <b>Teta</b>. Lines pile up below so you can double-check — nothing moves until <b>Save all transfers</b>.</p>
     <div id="trfDraftBox"></div>
-    <details class="no-print" style="margin-top:10px">
+    <details class="no-print" style="margin-top:10px" data-hideable="trfsheet">
       <summary class="hint" style="cursor:pointer;display:inline-block">⇪ Import a transfer sheet (Excel / CSV / pasted list)</summary>
       <div class="rowform" style="margin-top:8px">
         <label>File<input type="file" id="ti_file" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
@@ -480,13 +480,13 @@
 <!-- ================= PURCHASES ================= -->
 <div class="tab" id="tab-pur" style="display:none">
   <div class="pagehead"><h1>Purchases</h1><p>Supplier invoices and purchasing details — every line adds stock to Home and feeds the average cost per product.</p></div>
-  <section class="card no-print" id="importCard">
+  <section class="card no-print" id="importCard" data-hideable="invimport">
     <h2>Au pays des Ânes invoices</h2>
     <p class="hint" id="importHint"></p>
     <button class="btn gold" id="importBtn" onclick="importInvoices()">Import invoices</button>
     <span id="importStatus" style="margin-left:10px;font-size:13px"></span>
   </section>
-  <section class="card no-print">
+  <section class="card no-print" data-hideable="scanner">
     <h2>Scan an invoice (AI)</h2>
     <p class="hint">Drop a <b>PDF or photo</b> of a supplier invoice — Gemini reads the date, invoice ref and every line (product · qty · unit price · line total).
     You review and match the products, then import. The API key is saved <b>only in this browser</b> — never in the code or the cloud.</p>
@@ -623,7 +623,7 @@
     </form>
     <p class="hint">Any date works — use it to back-fill old expenses. Today's small costs can also go through the Daily report.</p>
     <div class="hint no-print" style="margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">Categories (click one to rename): <span id="catManager" style="display:contents"></span></div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px" data-hideable="oldexp55">
       <button class="btn gold" type="button" onclick="importOldExpenses()">Import the 55 old expenses from the Excel (€21,064.87)</button>
       <span class="hint" style="margin:0">One click — safe to press twice, already-imported lines are skipped. Supplier invoices are excluded (they live in Purchases).</span>
     </div>
@@ -1504,21 +1504,33 @@ window.renderBreakEven = () => {
   if (tEl) {
     const ovU = runUnits > 0 ? fix / runUnits : 0;
     const hpT = homePos();
-    let th = `<table><tr><th>Product</th><th class="num">Sale $</th><th class="num">Goods $/u</th><th class="num">Shipping $/u</th>
-      <th class="num">Overhead $/u</th><th class="num">TRUE cost $/u</th><th class="num">Real profit (direct)</th><th class="num">Real profit (via reseller −15%)</th></tr>`;
+    let body = "", tLeft = 0, tPD = 0, tPR = 0;
     for (const p of [...state.products].sort(prodSort)) {
       const price = (hpT ? priceFor(hpT.id, p.id) : null) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0);
       if (!(price > 0)) continue;
-      const goods = productCalc(p).avgCost * USD_RATE;
+      const c = productCalc(p);
+      const goods = c.avgCost * USD_RATE;
       const trueC = goods + ship + ovU;
       const pd = price - trueC, pr = price * 0.85 - trueC;
-      th += `<tr><td>${prodLabel(p)}</td><td class="num calc">${showU(price)}</td><td class="num calc">${showU(goods)}</td>
+      const left = Math.max(c.stock, 0);
+      tLeft += left; tPD += left * pd; tPR += left * pr;
+      body += `<tr><td>${prodLabel(p)}</td><td class="num calc">${showU(price)}</td><td class="num calc">${showU(goods)}</td>
         <td class="num calc">${showU(ship)}</td><td class="num calc">${showU(ovU)}</td>
         <td class="num calc"><b>${showU(trueC)}</b></td>
         <td class="num calc ${pd < 0 ? "neg" : "hi-sold"}">${showU(pd)} · ${fmtP(pd / price)}</td>
-        <td class="num calc ${pr < 0 ? "neg" : ""}">${showU(pr)} · ${fmtP(pr / price)}</td></tr>`;
+        <td class="num calc ${pr < 0 ? "neg" : ""}">${showU(pr)} · ${fmtP(pr / price)}</td>
+        <td class="num calc">${fmtN(left)}</td>
+        <td class="num calc ${left * pd < 0 ? "neg" : ""}">${showU(left * pd)}</td>
+        <td class="num calc ${left * pr < 0 ? "neg" : ""}">${showU(left * pr)}</td></tr>`;
     }
-    tEl.innerHTML = th + "</table>";
+    let th = `<table><tr><th>Product</th><th class="num">Sale $</th><th class="num">Goods $/u</th><th class="num">Shipping $/u</th>
+      <th class="num">Overhead $/u</th><th class="num">TRUE cost $/u</th><th class="num">Real profit (direct)</th><th class="num">Real profit (via reseller −15%)</th>
+      <th class="num">Left</th><th class="num">TRUE profit in stock (direct)</th><th class="num">(via reseller)</th></tr>`;
+    th += `<tr class="total"><td>TOTAL if everything left sells</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td class="num">${fmtN(tLeft)}</td>
+      <td class="num ${tPD < 0 ? "neg" : ""}"><b>${showU(tPD)}</b></td>
+      <td class="num ${tPR < 0 ? "neg" : ""}"><b>${showU(tPR)}</b></td></tr>`;
+    tEl.innerHTML = th + body + "</table>";
   }
 };
 window.clearFilters = () => {
@@ -3221,13 +3233,29 @@ window.importJulySales = async () => {
 let HIDDEN = { mnt: [], tabs: [] };
 try { HIDDEN = Object.assign({ mnt: [], tabs: [] }, JSON.parse(localStorage.getItem("lanea-hidden") || "{}")); } catch {}
 const saveHidden = () => localStorage.setItem("lanea-hidden", JSON.stringify(HIDDEN));
-window.hideMnt = key => { if (!HIDDEN.mnt.includes(key)) HIDDEN.mnt.push(key); saveHidden(); render(); toast("Button removed — restore it anytime in Settings"); };
+window.hideMnt = key => { if (!HIDDEN.mnt.includes(key)) HIDDEN.mnt.push(key); saveHidden(); applyHideables(); render(); toast("Removed — restore it anytime in Settings"); };
+/* every block marked data-hideable="key" gets a ✕ and hides when dismissed —
+   one-time import/export bars across all pages share the Maintenance store */
+function applyHideables() {
+  document.querySelectorAll("[data-hideable]").forEach(el => {
+    const key = el.getAttribute("data-hideable");
+    el.style.display = HIDDEN.mnt.includes(key) ? "none" : "";
+    if (el.querySelector(".hidex")) return;
+    const btn = document.createElement("button");
+    btn.className = "btn small ghost hidex no-print";
+    btn.type = "button";
+    btn.title = "Remove this block (restore in Settings)";
+    btn.textContent = "✕";
+    btn.onclick = e => { e.preventDefault(); e.stopPropagation(); hideMnt(key); };
+    (el.querySelector("summary") || el.querySelector("h2") || el).appendChild(btn);
+  });
+}
 window.toggleTabVis = (key, show) => {
   HIDDEN.tabs = HIDDEN.tabs.filter(t => t !== key);
   if (!show) HIDDEN.tabs.push(key);
   saveHidden(); applyHiddenTabs(); renderTabToggles();
 };
-window.showEverything = () => { HIDDEN = { mnt: [], tabs: [] }; saveHidden(); applyHiddenTabs(); render(); toast("All pages and buttons restored ✓"); };
+window.showEverything = () => { HIDDEN = { mnt: [], tabs: [] }; saveHidden(); applyHiddenTabs(); applyHideables(); render(); toast("All pages and buttons restored ✓"); };
 function applyHiddenTabs() {
   document.querySelectorAll("#nav button").forEach(btn => {
     btn.style.display = HIDDEN.tabs.includes(btn.dataset.tab) ? "none" : "";
@@ -5158,6 +5186,7 @@ window.saveLowStock = () => {
 setVal("rc_start", todayISO().slice(0, 7));
 setVal("ex_date", todayISO());
 applyHiddenTabs();
+applyHideables();
 try { setVal("gm_key", localStorage.getItem(LS_GMKEY) || ""); } catch {}
 loadLocal(); setBadge(); render(); initSupabase();
 if (!remote) ensureRecurring();
