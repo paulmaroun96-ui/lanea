@@ -1821,7 +1821,15 @@ window.posRank = pos => {
   const i = POS_ORDER.findIndex(k => n === k || n.includes(k) || (n.length >= 4 && k.includes(n)));
   return i === -1 ? POS_ORDER.length : i;
 };
-window.sortedPos = () => [...state.pos].sort((a, b) => posRank(a) - posRank(b) || String(a.name || "").localeCompare(String(b.name || "")));
+/* resellers that actually hold or moved stock come BEFORE empty ones (user) */
+window.sortedPos = () => {
+  const act = new Set();
+  for (const t of state.transfers) act.add(t.pos_id);
+  for (const s of state.sales) if (s.pos_id) act.add(s.pos_id);
+  return [...state.pos].sort((a, b) => posRank(a) - posRank(b)
+    || ((act.has(b.id) ? 1 : 0) - (act.has(a.id) ? 1 : 0))
+    || String(a.name || "").localeCompare(String(b.name || "")));
+};
 window.prefillPrices = () => {
   if (typeof RETAIL_USD === "undefined") { alert("Price data not loaded — reload the page."); return; }
   if (!state.pos.length) { alert("Create a point of sale first."); return; }
@@ -3308,6 +3316,7 @@ function renderMaintenance() {
   }
   const tools = [];
   if (!HIDDEN.mnt.includes("alignprices")) tools.push(wrap("alignprices", `<button class="btn gold" type="button" onclick="realignPrices()">Set ALL prices from the website (resellers −15%) + re-price Pharma's sales</button>`));
+  if (!HIDDEN.mnt.includes("tidypos")) tools.push(wrap("tidypos", `<button class="btn ghost" type="button" onclick="tidyResellers()">Tidy resellers — short names (Rosy, Pascale) + delete empty ones</button>`));
   if (!HIDDEN.mnt.includes("fixteta")) tools.push(wrap("fixteta", `<button class="btn ghost" type="button" onclick="fixTetaPrices()">Set Teta at reseller prices (−15%) + re-price her existing sales</button>`));
   if (!HIDDEN.mnt.includes("consolidate")) tools.push(wrap("consolidate", `<button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>`));
   if (tools.length) h += `<div class="rowform" style="margin-top:6px">${tools.join("")}</div>`;
@@ -3453,6 +3462,30 @@ window.importOldMayJun = async () => {
 /* Handwritten invoices 31–37 (24–26 Oct 2026): consignment placements
    Home → Rosy El Khoury Geagea + Dr Pascale Abou Sleiman (created if missing).
    Transfers only — revenue comes when they sell. */
+/* one click: short reseller names (Rosy, Pascale) + delete POS where nothing
+   was ever transferred, sold, gifted, lost or counted (never Home) */
+window.tidyResellers = async () => {
+  const hp = homePos();
+  for (const [k, short] of [["rosy", "Rosy"], ["pascale", "Pascale"]]) {
+    const p = state.pos.find(x => normPosName(x.name).indexOf(k) >= 0 && x.name !== short);
+    if (p) await updateRow("pos", p.id, { name: short });
+  }
+  const used = new Set();
+  for (const t of state.transfers) used.add(t.pos_id);
+  for (const s of state.sales) if (s.pos_id) used.add(s.pos_id);
+  for (const g of state.gifts) if (g.pos_id) used.add(g.pos_id);
+  for (const l of state.losses) if (l.pos_id) used.add(l.pos_id);
+  for (const pos of state.pos) if (!used.has(pos.id)) {
+    for (const p of state.products) if (invDelta(p.id, pos.id) !== 0) { used.add(pos.id); break; }
+  }
+  const empty = state.pos.filter(x => (!hp || x.id !== hp.id) && !used.has(x.id));
+  if (!empty.length) { toast("Names tidied ✓ — no empty resellers to delete"); render(); return; }
+  if (!(await niceConfirm("Delete the empty resellers?",
+    `${empty.map(x => x.name).join(", ")} — nothing was ever transferred, sold, gifted or counted there. Their price lists go too. Ctrl+Z undoes everything.`, "Delete them"))) { render(); return; }
+  for (const x of empty) if (!(await deleteRow("pos", x.id))) return;
+  toast(`Tidied ✓ — ${empty.length} empty reseller${empty.length === 1 ? "" : "s"} deleted`);
+  render();
+};
 window.importNewPlacements = async () => {
   if (typeof PLACEMENTS_OCT === "undefined") { alert("Placement data not loaded — reload the page."); return; }
   if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
