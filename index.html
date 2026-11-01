@@ -2198,7 +2198,7 @@ window.renderInvGrid = () => {
   const stockAt = (p, l) => l.key === "wh" ? warehouseOf(p) : posStockOf(p.id, l.key);
   const eff = (p, l) => { const e = IG_EDIT[p.id + "|" + l.key]; return e !== undefined ? Number(e) : stockAt(p, l); };
   let h = `<table><tr><th>Product</th>`
-    + locs.map(l => `<th class="num" style="${l.home ? "" : IG_RS_BG}">${esc(l.name)}${l.home ? "" : '<div style="font-size:9.5px;font-weight:400;color:var(--muted)">reseller</div>'}</th>`).join("")
+    + locs.map(l => `<th class="num" style="${l.home ? "" : IG_RS_BG}">${esc(l.name)}</th>`).join("")
     + `<th class="num">Total</th></tr>`;
   const colTot = {}; let grand = 0;
   for (const p of [...state.products].sort(prodSort)) {
