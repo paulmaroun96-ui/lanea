@@ -3289,6 +3289,9 @@ function renderMaintenance() {
       done: hasSale("2026-04-26") },
     { key: "recur3", fn: "addMyRecurring()", label: "Add the 3 recurring payments ($27.7 monthly + Ad Libitum $700 + Qudra $800)",
       done: state.recurring_expenses.some(r => r.description === "Qudra ($800)") },
+    { key: "placeoct", fn: "importNewPlacements()", label: "Place stock with Rosy & Dr Pascale (91 units — invoices 31–37, 24–26 Oct)",
+      done: (() => { const r = state.pos.find(x => normPosName(x.name).indexOf("rosy") >= 0);
+        return !!r && state.transfers.some(t => t.pos_id === r.id && t.date === "2026-10-24"); })() },
     { key: "dedup", fn: "cleanRecurringDupes()", label: "Delete the old Adlibitum / Shopify rows the recurring rules now cover",
       done: !state.expenses.some(e => /^(Shopify .+\(\$[0-9.]+\)|Adlibitum .*\(\$(700|1000)\))$/.test(e.description || ""))
             && !state.recurring_expenses.some(r => r.description === "Monthly payment ($27.7)") },
@@ -3445,6 +3448,36 @@ window.importOldMayJun = async () => {
   activeInv = d.id;
   await submitInventory();
   toast(`Apr–Jun history imported ✓ — $${fmtN(sv)} revenue, ${fmtN(gu)} gifts, €${ev.toFixed(2)} expenses; stock unchanged (old records)`);
+  render();
+};
+/* Handwritten invoices 31–37 (24–26 Oct 2026): consignment placements
+   Home → Rosy El Khoury Geagea + Dr Pascale Abou Sleiman (created if missing).
+   Transfers only — revenue comes when they sell. */
+window.importNewPlacements = async () => {
+  if (typeof PLACEMENTS_OCT === "undefined") { alert("Placement data not loaded — reload the page."); return; }
+  if (!state.products.length) { alert("Import your invoices first (Purchases tab)."); return; }
+  const rosy0 = state.pos.find(x => normPosName(x.name).indexOf("rosy") >= 0);
+  if (rosy0 && state.transfers.some(t => t.pos_id === rosy0.id && t.date === "2026-10-24")) {
+    alert("These placements are already imported (Rosy's 24 Oct transfers exist)."); return;
+  }
+  const totalU = PLACEMENTS_OCT.resellers.reduce((a, r) => a + r.batches.reduce((b, bt) => b + bt.lines.reduce((c, l) => c + l.qty, 0), 0), 0);
+  if (!(await niceConfirm("Place stock with the 2 new resellers?",
+    `${fmtN(totalU)} units move Home → Rosy El Khoury Geagea (20 u, 24 Oct) and Dr Pascale Abou Sleiman (71 u, 25–26 Oct) as consignment — NO sales are recorded, revenue comes when they sell. The resellers are created if missing. Press “Set ALL from the website” after, so their −15% price columns fill.`, "Place stock"))) return;
+  const byRef = {};
+  for (const p of state.products) if (p.ref) byRef[p.ref] = p;
+  for (const rs of PLACEMENTS_OCT.resellers) {
+    const key = normPosName(rs.name).slice(0, 8);
+    let pos = state.pos.find(x => normPosName(x.name) === normPosName(rs.name))
+           || state.pos.find(x => normPosName(x.name).indexOf(key) >= 0);
+    if (!pos) pos = await addRow("pos", { name: rs.name });
+    if (!pos) return;
+    for (const bt of rs.batches) for (const l of bt.lines) {
+      const p = byRef[l.ref];
+      if (!p) { alert("Unknown ref " + l.ref); return; }
+      if (!(await addRow("transfers", { date: bt.date, product_id: p.id, pos_id: pos.id, qty: l.qty }))) return;
+    }
+  }
+  toast(`Placements imported ✓ — ${fmtN(totalU)} units now with Rosy & Dr Pascale`);
   render();
 };
 /* Pharmacie Ste Rita placement (handwritten invoices 26/27/28, 25 Jul 2026):
