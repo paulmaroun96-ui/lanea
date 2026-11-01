@@ -1233,7 +1233,17 @@ async function upsertPosPrice(pos_id, product_id, price) {
 }
 const priceFor = (pos_id, product_id) => {
   const r = state.pos_prices.find(r => r.pos_id === pos_id && r.product_id === product_id);
-  return r ? Number(r.price) : null;
+  if (r) return Number(r.price); // a saved price always wins
+  // AUTOMATIC default (user): website price at Home, −15% at every reseller —
+  // new resellers are priced from day one without pressing anything
+  const p = prodById(product_id);
+  const web = p && p.ref
+    ? ((typeof WEB_USD !== "undefined" && WEB_USD[p.ref] !== undefined) ? WEB_USD[p.ref]
+       : (typeof RETAIL_USD !== "undefined" ? RETAIL_USD[p.ref] : undefined))
+    : undefined;
+  if (!(web > 0)) return null; // $0 / unknown products stay unpriced
+  const hp0 = homePos();
+  return (hp0 && pos_id === hp0.id) ? Math.round(web * 100) / 100 : Math.round(web * 0.85 * 100) / 100;
 };
 
 /* ================= invoice import ================= */
