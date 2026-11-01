@@ -378,6 +378,19 @@
     </form>
     <p class="hint" id="t_hint">Defaults: quantity <b>1</b>, from <b>Home</b>, to <b>Teta</b>. Lines pile up below so you can double-check — nothing moves until <b>Save all transfers</b>.</p>
     <div id="trfDraftBox"></div>
+    <details class="no-print" style="margin-top:10px">
+      <summary class="hint" style="cursor:pointer;display:inline-block">⇪ Import a transfer sheet (Excel / CSV / pasted list)</summary>
+      <div class="rowform" style="margin-top:8px">
+        <label>File<input type="file" id="ti_file" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
+        <label>Send everything to<select id="ti_to"></select></label>
+        <button class="btn gold" type="button" onclick="importTransferFile()">Read file → pending list</button>
+      </div>
+      <label style="display:block;margin-top:8px;max-width:640px;text-transform:none;letter-spacing:0">…or paste lines (Product, Qty, Reseller — reseller optional)
+        <textarea id="ti_paste" rows="4" style="width:100%;margin-top:4px" placeholder="Savon Rond Monoï, 3, Teta&#10;Sérum 30ml, 2"></textarea></label>
+      <div class="rowform"><button class="btn ghost" type="button" onclick="importTransferPaste()">Read pasted lines → pending list</button></div>
+      <p class="hint">Rows land in the pending list above — <b>nothing moves until you press Save all transfers</b>. Products match by ref or name;
+      rows I can't match are reported back. A Reseller column in the sheet overrides the "Send everything to" choice. Quantities go <b>from Home</b>.</p>
+    </details>
     <details class="inv" style="margin-top:12px"><summary><span class="ref">Transfer history</span><span class="meta" id="transferCount"></span></summary>
       <div class="lines" id="transfersLog"></div></details>
   </section>
@@ -2594,6 +2607,15 @@ function refreshSelects() {
     const sel = document.getElementById("t_to");
     if (sel && !sel.value) { const t = state.pos.find(x => normPosName(x.name) === "teta"); if (t) sel.value = t.id; }
   }
+  { // transfer-sheet import: destination when the sheet has no reseller column
+    const sel = document.getElementById("ti_to");
+    if (sel) {
+      const cur = sel.value;
+      sel.innerHTML = posOptsNoHome;
+      if (cur) sel.value = cur;
+      if (!sel.value) { const t = state.pos.find(x => normPosName(x.name) === "teta"); if (t) sel.value = t.id; }
+    }
+  }
   const posOpts = sortedPos().map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
   {
     const sel = document.getElementById("sp_pos"); const cur = sel.value;
@@ -4197,6 +4219,99 @@ window.transferHint = () => {
 let trfDraft = [];
 try { trfDraft = JSON.parse(localStorage.getItem("lanea-trf-draft") || "[]"); } catch {}
 const saveTrfDraft = () => localStorage.setItem("lanea-trf-draft", JSON.stringify(trfDraft));
+/* ===== transfer-sheet import: Excel/CSV/pasted list → pending transfer lines.
+   The user reviews the amber list and presses Save all — the app never moves
+   stock straight from a file. ===== */
+let tiLibP = null;
+const loadXlsxLib = () => tiLibP ??= new Promise((res, rej) => {
+  if (window.XLSX) return res();
+  const s = document.createElement("script");
+  s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+  s.onload = () => res();
+  s.onerror = () => { tiLibP = null; rej(new Error("Could not load the Excel reader — check the internet connection.")); };
+  document.head.appendChild(s);
+});
+const tiNorm = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+function tiMatchProduct(txt) {
+  const t = String(txt || "").trim();
+  if (!t) return null;
+  const up = t.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^\d+/, "");
+  if (up) for (const p of state.products) {
+    const ref = String(p.ref || "").toUpperCase().replace(/^\d+/, "");
+    if (ref && ref === up) return p;
+  }
+  const qT = tiNorm(t).split(" ").filter(w => w.length > 1);
+  if (!qT.length) return null;
+  let best = null, bestScore = 0;
+  for (const p of state.products) {
+    const name = tiNorm(prodShort(p) + " " + (p.name || "") + " " + (p.ref || ""));
+    let hit = 0;
+    for (const w of qT) if (name.indexOf(w) >= 0) hit++;
+    const score = hit / qT.length;
+    if (score > bestScore) { bestScore = score; best = p; }
+  }
+  return bestScore >= 0.6 ? best : null;
+}
+const tiMatchPos = txt => {
+  const n = normPosName(txt || "");
+  if (!n) return null;
+  return state.pos.find(x => normPosName(x.name) === n)
+      || state.pos.find(x => normPosName(x.name).indexOf(n) >= 0 || n.indexOf(normPosName(x.name)) >= 0) || null;
+};
+/* rows = [[product, qty, reseller?], …] (header rows are skipped) */
+function tiAddRows(rawRows) {
+  const hp = homePos();
+  const defTo = gv("ti_to") || "";
+  const miss = [];
+  let added = 0, units = 0;
+  for (const raw of rawRows) {
+    const cells = raw.map(c => String(c ?? "").trim()).filter((c, i) => c !== "" || i < 3);
+    if (!cells.length || !cells[0]) continue;
+    if (/produ|article|item|^ref/i.test(cells[0]) && !/\d/.test(cells[1] || "")) continue; // header
+    let prodTxt = cells[0], qtyTxt = cells[1], posTxt = cells[2];
+    if (qtyTxt === undefined) { // one column: "Sérum 30ml 2" — last token is the qty
+      const m = prodTxt.match(/^(.*?)[\s,;]+(\d+)$/);
+      if (m) { prodTxt = m[1]; qtyTxt = m[2]; }
+    }
+    const qty = Math.round(Number(String(qtyTxt ?? "").replace(",", ".")));
+    const p = tiMatchProduct(prodTxt);
+    if (!p || !(qty > 0)) { miss.push(`• ${prodTxt}${qtyTxt ? " (" + qtyTxt + ")" : ""}`); continue; }
+    let pos = posTxt ? tiMatchPos(posTxt) : null;
+    if (!pos && defTo) pos = posById(defTo);
+    if (!pos || (hp && pos.id === hp.id)) { miss.push(`• ${prodTxt} — no reseller recognised`); continue; }
+    trfDraft.push({ date: todayISO(), product_id: p.id, from: "", to: pos.id, qty });
+    added++; units += qty;
+  }
+  saveTrfDraft();
+  renderTrfDraft();
+  if (!added && !miss.length) { alert("Nothing readable found — expected lines like: Product, Qty, Reseller."); return; }
+  alert(`${added} line${added === 1 ? "" : "s"} (${fmtN(units)} units) added to the pending list — check them, then press “Save all transfers”.`
+    + (miss.length ? `\n\nNOT matched (fix manually):\n${miss.slice(0, 25).join("\n")}${miss.length > 25 ? `\n… +${miss.length - 25} more` : ""}` : ""));
+}
+const tiSplitText = text => text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  .map(l => l.split(/\t|;|,|\s{2,}/).map(c => c.trim()));
+window.importTransferPaste = () => {
+  const t = gv("ti_paste");
+  if (!t.trim()) { alert("Paste some lines first."); return; }
+  tiAddRows(tiSplitText(t));
+  document.getElementById("ti_paste").value = "";
+};
+window.importTransferFile = async () => {
+  const inp = document.getElementById("ti_file");
+  const f = inp && inp.files && inp.files[0];
+  if (!f) { alert("Choose a file first (.xlsx, .csv or .txt)."); return; }
+  try {
+    if (/\.xlsx?$/i.test(f.name)) {
+      await loadXlsxLib();
+      const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      tiAddRows(XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" }));
+    } else {
+      tiAddRows(tiSplitText(await f.text()));
+    }
+    inp.value = "";
+  } catch (e) { alert("Could not read the file: " + (e && e.message ? e.message : e)); }
+};
 window.addTransferLine = () => {
   if (!state.products.length) { alert("Add products first (Purchases or Catalog tab)."); return; }
   const product_id = gv("t_product");
