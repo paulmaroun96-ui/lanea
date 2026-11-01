@@ -155,6 +155,10 @@
   .filters label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; margin-bottom: 20px; }
   .cards.hero { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-bottom: 14px; }
+  .hi-low { color: #b91c1c; font-weight: 800; }
+  .hi-sold { color: #15803d; font-weight: 700; }
+  #sellerMatrix .smProd { position: sticky; left: 0; background: var(--panel, #fff); z-index: 1; }
+  #sellerMatrix tr.total .smProd { background: #faf8f3; }
   .cards.hero .stat { border-width: 2px; border-color: var(--gold, #36656e); }
   .cards.hero .v { font-size: 30px; }
   .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 17px; box-shadow: var(--shadow); transition: box-shadow .15s; }
@@ -350,22 +354,7 @@
 
 <!-- ============ STOCKS & INVENTORY (merged: inventory + transfers + stocks) ============ -->
 <div class="tab" id="tab-stk" style="display:none">
-  <div class="pagehead"><h1>Stocks &amp; Inventory</h1><p>Everything stock in one place: your live inventory per location, moving stock to resellers, and what each product earned.</p></div>
-  <section class="card">
-    <h2>Inventory — what you have right now</h2>
-    <p class="hint">Type a correction in any cell, then press <b>Save changes</b>.</p>
-    <div class="rowform no-print">
-      <label>Search<input id="ig_search" oninput="renderInvGrid()" placeholder="product…" style="min-width:220px"></label>
-      <button class="btn gold" id="igSave" onclick="saveInvGrid()">Save changes</button>
-      <button class="btn ghost" id="igDiscardBtn" onclick="igDiscard()" style="display:none">Discard changes</button>
-      <button class="btn ghost" onclick="exportInvGridCSV()">Export CSV</button>
-    </div>
-    <div class="scrollbox" style="max-height:600px" id="invGrid"></div>
-    <details class="no-print" style="margin-top:12px">
-      <summary class="hint" style="cursor:pointer;display:inline-block">⚙ Maintenance</summary>
-      <div id="mntBox" style="margin-top:8px"></div>
-    </details>
-  </section>
+  <div class="pagehead"><h1>Stocks &amp; Inventory</h1><p>Move stock to your resellers, see who has what, correct your inventory.</p></div>
   <section class="card no-print">
     <h2>Move stock — Home → resellers</h2>
     <form class="rowform" id="transferForm">
@@ -395,55 +384,42 @@
       <div class="lines" id="transfersLog"></div></details>
   </section>
   <section class="card">
+    <h2>Reseller tracking — totals per seller</h2>
+    <p class="hint"><b>TOTAL received − Sold = Left.</b> <b>I earn</b> = what they pay you (their −15% price);
+    <b>They earn</b> = the 15% they keep selling at your price.</p>
+    <div id="resellerSummary"></div>
+    <div class="rowform no-print" style="margin-top:8px"><button class="btn ghost" onclick="exportResellersCSV()">Export CSV (by product)</button></div>
+  </section>
+  <section class="card">
+    <h2>Reseller matrix — everything by product, one table</h2>
+    <p class="hint">One row per product (no 0-rows). Per seller: <b>TOTAL received − Sold = Left</b>; <b>✖</b> = never received it.
+    <b>They earn ($)</b> = the 15% they keep on what they sold; <b>My profit</b> = your realized profit on the product everywhere.
+    <span class="hi-low">Red</span> = very low (≤ 2 left) · <span class="hi-sold">green</span> = strong seller (10+ sold). Pick one seller to see ONLY that seller, with gifts &amp; losses.</p>
+    <div class="rowform no-print" id="smBtns" style="margin-bottom:6px"></div>
+    <div class="rowform no-print"><label>Search<input id="sm_search" oninput="renderSellerMatrix()" placeholder="product…" style="min-width:220px"></label></div>
+    <div class="scrollbox" style="max-height:560px" id="sellerMatrix"></div>
+  </section>
+  <section class="card">
+    <h2>Inventory — what you have right now</h2>
+    <p class="hint">Type a correction in any cell, then press <b>Save changes</b>.</p>
+    <div class="rowform no-print">
+      <label>Search<input id="ig_search" oninput="renderInvGrid()" placeholder="product…" style="min-width:220px"></label>
+      <button class="btn gold" id="igSave" onclick="saveInvGrid()">Save changes</button>
+      <button class="btn ghost" id="igDiscardBtn" onclick="igDiscard()" style="display:none">Discard changes</button>
+      <button class="btn ghost" onclick="exportInvGridCSV()">Export CSV</button>
+    </div>
+    <div class="scrollbox" style="max-height:600px" id="invGrid"></div>
+    <details class="no-print" style="margin-top:12px">
+      <summary class="hint" style="cursor:pointer;display:inline-block">⚙ Maintenance</summary>
+      <div id="mntBox" style="margin-top:8px"></div>
+    </details>
+  </section>
+  <section class="card">
     <h2>Location performance</h2>
     <div class="rowform no-print" id="lcBtns" style="margin-bottom:6px"></div>
     <div class="cards" id="lcStats" style="margin-bottom:4px"></div>
     <div id="lcLegend"></div>
     <div class="scrollbox" style="max-height:520px" id="lcChart"></div>
-  </section>
-  <section class="card">
-    <h2>Reseller tracking — given · sold · in hand · revenue</h2>
-    <p class="hint">For each reseller: everything you <b>sent them</b> (transfers from Home), what they <b>sold</b> and the <b>revenue</b> it made,
-    gifts/losses recorded there, count corrections, and what is <b>in their hands now</b> (valued at cost).</p>
-    <div id="resellerSummary"></div>
-    <div class="rowform no-print" style="margin-top:10px">
-      <label>Products detail for<select id="rt_pos" onchange="renderResellers()"><option value="">All resellers combined</option></select></label>
-      <label>Search<input id="rt_search" oninput="renderResellers()" placeholder="product…" style="min-width:200px"></label>
-      <button class="btn ghost" onclick="exportResellersCSV()">Export CSV</button>
-    </div>
-    <div class="scrollbox" style="max-height:440px" id="resellerTable"></div>
-  </section>
-  <section class="card">
-    <h2>Product P&amp;L — purchased · sold · remaining · profit</h2>
-    <p class="hint">Pick a location (or all combined). <b>Purchased</b> at a reseller = TOTAL received (transfers + count arrivals — same number as everywhere else); <b>Profit</b> = that location's sales revenue − cost;
-    <b>Stock diff</b> = the net correction your inventory counts applied there. Click any header to sort.</p>
-    <div class="rowform no-print" id="stBtns" style="margin-bottom:6px"></div>
-    <div class="rowform no-print" style="margin-bottom:10px">
-      <label>Search<input id="st_search" oninput="renderStocks()" placeholder="product…" style="min-width:220px"></label>
-      <button class="btn ghost" onclick="exportStocksCSV()">Export CSV</button>
-    </div>
-    <div class="scrollbox" style="max-height:460px" id="stocksTable"></div>
-  </section>
-  <section class="card">
-    <h2>Reseller matrix — who has what, by product</h2>
-    <p class="hint">One row per product that exists somewhere (no 0-rows). Per seller: <b>Given · Sold · Left</b> — <b>✖ missing</b> means that reseller never received it.
-    <b>TOTAL</b> = everything that ever reached that seller (your transfers + stock recorded there by a count, like the June-28 baseline).
-    <b>TOTAL − Sold = Left</b> always. <b>His (€)</b> = the margin that reseller earned; <b>My profit</b> = your realized profit on the product everywhere.
-    Pick one seller for the full detail (gifted &amp; lost too).</p>
-    <div class="rowform no-print" id="smBtns" style="margin-bottom:6px"></div>
-    <div class="rowform no-print"><label>Search<input id="sm_search" oninput="renderSellerMatrix()" placeholder="product…" style="min-width:220px"></label></div>
-    <div class="scrollbox" style="max-height:520px" id="sellerMatrix"></div>
-  </section>
-  <section class="card">
-    <h2>Stock by location</h2>
-    <p class="hint"><b>Home holds everything not sent to a reseller</b> — purchases and initial stock land at Home
-    (− gifts − losses − transfers out, corrected by your Home counts). <b>Global stock = Home + resellers.</b>
-    Sales at a POS consume that POS's stock. Negative POS stock means sales were logged there without allocating stock first.</p>
-    <div class="rowform no-print" style="margin-top:6px">
-      <label>View<select id="sp_pos" onchange="renderPosStock()"></select></label>
-      <label>Search<input id="sp_search" oninput="renderPosStock()" placeholder="product…" style="min-width:200px"></label>
-    </div>
-    <div class="scrollbox" id="posStockTable"></div>
   </section>
 </div>
 
@@ -2268,7 +2244,7 @@ window.renderLocChart = () => {
         ${r.hand ? `<div style="width:${wH}%;min-width:3px;height:16px;background:#b9d2d8;border-radius:0 4px 4px 0"></div>` : ""}
         <span style="font-size:11px;color:var(--muted);white-space:nowrap">${fmtN(r.sold + r.hand)}</span>
       </div>
-      <div style="flex:0 0 160px;text-align:right;font-size:11.5px;color:var(--muted);white-space:nowrap">${price != null ? usdF.format(price) : "—"} · ${r.rev ? showU(r.rev) : "·"}</div>
+      <div style="flex:0 0 210px;text-align:right;font-size:11.5px;color:var(--muted);white-space:nowrap">${price != null ? usdF.format(price) : "—"} · me ${r.rev ? showU(r.rev) : "·"}${!isHome && r.margin ? " · they " + showU(r.margin) : ""}</div>
     </div>`;
   }
   if (rows.length > top.length) h += `<p class="empty">+ ${rows.length - top.length} more products — use the tables below for the full list</p>`;
@@ -2311,52 +2287,32 @@ window.renderResellers = () => {
   if (!sumEl) return;
   const rs = resellerPosList();
   if (!rs.length) { sumEl.innerHTML = '<p class="empty">No resellers yet — create them in Sales & prices.</p>'; document.getElementById("resellerTable").innerHTML = ""; return; }
-  let h = `<table><tr><th>Reseller</th><th class="num">TOTAL received</th><th class="num">Sold</th><th class="num">I earn ($)</th><th class="num">Their revenue ($)</th><th class="num">They keep ($)</th><th class="num">Gifted</th><th class="num">Lost</th><th class="num">= Left</th><th class="num">Value left (€)</th></tr>`;
-  const tot = { total: 0, sold: 0, rev: 0, theirRev: 0, theirCut: 0, gifted: 0, lost: 0, hand: 0, val: 0 };
+  let h = `<table><tr><th>Reseller</th><th class="num">TOTAL received</th><th class="num">Sold</th><th class="num">I earn ($)</th><th class="num">They earn ($)</th><th class="num">Gifted</th><th class="num">Lost</th><th class="num">= Left</th><th class="num">Value left (€)</th></tr>`;
+  const tot = { total: 0, sold: 0, rev: 0, theirCut: 0, gifted: 0, lost: 0, hand: 0, val: 0 };
   for (const pos of rs) {
     const s = resellerStats(pos.id, null);
     for (const k in tot) tot[k] += s[k];
     h += `<tr><td><b>${esc(pos.name)}</b></td>
       <td class="num calc"><b>${fmtN(s.total)}</b></td><td class="num calc">${fmtN(s.sold)}</td>
-      <td class="num calc">${showU(s.rev)}</td><td class="num calc">${showU(s.theirRev)}</td><td class="num calc">${showU(s.theirCut)}</td>
+      <td class="num calc">${showU(s.rev)}</td><td class="num calc">${showU(s.theirCut)}</td>
       <td class="num calc">${fmtN(s.gifted)}</td><td class="num calc">${fmtN(s.lost)}</td>
       <td class="num calc ${s.hand < 0 ? "stock-neg" : ""}"><b>${fmtN(s.hand)}</b></td><td class="num calc">${showE(s.val)}</td></tr>`;
   }
   h += `<tr class="total"><td>TOTAL resellers</td>
     <td class="num"><b>${fmtN(tot.total)}</b></td><td class="num">${fmtN(tot.sold)}</td>
-    <td class="num">${showU(tot.rev)}</td><td class="num">${showU(tot.theirRev)}</td><td class="num">${showU(tot.theirCut)}</td>
+    <td class="num">${showU(tot.rev)}</td><td class="num">${showU(tot.theirCut)}</td>
     <td class="num">${fmtN(tot.gifted)}</td><td class="num">${fmtN(tot.lost)}</td>
     <td class="num"><b>${fmtN(tot.hand)}</b></td><td class="num">${showE(tot.val)}</td></tr></table>`;
   sumEl.innerHTML = h;
-  // per-product detail for one reseller (or all combined)
-  const posId = gv("rt_pos") || null;
-  const q = (gv("rt_search") || "").toLowerCase();
-  const rows = state.products.filter(p => prodMatch(p, q)).sort(prodSort)
-    .map(p => ({ p, s: resellerStats(posId, p.id) }))
-    .filter(r => r.s.given || r.s.sold || r.s.hand || r.s.gifted || r.s.lost || r.s.adj);
-  const el = document.getElementById("resellerTable");
-  if (!rows.length) { el.innerHTML = '<p class="empty">Nothing given to or sold by this reseller yet.</p>'; return; }
-  let d = `<table><tr><th>Product</th><th class="num">TOTAL received</th><th class="num">Sold</th><th class="num">I earn ($)</th><th class="num">Their revenue ($)</th><th class="num">They keep ($)</th><th class="num">Gifted</th><th class="num">Lost</th><th class="num">= Left</th></tr>`;
-  for (const r of rows) {
-    d += `<tr><td>${prodLabel(r.p)}</td>
-      <td class="num calc"><b>${fmtN(r.s.total)}</b></td><td class="num calc">${fmtN(r.s.sold)}</td>
-      <td class="num calc">${r.s.rev ? showU(r.s.rev) : "·"}</td>
-      <td class="num calc">${r.s.theirRev ? showU(r.s.theirRev) : "·"}</td>
-      <td class="num calc">${r.s.theirCut ? showU(r.s.theirCut) : "·"}</td>
-      <td class="num calc">${r.s.gifted ? fmtN(r.s.gifted) : "·"}</td>
-      <td class="num calc">${r.s.lost ? fmtN(r.s.lost) : "·"}</td>
-      <td class="num calc ${r.s.hand < 0 ? "stock-neg" : ""}"><b>${fmtN(r.s.hand)}</b></td></tr>`;
-  }
-  el.innerHTML = d + "</table>";
+  // per-product detail removed in v62 — the reseller matrix covers it
 };
 window.exportResellersCSV = () => {
-  const posId = gv("rt_pos") || null;
-  const name = posId ? (posById(posId)?.name || "") : "All resellers";
-  const rows = [["LANEA — Reseller tracking: " + name], ["Product", "TOTAL received", "Sold", "I earn (USD)", "Their revenue (USD)", "They keep (USD)", "Gifted", "Lost", "Left"]];
+  const posId = null; // all resellers (v62: detail select removed)
+  const rows = [["LANEA — Reseller tracking: all resellers"], ["Product", "TOTAL received", "Sold", "I earn (USD)", "They earn (USD)", "Gifted", "Lost", "Left"]];
   for (const p of [...state.products].sort(prodSort)) {
     const s = resellerStats(posId, p.id);
     if (!(s.given || s.sold || s.hand || s.gifted || s.lost || s.adj)) continue;
-    rows.push([prodShort(p), s.total, s.sold, s.rev.toFixed(2), s.theirRev.toFixed(2), s.theirCut.toFixed(2), s.gifted, s.lost, s.hand]);
+    rows.push([prodShort(p), s.total, s.sold, s.rev.toFixed(2), s.theirCut.toFixed(2), s.gifted, s.lost, s.hand]);
   }
   downloadFile("lanea-resellers.csv", "text/csv", toCSV(rows));
 };
@@ -2617,15 +2573,17 @@ function refreshSelects() {
     }
   }
   const posOpts = sortedPos().map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
-  {
-    const sel = document.getElementById("sp_pos"); const cur = sel.value;
-    sel.innerHTML = '<option value="wh">Overview (all locations)</option>' + posOpts;
-    if (cur) sel.value = cur;
+  { // card removed in v62 — element may not exist
+    const sel = document.getElementById("sp_pos");
+    if (sel) { const cur = sel.value; sel.innerHTML = '<option value="wh">Overview (all locations)</option>' + posOpts; if (cur) sel.value = cur; }
   }
   {
-    const sel = document.getElementById("rt_pos"); const cur = sel.value;
-    sel.innerHTML = '<option value="">All resellers combined</option>' + posOptsNoHome;
-    if (cur) sel.value = cur;
+    const sel = document.getElementById("rt_pos"); // detail controls removed in v62
+    if (sel) {
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">All resellers combined</option>' + posOptsNoHome;
+      if (cur) sel.value = cur;
+    }
   }
   for (const [id, opts] of [["f_pos", posOpts], ["sl_pos", posOpts], ["hi_pos", posOpts], ["f_prod", prodOpts], ["sl_prod", prodOpts]]) {
     const sel = document.getElementById(id); const cur = sel.value;
@@ -3998,8 +3956,9 @@ function renderVariance() {
 let ST_POS = null; // null = all locations combined
 window.setStPos = id => { ST_POS = id || null; renderStocks(); };
 window.renderStocks = () => {
-  const q = (gv("st_search") || "").toLowerCase();
   const el = document.getElementById("stocksTable");
+  if (!el) return; // card merged into the reseller matrix (v62)
+  const q = (gv("st_search") || "").toLowerCase();
   const hp = homePos();
   const locs = sortedPos();
   if (ST_POS && !locs.some(p => p.id === ST_POS)) ST_POS = null;
@@ -4061,76 +4020,87 @@ window.renderSellerMatrix = () => {
   const el = document.getElementById("sellerMatrix");
   if (!el) return;
   const hp = homePos();
-  const locs = sortedPos();
-  const allRes = locs.filter(x => !hp || x.id !== hp.id);
+  const allRes = sortedPos().filter(x => !hp || x.id !== hp.id);
   if (SM_POS && !allRes.some(r => r.id === SM_POS)) SM_POS = null;
   const res = SM_POS ? allRes.filter(r => r.id === SM_POS) : allRes;
+  const single = !!SM_POS; // one seller = ONLY that seller, no Home columns
   const bEl = document.getElementById("smBtns");
   if (bEl) bEl.innerHTML = `<button type="button" class="btn small ${!SM_POS ? "gold" : "ghost"}" onclick="setSmPos('')">All sellers side by side</button>` +
     allRes.map(r => `<button type="button" class="btn small ${r.id === SM_POS ? "gold" : "ghost"}" onclick="setSmPos('${r.id}')">${esc(r.name)}</button>`).join("");
   const q = (gv("sm_search") || "").toLowerCase();
   const homePrice = p => ((hp ? priceFor(hp.id, p.id) : null) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0));
-  /* per reseller the math is always: Transferred + From counts = TOTAL in,
-     then TOTAL − Sold − Gifted − Lost = Left — no hidden source of stock */
-  const cell = (p, r) => {
-    const trf = transferredTo(p.id, r.id), adj = invDelta(p.id, r.id);
+  const cellOf = (p, r) => {
+    const totalIn = transferredTo(p.id, r.id) + invDelta(p.id, r.id);
     const sold = soldAtPos(p.id, r.id), gift = giftedAt(p.id, r.id), lost = lostAt(p.id, r.id);
-    const left = posStockOf(p.id, r.id), totalIn = trf + adj;
-    const theirPrice = priceFor(r.id, p.id) ?? 0;
-    const his = toE(Math.max(homePrice(p) - theirPrice, 0) * sold);
-    return { trf, adj, totalIn, sold, gift, lost, left, his };
+    const left = posStockOf(p.id, r.id);
+    let myRev = 0;
+    for (const sl of state.sales) if (sl.product_id === p.id && sl.pos_id === r.id) myRev += Number(sl.qty) * Number(sl.price_per_unit);
+    const they = Math.max(homePrice(p) - (priceFor(r.id, p.id) ?? 0), 0) * sold;
+    return { totalIn, sold, gift, lost, left, they, myRev };
   };
   const rows = [];
   for (const p of [...state.products].sort(prodSort)) {
     if (!prodMatch(p, q)) continue;
     const c = productCalc(p);
     const homePur = c.iq + c.purQty;
-    const cells = res.map(r => cell(p, r));
-    if (homePur <= 0 && !cells.some(x => x.totalIn || x.sold || x.left)) continue; // hide 0-rows
+    const cells = res.map(r => cellOf(p, r));
+    const hasSeller = cells.some(x => x.totalIn || x.sold || x.left);
+    if (single ? !hasSeller : (homePur <= 0 && !hasSeller)) continue;
     rows.push({ p, c, homePur, cells });
   }
-  if (!rows.length) { el.innerHTML = '<p class="empty">Nothing purchased or given yet.</p>'; return; }
+  if (!rows.length) { el.innerHTML = '<p class="empty">Nothing here yet.</p>'; return; }
+  const SEP = "border-left:2px solid #c9d4d6";
   const RS = 'style="background:#f1f7f3"';
-  const single = !!SM_POS; // single seller = full detail incl. gifted/lost
-  const subCols = single ? ["TOTAL in", "Sold", "Gifted", "Lost", "= Left", "His (€)"]
-                         : ["TOTAL", "Sold", "= Left", "His (€)"];
-  let h = `<table><tr><th>Product</th><th colspan="3" style="text-align:center">${hp ? esc(hp.name) : "Home"}</th>`
-    + res.map(r => `<th colspan="${subCols.length}" style="text-align:center;background:#f1f7f3">${esc(r.name)}</th>`).join("")
-    + `<th class="num">Cost €/u</th><th class="num">Sale $</th><th class="num">My profit (€)</th></tr>`;
-  h += `<tr><th></th><th class="num">Purch.</th><th class="num">Sold</th><th class="num">Left</th>`
-    + res.map(() => subCols.map(cn => `<th class="num" ${RS}>${cn}</th>`).join("")).join("")
-    + `<th></th><th></th><th></th></tr>`;
-  const tot = { pur: 0, hs: 0, hl: 0, my: 0, res: res.map(() => ({ tin: 0, s: 0, g: 0, lo: 0, l: 0, e: 0 })) };
+  const RSL = `style="background:#f1f7f3;${SEP}"`;
+  const soldCls = n => n >= 10 ? "hi-sold" : "";
+  const leftCls = (left, tin) => left < 0 ? "stock-neg" : (left <= 2 && tin > 0 ? "hi-low" : "");
+  const subCols = single ? ["TOTAL in", "Sold", "Gifted", "Lost", "= Left", "I earn ($)", "They earn ($)"]
+                         : ["TOTAL", "Sold", "= Left", "They earn ($)"];
+  const tot = { pur: 0, hs: 0, hl: 0, my: 0, res: res.map(() => ({ tin: 0, s: 0, g: 0, lo: 0, l: 0, e: 0, rv: 0 })) };
+  let body = "";
   for (const { p, c, homePur, cells } of rows) {
     const hSold = hp ? soldAtPos(p.id, hp.id) : 0;
     const hLeft = hp ? posStockOf(p.id, hp.id) : 0;
     const myProfit = toE(c.revenue) - c.cogs;
     tot.pur += homePur; tot.hs += hSold; tot.hl += hLeft; tot.my += myProfit;
-    h += `<tr><td>${prodLabel(p)}</td><td class="num calc">${fmtN(homePur)}</td><td class="num calc">${fmtN(hSold)}</td>
-      <td class="num calc ${hLeft < 0 ? "stock-neg" : ""}">${fmtN(hLeft)}</td>`;
+    body += `<tr><td class="smProd">${prodLabel(p)}</td>`;
+    if (!single) body += `<td class="num calc">${fmtN(homePur)}</td><td class="num calc ${soldCls(hSold)}">${fmtN(hSold)}</td>
+      <td class="num calc ${leftCls(hLeft, homePur)}"><b>${fmtN(hLeft)}</b></td>`;
     cells.forEach((x, i) => {
       if (!x.totalIn && !x.sold && !x.left) {
-        h += `<td colspan="${subCols.length}" style="background:#fff3e0;color:#b45309;text-align:center" title="never at ${esc(res[i].name)}">✖</td>`;
+        body += `<td colspan="${subCols.length}" style="background:#fff3e0;color:#b45309;text-align:center;${SEP}" title="never at ${esc(res[i].name)}">✖</td>`;
         return;
       }
       const t = tot.res[i];
-      t.tin += x.totalIn; t.s += x.sold; t.g += x.gift; t.lo += x.lost; t.l += x.left; t.e += x.his;
-      h += `<td class="num calc" ${RS}><b>${fmtN(x.totalIn)}</b></td>
-        <td class="num calc" ${RS}>${fmtN(x.sold)}</td>`
-        + (single ? `<td class="num calc" ${RS}>${fmtN(x.gift)}</td><td class="num calc ${x.lost > 0 ? "neg" : ""}" ${RS}>${fmtN(x.lost)}</td>` : "")
-        + `<td class="num calc ${x.left < 0 ? "stock-neg" : x.left === 0 && x.totalIn > 0 ? "neg" : ""}" ${RS}><b>${fmtN(x.left)}</b></td>
-        <td class="num calc" ${RS}>${showE(x.his)}</td>`;
+      t.tin += x.totalIn; t.s += x.sold; t.g += x.gift; t.lo += x.lost; t.l += x.left; t.e += x.they; t.rv += x.myRev;
+      body += `<td class="num calc" ${RSL}><b>${fmtN(x.totalIn)}</b></td>
+        <td class="num calc ${soldCls(x.sold)}" ${RS}>${fmtN(x.sold)}</td>`
+        + (single ? `<td class="num calc" ${RS}>${x.gift ? fmtN(x.gift) : "·"}</td><td class="num calc" ${RS}>${x.lost ? fmtN(x.lost) : "·"}</td>` : "")
+        + `<td class="num calc ${leftCls(x.left, x.totalIn)}" ${RS}><b>${fmtN(x.left)}</b></td>`
+        + (single ? `<td class="num calc" ${RS}>${x.myRev ? showU(x.myRev) : "·"}</td>` : "")
+        + `<td class="num calc" ${RS}>${x.they ? showU(x.they) : "·"}</td>`;
     });
-    h += `<td class="num calc">${eurF.format(c.avgCost)}</td>
+    body += `<td class="num calc" style="${SEP}">${eurF.format(c.avgCost)}</td>
       <td class="num calc">${homePrice(p) ? showU(homePrice(p)) : "—"}</td>
       <td class="num calc ${myProfit < 0 ? "neg" : ""}">${showE(myProfit)}</td></tr>`;
   }
-  h += `<tr class="total"><td>TOTAL (${rows.length})</td><td class="num">${fmtN(tot.pur)}</td><td class="num">${fmtN(tot.hs)}</td><td class="num">${fmtN(tot.hl)}</td>`
-    + tot.res.map(t => `<td class="num"><b>${fmtN(t.tin)}</b></td><td class="num">${fmtN(t.s)}</td>`
+  let h = `<table><tr><th class="smProd">Product</th>`
+    + (single ? "" : `<th colspan="3" style="text-align:center">${hp ? esc(hp.name) : "Home"}</th>`)
+    + res.map(r => `<th colspan="${subCols.length}" style="text-align:center;background:#f1f7f3;${SEP}">${esc(r.name)}</th>`).join("")
+    + `<th class="num" style="${SEP}">Cost €/u</th><th class="num">Sale $</th><th class="num">My profit (€)</th></tr>`;
+  h += `<tr><th class="smProd"></th>` + (single ? "" : `<th class="num">Purch.</th><th class="num">Sold</th><th class="num">Left</th>`)
+    + res.map(() => subCols.map((cn, ci) => `<th class="num" ${ci === 0 ? RSL : RS}>${cn}</th>`).join("")).join("")
+    + `<th style="${SEP}"></th><th></th><th></th></tr>`;
+  // TOTAL row sits right under the header, not at the bottom (user request)
+  h += `<tr class="total"><td class="smProd">TOTAL (${rows.length})</td>`
+    + (single ? "" : `<td class="num">${fmtN(tot.pur)}</td><td class="num">${fmtN(tot.hs)}</td><td class="num">${fmtN(tot.hl)}</td>`)
+    + tot.res.map(t => `<td class="num" style="${SEP}"><b>${fmtN(t.tin)}</b></td><td class="num">${fmtN(t.s)}</td>`
         + (single ? `<td class="num">${fmtN(t.g)}</td><td class="num">${fmtN(t.lo)}</td>` : "")
-        + `<td class="num"><b>${fmtN(t.l)}</b></td><td class="num">${showE(t.e)}</td>`).join("")
-    + `<td></td><td></td><td class="num ${tot.my < 0 ? "neg" : ""}">${showE(tot.my)}</td></tr></table>`;
-  el.innerHTML = h;
+        + `<td class="num"><b>${fmtN(t.l)}</b></td>`
+        + (single ? `<td class="num">${showU(t.rv)}</td>` : "")
+        + `<td class="num">${showU(t.e)}</td>`).join("")
+    + `<td class="num" style="${SEP}"></td><td></td><td class="num ${tot.my < 0 ? "neg" : ""}">${showE(tot.my)}</td></tr>`;
+  el.innerHTML = h + body + "</table>";
 };
 window.exportStocksCSV = () => {
   const rows = [["Product", "Ref", "Initial", "Purchased", "Sold", "Gifted", "Lost", "Inventory adj.", "Stock", "Avg cost (EUR)", "Value at cost (EUR)"]];
@@ -4377,6 +4347,7 @@ window.saveTransfers = async () => {
   render();
 };
 window.renderPosStock = () => {
+  if (!document.getElementById("posStockTable")) return; // card merged into the matrix (v62)
   const view = gv("sp_pos");
   const q = (gv("sp_search") || "").toLowerCase();
   const el = document.getElementById("posStockTable");
