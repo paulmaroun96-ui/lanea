@@ -430,6 +430,7 @@
   <section class="card">
     <h2>Inventory — what you have right now</h2>
     <p class="hint">Type a correction in any cell, then press <b>Save changes</b>.</p>
+    <div class="rowform no-print" id="igBtns" style="margin-bottom:2px"></div>
     <div class="rowform no-print">
       <label>Search<input id="ig_search" oninput="renderInvGrid()" placeholder="product…" style="min-width:220px"></label>
       <button class="btn gold" id="igSave" onclick="saveInvGrid()">Save changes</button>
@@ -2172,6 +2173,7 @@ function renderCFO() {
    product, bottom row = TOTAL per place. Edit any cell, Save — that submits a
    count for the changed cells only. */
 let IG_EDIT = {};
+let IG_POS = null; // inventory grid: null = all locations, else one location's column
 const IG_RS_BG = "background:#f1f7f3";
 window.igSet = (pid, loc, val) => {
   const k = pid + "|" + loc;
@@ -2182,14 +2184,20 @@ window.igSet = (pid, loc, val) => {
   renderInvGrid();
 };
 window.igDiscard = () => { IG_EDIT = {}; renderInvGrid(); };
+window.setIgPos = key => { IG_POS = key || null; renderInvGrid(); };
 window.renderInvGrid = () => {
   const el = document.getElementById("invGrid");
   if (!el) return;
   if (!state.products.length) { el.innerHTML = '<p class="empty">Import your invoices first (Purchases tab).</p>'; return; }
   const hp = homePos();
-  const locs = [...sortedPos().map(p => ({ key: p.id, name: p.name, home: !!(hp && p.id === hp.id) })),
+  let locs = [...sortedPos().map(p => ({ key: p.id, name: p.name, home: !!(hp && p.id === hp.id) })),
                 ...(hp ? [] : [{ key: "wh", name: "Home", home: true }])];
   if (!locs.length) { el.innerHTML = '<p class="empty">Create your locations first (Sales & prices tab).</p>'; return; }
+  if (IG_POS && !locs.some(l => l.key === IG_POS)) IG_POS = null;
+  const bEl = document.getElementById("igBtns");
+  if (bEl) bEl.innerHTML = `<button type="button" class="btn small ${!IG_POS ? "gold" : "ghost"}" onclick="setIgPos('')">All locations</button>`
+    + locs.map(l => `<button type="button" class="btn small ${l.key === IG_POS ? "gold" : "ghost"}" onclick="setIgPos('${l.key}')">${esc(l.name)}</button>`).join("");
+  if (IG_POS) locs = locs.filter(l => l.key === IG_POS);
   const q = (gv("ig_search") || "").toLowerCase();
   const n = Object.keys(IG_EDIT).length;
   const sv = document.getElementById("igSave"), di = document.getElementById("igDiscardBtn");
