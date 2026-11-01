@@ -247,9 +247,9 @@
     <button data-tab="pur"><span class="ms">receipt_long</span>Purchases</button>
     <button data-tab="day"><span class="ms">edit_square</span>Daily report</button>
     <button data-tab="stk"><span class="ms">warehouse</span>Stocks &amp; Inventory</button>
-    <button data-tab="los"><span class="ms">report</span>Losses</button>
     <button data-tab="exp"><span class="ms">account_balance_wallet</span>Expenses</button>
     <button data-tab="sal"><span class="ms">storefront</span>Sales &amp; prices</button>
+    <button data-tab="los"><span class="ms">report</span>Losses</button>
     <button data-tab="his"><span class="ms">history</span>History</button>
     <div class="nav-sec">Setup &amp; help</div>
     <button data-tab="cat"><span class="ms">category</span>Catalog</button>
@@ -364,7 +364,7 @@
     </div>
     <div id="reportBody"></div>
   </section>
-  <section class="card no-print" data-hideable="salesheet">
+  <section class="card no-print">
     <h2>⇪ Import a sales sheet (Excel / CSV / pasted list)</h2>
     <p class="hint">Sales made at Home or by a reseller, straight from a file — each line becomes a <b>sale dated today</b> at that location's list price unless the line carries its own price.
     You confirm the totals before anything saves; stock deducts automatically; Ctrl+Z undoes the whole import.</p>
@@ -394,7 +394,7 @@
     </form>
     <p class="hint" id="t_hint">Defaults: quantity <b>1</b>, from <b>Home</b>, to <b>Teta</b>. Lines pile up below so you can double-check — nothing moves until <b>Save all transfers</b>.</p>
     <div id="trfDraftBox"></div>
-    <details class="no-print" style="margin-top:10px" data-hideable="trfsheet">
+    <details class="no-print" style="margin-top:10px">
       <summary class="hint" style="cursor:pointer;display:inline-block">⇪ Import a transfer sheet (Excel / CSV / pasted list)</summary>
       <div class="rowform" style="margin-top:8px">
         <label>File<input type="file" id="ti_file" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
@@ -480,13 +480,7 @@
 <!-- ================= PURCHASES ================= -->
 <div class="tab" id="tab-pur" style="display:none">
   <div class="pagehead"><h1>Purchases</h1><p>Supplier invoices and purchasing details — every line adds stock to Home and feeds the average cost per product.</p></div>
-  <section class="card no-print" id="importCard" data-hideable="invimport">
-    <h2>Au pays des Ânes invoices</h2>
-    <p class="hint" id="importHint"></p>
-    <button class="btn gold" id="importBtn" onclick="importInvoices()">Import invoices</button>
-    <span id="importStatus" style="margin-left:10px;font-size:13px"></span>
-  </section>
-  <section class="card no-print" data-hideable="scanner">
+  <section class="card no-print">
     <h2>Scan an invoice (AI)</h2>
     <p class="hint">Drop a <b>PDF or photo</b> of a supplier invoice — Gemini reads the date, invoice ref and every line (product · qty · unit price · line total).
     You review and match the products, then import. The API key is saved <b>only in this browser</b> — never in the code or the cloud.</p>
@@ -511,6 +505,12 @@
     </form>
   </section>
   <section class="card"><h2>Invoices &amp; purchase lines</h2><div id="purchasesList"></div></section>
+  <section class="card no-print" id="importCard">
+    <h2>Au pays des Ânes invoices</h2>
+    <p class="hint" id="importHint"></p>
+    <button class="btn gold" id="importBtn" onclick="importInvoices()">Import invoices</button>
+    <span id="importStatus" style="margin-left:10px;font-size:13px"></span>
+  </section>
 </div>
 
 <!-- ================= CATALOG ================= -->
@@ -3261,7 +3261,7 @@ function applyHiddenTabs() {
     btn.style.display = HIDDEN.tabs.includes(btn.dataset.tab) ? "none" : "";
   });
 }
-const TAB_NAMES = { dash: "Dashboard", pur: "Purchases", day: "Daily report", stk: "Stocks & Inventory", los: "Losses", exp: "Expenses", sal: "Sales & prices", his: "History", cat: "Catalog", help: "Guide" };
+const TAB_NAMES = { dash: "Dashboard", pur: "Purchases", day: "Daily report", stk: "Stocks & Inventory", exp: "Expenses", sal: "Sales & prices", los: "Losses", his: "History", cat: "Catalog", help: "Guide" };
 window.renderTabToggles = () => {
   const el = document.getElementById("tabToggles");
   if (!el) return;
@@ -4148,6 +4148,25 @@ let SM_POS = null; // null = all sellers side by side
 let SM_GAPS = false; // true = only products a seller never received
 let SM_HIDEFREE = true; // ON by default: hide $0 products (échantillons, testers…) except présentoirs
 window.toggleSmFree = () => { SM_HIDEFREE = !SM_HIDEFREE; renderSellerMatrix(); toast(SM_HIDEFREE ? "Hiding $0 products (échantillons…) — présentoirs stay" : "Showing every product, $0 included"); };
+let SM_PROFIT = true; // Real-profit column per location (minimisable)
+window.toggleSmProfit = () => { SM_PROFIT = !SM_PROFIT; renderSellerMatrix(); };
+/* $ per unit on top of goods: shipping (shipping expenses ÷ units bought)
+   + overhead (active recurring monthly costs ÷ units sold per month) */
+function trueUnitExtras() {
+  const bought = state.purchases.reduce((a, u) => a + Number(u.qty), 0)
+    + state.products.reduce((a, p) => a + Number(p.initial_qty || 0), 0);
+  const shipExp = state.expenses.filter(e => e.category === "Shipment" || /shipping|freight/i.test(e.description || ""))
+    .reduce((a, e) => a + Number(e.amount), 0);
+  const ship = bought > 0 ? (shipExp / bought) * USD_RATE : 0;
+  const cut = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
+  let rows = state.sales.filter(s => s.date >= cut);
+  if (!rows.length) rows = state.sales;
+  const units = rows.reduce((a, s) => a + Number(s.qty), 0);
+  const months = Math.max(1, new Set(rows.map(s => String(s.date).slice(0, 7))).size);
+  const fix = state.recurring_expenses.filter(r => r.active !== false && (!r.end_date || String(r.end_date).slice(0, 10) >= todayISO()))
+    .reduce((a, r) => a + Number(r.amount), 0) * USD_RATE;
+  return ship + (units > 0 ? fix / (units / months) : 0);
+}
 let SM_SORT = null; // {key, dir} — the matrix sorts its own data (colspan-proof)
 window.setSmPos = id => { SM_POS = id || null; renderSellerMatrix(); };
 window.toggleSmGaps = () => {
@@ -4172,7 +4191,8 @@ window.renderSellerMatrix = () => {
   if (bEl) bEl.innerHTML = `<button type="button" class="btn small ${!SM_POS ? "gold" : "ghost"}" onclick="setSmPos('')">All sellers side by side</button>` +
     allRes.map(r => `<button type="button" class="btn small ${r.id === SM_POS ? "gold" : "ghost"}" onclick="setSmPos('${r.id}')">${esc(r.name)}</button>`).join("") +
     `<button type="button" class="btn small ${SM_GAPS ? "danger" : "ghost"}" onclick="toggleSmGaps()" title="Only products with Home stock that a seller never received">✖ Never given only</button>` +
-    `<button type="button" class="btn small ${SM_HIDEFREE ? "gold" : "ghost"}" onclick="toggleSmFree()" title="Échantillons, testers and other $0 products are hidden while this is on — présentoirs always stay">Hide $0 products</button>`;
+    `<button type="button" class="btn small ${SM_HIDEFREE ? "gold" : "ghost"}" onclick="toggleSmFree()" title="Échantillons, testers and other $0 products are hidden while this is on — présentoirs always stay">Hide $0 products</button>` +
+    `<button type="button" class="btn small ${SM_PROFIT ? "gold" : "ghost"}" onclick="toggleSmProfit()" title="Real profit = revenue − TRUE cost (goods + shipping + monthly overhead per unit) of what was sold there">${SM_PROFIT ? "− Minimise Real profit" : "+ Real profit"}</button>`;
   const q = (gv("sm_search") || "").toLowerCase();
   const homePrice = p => ((hp ? priceFor(hp.id, p.id) : null) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0));
   const cellOf = (p, r) => {
@@ -4184,6 +4204,7 @@ window.renderSellerMatrix = () => {
     const they = Math.max(homePrice(p) - (priceFor(r.id, p.id) ?? 0), 0) * sold;
     return { totalIn, sold, gift, lost, left, they, myRev };
   };
+  const extras = SM_PROFIT ? trueUnitExtras() : 0; // shipping + overhead $/u on top of goods
   const rows = [];
   for (const p of [...state.products].sort(prodSort)) {
     if (!prodMatch(p, q)) continue;
@@ -4199,14 +4220,20 @@ window.renderSellerMatrix = () => {
       if (!(hLeft > 0 && cells.some(x => !x.totalIn && !x.sold && !x.left))) continue;
     } else if (single ? !hasSeller : (homePur <= 0 && !hasSeller)) continue;
     const myProfit = toE(c.revenue) - c.cogs;
+    // REAL profit of what was sold at a location = its revenue − TRUE cost × sold
+    const trueC = c.avgCost * USD_RATE + extras;
+    let hRev = 0;
+    if (hp && SM_PROFIT) for (const sl of state.sales) if (sl.product_id === p.id && sl.pos_id === hp.id) hRev += Number(sl.qty) * Number(sl.price_per_unit);
+    const hReal = hRev - trueC * hSold;
+    cells.forEach(x => { x.rp = x.myRev - trueC * x.sold; });
     const vals = { prod: prodShort(p).toLowerCase(), hpur: homePur, hsold: hSold, hleft: hLeft,
-      cost: c.avgCost, sale: homePrice(p), profit: myProfit };
+      hreal: hReal, cost: c.avgCost, sale: homePrice(p), profit: myProfit };
     cells.forEach((x, i) => {
       const id = res[i].id;
       vals["t:" + id] = x.totalIn; vals["s:" + id] = x.sold; vals["l:" + id] = x.left; vals["e:" + id] = x.they;
-      vals["g:" + id] = x.gift; vals["lo:" + id] = x.lost; vals["rv:" + id] = x.myRev;
+      vals["g:" + id] = x.gift; vals["lo:" + id] = x.lost; vals["rv:" + id] = x.myRev; vals["rp:" + id] = x.rp;
     });
-    rows.push({ p, c, homePur, hSold, hLeft, myProfit, cells, vals });
+    rows.push({ p, c, homePur, hSold, hLeft, hReal, myProfit, cells, vals });
   }
   let gapSummary = "";
   if (SM_GAPS && allRes.length) { // combined + per-seller missing counts
@@ -4244,47 +4271,56 @@ window.renderSellerMatrix = () => {
   const subDefs = single
     ? [["t", "TOTAL in"], ["s", "Sold"], ["g", "Gifted"], ["lo", "Lost"], ["l", "= Left"], ["rv", "I earn ($)"], ["e", "They earn ($)"]]
     : [["t", "TOTAL"], ["s", "Sold"], ["l", "= Left"], ["e", "They earn ($)"]];
-  const tot = { pur: 0, hs: 0, hl: 0, my: 0, res: res.map(() => ({ tin: 0, s: 0, g: 0, lo: 0, l: 0, e: 0, rv: 0 })) };
+  if (SM_PROFIT) subDefs.push(["rp", "Real profit ($)"]);
+  const homeCols = SM_PROFIT ? 4 : 3;
+  const rpCell = (v, sold, styled) => `<td class="num calc ${v < 0 && sold ? "neg" : v > 0 ? "hi-sold" : ""}" ${styled || ""}>${sold ? showU(v) : "·"}</td>`;
+  const tot = { pur: 0, hs: 0, hl: 0, hr: 0, my: 0, res: res.map(() => ({ tin: 0, s: 0, g: 0, lo: 0, l: 0, e: 0, rv: 0, rp: 0 })) };
   let body = "";
-  for (const { p, c, homePur, hSold, hLeft, myProfit, cells } of rows) {
-    tot.pur += homePur; tot.hs += hSold; tot.hl += hLeft; tot.my += myProfit;
+  for (const { p, c, homePur, hSold, hLeft, hReal, myProfit, cells } of rows) {
+    tot.pur += homePur; tot.hs += hSold; tot.hl += hLeft; tot.hr += hReal; tot.my += myProfit;
     body += `<tr><td class="smProd">${prodLabel(p)}</td>`;
-    if (!single) body += `<td class="num calc">${fmtN(homePur)}</td><td class="num calc ${soldCls(hSold)}">${fmtN(hSold)}</td>
+    if (!single) {
+      body += `<td class="num calc">${fmtN(homePur)}</td><td class="num calc ${soldCls(hSold)}">${fmtN(hSold)}</td>
       <td class="num calc ${leftCls(hLeft, homePur)}"><b>${fmtN(hLeft)}</b></td>`;
+      if (SM_PROFIT) body += rpCell(hReal, hSold);
+    }
     cells.forEach((x, i) => {
       if (!x.totalIn && !x.sold && !x.left) {
         body += `<td colspan="${subDefs.length}" style="background:#fff3e0;color:#b45309;text-align:center;${SEP}" title="never at ${esc(res[i].name)}">✖</td>`;
         return;
       }
       const t = tot.res[i];
-      t.tin += x.totalIn; t.s += x.sold; t.g += x.gift; t.lo += x.lost; t.l += x.left; t.e += x.they; t.rv += x.myRev;
+      t.tin += x.totalIn; t.s += x.sold; t.g += x.gift; t.lo += x.lost; t.l += x.left; t.e += x.they; t.rv += x.myRev; t.rp += x.rp;
       body += `<td class="num calc" ${RSL}><b>${fmtN(x.totalIn)}</b></td>
         <td class="num calc ${soldCls(x.sold)}" ${RS}>${fmtN(x.sold)}</td>`
         + (single ? `<td class="num calc" ${RS}>${x.gift ? fmtN(x.gift) : "·"}</td><td class="num calc" ${RS}>${x.lost ? fmtN(x.lost) : "·"}</td>` : "")
         + `<td class="num calc ${leftCls(x.left, x.totalIn)}" ${RS}><b>${fmtN(x.left)}</b></td>`
         + (single ? `<td class="num calc" ${RS}>${x.myRev ? showU(x.myRev) : "·"}</td>` : "")
-        + `<td class="num calc" ${RS}>${x.they ? showU(x.they) : "·"}</td>`;
+        + `<td class="num calc" ${RS}>${x.they ? showU(x.they) : "·"}</td>`
+        + (SM_PROFIT ? rpCell(x.rp, x.sold, RS) : "");
     });
     body += `<td class="num calc" style="${SEP}">${eurF.format(c.avgCost)}</td>
       <td class="num calc">${homePrice(p) ? showU(homePrice(p)) : "—"}</td>
       <td class="num calc ${myProfit < 0 ? "neg" : ""}">${showE(myProfit)}</td></tr>`;
   }
   let h = `<table><tr><th class="smProd" onclick="smSortBy('prod')" style="cursor:pointer" title="Click to sort A→Z">Product${arrow("prod")}</th>`
-    + (single ? "" : `<th colspan="3" style="text-align:center">${hp ? esc(hp.name) : "Home"}</th>`)
+    + (single ? "" : `<th colspan="${homeCols}" style="text-align:center">${hp ? esc(hp.name) : "Home"}</th>`)
     + res.map(r => `<th colspan="${subDefs.length}" style="text-align:center;background:#f1f7f3;${SEP}">${esc(r.name)}</th>`).join("")
     + `<th class="num" style="${SEP}"></th><th class="num"></th><th class="num"></th></tr>`;
   h += `<tr><th class="smProd"></th>`
-    + (single ? "" : thS("hpur", "Purch.") + thS("hsold", "Sold") + thS("hleft", "Left"))
+    + (single ? "" : thS("hpur", "Purch.") + thS("hsold", "Sold") + thS("hleft", "Left") + (SM_PROFIT ? thS("hreal", "Real profit ($)") : ""))
     + res.map(r => subDefs.map(([k, cn], ci) => thS(k + ":" + r.id, cn, ci === 0 ? RSL : RS)).join("")).join("")
     + thS("cost", "Cost €/u", `style="${SEP}"`) + thS("sale", "Sale $") + thS("profit", "My profit (€)") + `</tr>`;
   // TOTAL row right under the header (scrolls with the table — not pinned)
   h += `<tr class="total"><td class="smProd">TOTAL (${rows.length})</td>`
-    + (single ? "" : `<td class="num">${fmtN(tot.pur)}</td><td class="num">${fmtN(tot.hs)}</td><td class="num">${fmtN(tot.hl)}</td>`)
+    + (single ? "" : `<td class="num">${fmtN(tot.pur)}</td><td class="num">${fmtN(tot.hs)}</td><td class="num">${fmtN(tot.hl)}</td>`
+        + (SM_PROFIT ? `<td class="num ${tot.hr < 0 ? "neg" : ""}"><b>${showU(tot.hr)}</b></td>` : ""))
     + tot.res.map(t => `<td class="num" style="${SEP}"><b>${fmtN(t.tin)}</b></td><td class="num">${fmtN(t.s)}</td>`
         + (single ? `<td class="num">${fmtN(t.g)}</td><td class="num">${fmtN(t.lo)}</td>` : "")
         + `<td class="num"><b>${fmtN(t.l)}</b></td>`
         + (single ? `<td class="num">${showU(t.rv)}</td>` : "")
-        + `<td class="num">${showU(t.e)}</td>`).join("")
+        + `<td class="num">${showU(t.e)}</td>`
+        + (SM_PROFIT ? `<td class="num ${t.rp < 0 ? "neg" : ""}"><b>${showU(t.rp)}</b></td>` : "")).join("")
     + `<td class="num" style="${SEP}"></td><td></td><td class="num ${tot.my < 0 ? "neg" : ""}">${showE(tot.my)}</td></tr>`;
   el.innerHTML = gapSummary + h + body + "</table>";
 };
