@@ -4961,6 +4961,8 @@ window.sortAnyTable = (table, th) => {
   if (!headRow || ![...headRow.children].includes(th)) return;
   const cols = [...headRow.children];
   const idx = cols.indexOf(th);
+  // first column (Product) or a third click = back to the family A→Z order
+  if (idx === 0 || th.dataset.sort === "desc") { render(); return; }
   const rows = [...table.querySelectorAll("tr")].slice(1);
   const movable = rows.filter(r => !r.classList.contains("total") && !r.classList.contains("newrow")
     && r.children.length === cols.length && !r.querySelector("th"));
