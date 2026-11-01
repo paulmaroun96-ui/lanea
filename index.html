@@ -397,6 +397,19 @@
     <b>They earn</b> = the 15% they keep selling at your price.</p>
     <div id="resellerSummary"></div>
     <div class="rowform no-print" style="margin-top:8px"><button class="btn ghost" onclick="exportResellersCSV()">Export CSV (by product)</button></div>
+    <details class="no-print" style="margin-top:10px">
+      <summary class="hint" style="cursor:pointer;display:inline-block">⇪ Import a sales sheet — what a reseller sold (Excel / CSV / pasted list)</summary>
+      <div class="rowform" style="margin-top:8px">
+        <label>File<input type="file" id="si_file" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
+        <label>Sold at<select id="si_to"></select></label>
+        <button class="btn gold" type="button" onclick="importSalesFile()">Read file → import sales</button>
+      </div>
+      <label style="display:block;margin-top:8px;max-width:640px;text-transform:none;letter-spacing:0">…or paste lines (Product, Qty — optional: Reseller, Price $)
+        <textarea id="si_paste" rows="4" style="width:100%;margin-top:4px" placeholder="Savon Rond Monoï, 3&#10;Sérum 30ml, 2, Pharma, 55.25"></textarea></label>
+      <div class="rowform"><button class="btn ghost" type="button" onclick="importSalesPaste()">Read pasted lines → import sales</button></div>
+      <p class="hint">Each line becomes a <b>sale at that reseller, dated today</b>, priced from their price list (−15%) unless the line carries its own price.
+      You confirm the total before anything is saved; stock deducts at that reseller; Ctrl+Z undoes the whole import. Unmatched rows are reported back.</p>
+    </details>
   </section>
   <section class="card">
     <h2>Reseller matrix — everything by product, one table</h2>
@@ -2572,9 +2585,10 @@ function refreshSelects() {
     const sel = document.getElementById("t_to");
     if (sel && !sel.value) { const t = state.pos.find(x => normPosName(x.name) === "teta"); if (t) sel.value = t.id; }
   }
-  { // transfer-sheet import: destination when the sheet has no reseller column
-    const sel = document.getElementById("ti_to");
-    if (sel) {
+  { // sheet imports: default destination when a sheet has no reseller column
+    for (const id of ["ti_to", "si_to"]) {
+      const sel = document.getElementById(id);
+      if (!sel) continue;
       const cur = sel.value;
       sel.innerHTML = posOptsNoHome;
       if (cur) sel.value = cur;
@@ -3223,6 +3237,7 @@ function renderMaintenance() {
     h += '<p class="hint">✓ Nothing pending here.</p>';
   }
   const tools = [];
+  if (!HIDDEN.mnt.includes("alignprices")) tools.push(wrap("alignprices", `<button class="btn gold" type="button" onclick="realignPrices()">Set ALL prices from the website (resellers −15%) + re-price Pharma's sales</button>`));
   if (!HIDDEN.mnt.includes("fixteta")) tools.push(wrap("fixteta", `<button class="btn ghost" type="button" onclick="fixTetaPrices()">Set Teta at reseller prices (−15%) + re-price her existing sales</button>`));
   if (!HIDDEN.mnt.includes("consolidate")) tools.push(wrap("consolidate", `<button class="btn danger" type="button" onclick="consolidateInventories()">Delete all old inventory counts — numbers stay EXACTLY the same</button>`));
   if (tools.length) h += `<div class="rowform" style="margin-top:6px">${tools.join("")}</div>`;
@@ -3395,6 +3410,44 @@ window.importPharmaBatch = async () => {
 /* GUARANTEE: everything sold at Teta is at her reseller price (15% off the
    Home price). Sets Teta's whole price list to −15% and re-prices every
    existing Teta sale that differs. Undo-able (Ctrl+Z). */
+/* Re-align every price list with the website: Home = RETAIL_USD, every
+   reseller = −15%. Past sales stay untouched EXCEPT Pharmacie St.Rita's,
+   which are re-priced to her list so her numbers become the real ones.
+   Products missing from the website list are reported, never guessed. */
+window.realignPrices = async () => {
+  if (typeof RETAIL_USD === "undefined") { alert("Website price list not loaded — reload the page."); return; }
+  const hp = homePos();
+  if (!hp) { alert("Create your Home location first (Sales & prices)."); return; }
+  const res = sortedPos().filter(x => x.id !== hp.id);
+  const pharma = state.pos.find(x => normPosName(x.name).indexOf("pharma") >= 0);
+  const missing = [], plan = [];
+  for (const p of [...state.products].sort(prodSort)) {
+    const w = p.ref ? RETAIL_USD[p.ref] : undefined;
+    if (w === undefined) { missing.push(prodShort(p)); continue; }
+    if (!(w > 0)) continue; // $0 = freebie, no price to set
+    plan.push({ p, home: Math.round(w * 100) / 100, resale: Math.round(w * 0.85 * 100) / 100 });
+  }
+  if (!(await niceConfirm("Re-align every price with the website?",
+    `${plan.length} products: Home = the website price, every reseller = −15%. All past sales keep their recorded figures — ONLY Pharmacie St.Rita's existing sales are re-priced to her list, so her sold numbers become real.${missing.length ? ` ${missing.length} product(s) have NO website price and will be listed.` : ""}`, "Set prices"))) return;
+  let changed = 0;
+  for (const { p, home, resale } of plan) {
+    if (priceFor(hp.id, p.id) !== home) { await upsertPosPrice(hp.id, p.id, home); changed++; }
+    for (const r of res) if (priceFor(r.id, p.id) !== resale) { await upsertPosPrice(r.id, p.id, resale); changed++; }
+  }
+  let fixed = 0, delta = 0;
+  if (pharma) for (const s of state.sales.filter(x => x.pos_id === pharma.id)) {
+    const want = priceFor(pharma.id, s.product_id);
+    if (want != null && Number(s.price_per_unit) !== want) {
+      delta += Number(s.qty) * (want - Number(s.price_per_unit));
+      if (!(await updateRow("sales", s.id, { price_per_unit: want }))) return;
+      fixed++;
+    }
+  }
+  render();
+  alert(`Prices aligned with the website ✓ — ${fmtN(changed)} price cells updated.`
+    + (pharma ? `\nPharmacie St.Rita: ${fmtN(fixed)} sales re-priced (${usdF.format(delta)} revenue change).` : "")
+    + (missing.length ? `\n\nNOT FOUND on the website list (prices left as they are):\n• ${missing.slice(0, 40).join("\n• ")}` : "\n\nEvery product has a website price ✓"));
+};
 window.fixTetaPrices = async () => {
   const teta = state.pos.find(x => normPosName(x.name) === "teta");
   if (!teta) { alert("No Teta location found."); return; }
@@ -4082,7 +4135,22 @@ window.renderSellerMatrix = () => {
     });
     rows.push({ p, c, homePur, hSold, hLeft, myProfit, cells, vals });
   }
-  if (!rows.length) { el.innerHTML = `<p class="empty">${SM_GAPS ? "No gaps — every seller has everything you stock ✓" : "Nothing here yet."}</p>`; return; }
+  let gapSummary = "";
+  if (SM_GAPS && allRes.length) { // combined + per-seller missing counts
+    const per = allRes.map(() => 0);
+    let allN = 0;
+    for (const p of state.products) {
+      const hl = hp ? posStockOf(p.id, hp.id) : 0;
+      if (hl <= 0) continue;
+      let m = 0;
+      allRes.forEach((r, i) => {
+        if (!(transferredTo(p.id, r.id) + invDelta(p.id, r.id)) && !soldAtPos(p.id, r.id) && !posStockOf(p.id, r.id)) { per[i]++; m++; }
+      });
+      if (m === allRes.length) allN++;
+    }
+    gapSummary = `<p class="hint" style="margin:4px 0 8px"><b>Gap summary:</b> ${allRes.map((r, i) => `${esc(r.name)} missing <b class="hi-low">${fmtN(per[i])}</b>`).join(" · ")} · missing at <b>every</b> seller: <b class="hi-low">${fmtN(allN)}</b></p>`;
+  }
+  if (!rows.length) { el.innerHTML = gapSummary + `<p class="empty">${SM_GAPS ? "No gaps — every seller has everything you stock ✓" : "Nothing here yet."}</p>`; return; }
   if (SM_SORT) {
     const d = SM_SORT.dir, k = SM_SORT.key;
     rows.sort((a, b) => {
@@ -4143,7 +4211,7 @@ window.renderSellerMatrix = () => {
         + (single ? `<td class="num">${showU(t.rv)}</td>` : "")
         + `<td class="num">${showU(t.e)}</td>`).join("")
     + `<td class="num" style="${SEP}"></td><td></td><td class="num ${tot.my < 0 ? "neg" : ""}">${showE(tot.my)}</td></tr>`;
-  el.innerHTML = h + body + "</table>";
+  el.innerHTML = gapSummary + h + body + "</table>";
 };
 window.exportStocksCSV = () => {
   const rows = [["Product", "Ref", "Initial", "Purchased", "Sold", "Gifted", "Lost", "Inventory adj.", "Stock", "Avg cost (EUR)", "Value at cost (EUR)"]];
@@ -4308,6 +4376,74 @@ window.importTransferPaste = () => {
   if (!t.trim()) { alert("Paste some lines first."); return; }
   tiAddRows(tiSplitText(t));
   document.getElementById("ti_paste").value = "";
+};
+/* sales-sheet import: Product, Qty[, Reseller][, Price $] → SALES at that
+   reseller, dated today, price-list price unless the line has its own */
+async function siAddRows(rawRows) {
+  const hp = homePos();
+  const defTo = gv("si_to") || "";
+  const miss = [], plan = [];
+  for (const raw of rawRows) {
+    const cells = raw.map(c => String(c ?? "").trim());
+    if (!cells[0]) continue;
+    if (/produ|article|item|^ref/i.test(cells[0]) && !/\d/.test(cells[1] || "")) continue;
+    let prodTxt = cells[0], qtyTxt = cells[1];
+    if (qtyTxt === undefined || qtyTxt === "") {
+      const m = prodTxt.match(/^(.*?)[\s,;]+(\d+)$/);
+      if (m) { prodTxt = m[1]; qtyTxt = m[2]; }
+    }
+    const rest = cells.slice(2).filter(c => c !== "");
+    let posTxt = "", priceTxt = "";
+    for (const c of rest) {
+      if (/^[\d.,$]+$/.test(c)) priceTxt = priceTxt || c;
+      else posTxt = posTxt || c;
+    }
+    const qty = Math.round(Number(String(qtyTxt ?? "").replace(",", ".")));
+    const p = tiMatchProduct(prodTxt);
+    if (!p || !(qty > 0)) { miss.push(`• ${prodTxt}${qtyTxt ? " (" + qtyTxt + ")" : ""}`); continue; }
+    const pos = (posTxt && tiMatchPos(posTxt)) || (defTo ? posById(defTo) : null);
+    if (!pos) { miss.push(`• ${prodTxt} — no reseller recognised`); continue; }
+    let price = priceTxt ? Number(priceTxt.replace("$", "").replace(",", ".")) : null;
+    if (!(price > 0)) price = priceFor(pos.id, p.id)
+      ?? Math.round(((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0) * ((hp && pos.id === hp.id) ? 1 : 0.85) * 100) / 100;
+    plan.push({ p, pos, qty, price });
+  }
+  if (!plan.length) {
+    alert("Nothing importable found — expected lines like: Product, Qty, Reseller, Price."
+      + (miss.length ? `\n\nNOT matched:\n${miss.slice(0, 25).join("\n")}` : ""));
+    return;
+  }
+  const units = plan.reduce((a, l) => a + l.qty, 0);
+  const totalU = plan.reduce((a, l) => a + l.qty * l.price, 0);
+  if (!(await niceConfirm("Import these sales?",
+    `${plan.length} line${plan.length === 1 ? "" : "s"} · ${fmtN(units)} units · ${usdF.format(totalU)}, dated today, at each seller's list price (or the sheet's own price). Stock deducts at the seller. Ctrl+Z undoes it.`, "Import sales"))) return;
+  for (const l of plan) {
+    if (!(await addRow("sales", { date: todayISO(), pos_id: l.pos.id, product_id: l.p.id, qty: l.qty, price_per_unit: l.price }))) return;
+  }
+  render();
+  alert(`${plan.length} sales imported ✓ — ${fmtN(units)} units · ${usdF.format(totalU)}.`
+    + (miss.length ? `\n\nNOT matched (add manually):\n${miss.slice(0, 25).join("\n")}${miss.length > 25 ? `\n… +${miss.length - 25} more` : ""}` : ""));
+}
+window.importSalesPaste = () => {
+  const t = gv("si_paste");
+  if (!t.trim()) { alert("Paste some lines first."); return; }
+  siAddRows(tiSplitText(t));
+  const el = document.getElementById("si_paste"); if (el) el.value = "";
+};
+window.importSalesFile = async () => {
+  const inp = document.getElementById("si_file");
+  const f = inp && inp.files && inp.files[0];
+  if (!f) { alert("Choose a file first (.xlsx, .csv or .txt)."); return; }
+  try {
+    if (/\.xlsx?$/i.test(f.name)) {
+      await loadXlsxLib();
+      const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+      await siAddRows(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: "" }));
+    } else {
+      await siAddRows(tiSplitText(await f.text()));
+    }
+    inp.value = "";
+  } catch (e) { alert("Could not read the file: " + (e && e.message ? e.message : e)); }
 };
 window.importTransferFile = async () => {
   const inp = document.getElementById("ti_file");
