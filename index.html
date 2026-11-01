@@ -159,6 +159,14 @@
   .hi-sold { color: #15803d; font-weight: 700; }
   #sellerMatrix .smProd { position: sticky; left: 0; background: var(--panel, #fff); z-index: 1; }
   #sellerMatrix tr.total .smProd { background: #faf8f3; }
+  /* pin both header rows + the TOTAL row while scrolling the matrix */
+  #sellerMatrix th { height: 34px; box-sizing: border-box; padding: 6px 10px; }
+  #sellerMatrix tr:nth-child(1) th { position: sticky; top: 0; background: var(--panel, #fff); z-index: 2; }
+  #sellerMatrix tr:nth-child(2) th { position: sticky; top: 34px; background: var(--panel, #fff); z-index: 2; }
+  #sellerMatrix tr.total td { position: sticky; top: 68px; background: #faf8f3; z-index: 2; }
+  #sellerMatrix tr:nth-child(1) th[style*="f1f7f3"], #sellerMatrix tr:nth-child(2) th[style*="f1f7f3"] { z-index: 2; }
+  #sellerMatrix th.smProd, #sellerMatrix td.smProd { z-index: 3; }
+  #sellerMatrix tr.total td.smProd { z-index: 4; }
   .cards.hero .stat { border-width: 2px; border-color: var(--gold, #36656e); }
   .cards.hero .v { font-size: 30px; }
   .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 17px; box-shadow: var(--shadow); transition: box-shadow .15s; }
@@ -398,6 +406,11 @@
     <div class="rowform no-print" id="smBtns" style="margin-bottom:6px"></div>
     <div class="rowform no-print"><label>Search<input id="sm_search" oninput="renderSellerMatrix()" placeholder="product…" style="min-width:220px"></label></div>
     <div class="scrollbox" style="max-height:560px" id="sellerMatrix"></div>
+  </section>
+  <section class="card">
+    <h2>Never given — what each reseller is missing</h2>
+    <p class="hint">Products you have at Home that the reseller never received (with how many you could send). Use Move stock above to fill the gaps.</p>
+    <div id="neverGiven"></div>
   </section>
   <section class="card">
     <h2>Inventory — what you have right now</h2>
@@ -2604,7 +2617,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderBreakEven(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInvGrid(); renderImportState(); renderMaintenance(); renderTabToggles(); renderStocks(); renderSellerMatrix(); renderPosStock(); renderTrfDraft(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderCatManager(); renderRecurring();
+  renderDash(); renderBreakEven(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInvGrid(); renderImportState(); renderMaintenance(); renderTabToggles(); renderStocks(); renderSellerMatrix(); renderNeverGiven(); renderPosStock(); renderTrfDraft(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderCatManager(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
@@ -4014,6 +4027,28 @@ window.renderStocks = () => {
 /* Reseller matrix: every product that exists somewhere × every seller —
    Given/Sold/Left per seller (✖ when never given), cost, my sale price,
    my realized profit, the reseller's earned margin, global stock diff. */
+/* gap list: per reseller, every product with Home stock they never received */
+window.renderNeverGiven = () => {
+  const el = document.getElementById("neverGiven");
+  if (!el) return;
+  const hp = homePos();
+  const res = sortedPos().filter(x => !hp || x.id !== hp.id);
+  if (!res.length || !state.products.length) { el.innerHTML = '<p class="empty">No resellers yet.</p>'; return; }
+  let h = "";
+  for (const r of res) {
+    const miss = [];
+    for (const p of [...state.products].sort(prodSort)) {
+      const homeLeft = hp ? posStockOf(p.id, hp.id) : 0;
+      if (homeLeft <= 0) continue; // only gaps you can actually fill
+      if (transferredTo(p.id, r.id) + invDelta(p.id, r.id) || soldAtPos(p.id, r.id) || posStockOf(p.id, r.id)) continue;
+      miss.push(`${esc(prodShort(p))} <span style="color:var(--muted)">(×${fmtN(homeLeft)} at Home)</span>`);
+    }
+    h += `<details${res.length === 1 ? " open" : ""} style="margin-bottom:8px">
+      <summary style="cursor:pointer"><b>${esc(r.name)}</b> — <span class="${miss.length ? "hi-low" : "hi-sold"}">${miss.length} product${miss.length === 1 ? "" : "s"}</span> never received</summary>
+      <div style="margin:6px 0 2px 14px;line-height:2">${miss.length ? miss.join(" · ") : "Has (or had) everything you stock ✓"}</div></details>`;
+  }
+  el.innerHTML = h;
+};
 let SM_POS = null; // null = all sellers side by side
 window.setSmPos = id => { SM_POS = id || null; renderSellerMatrix(); };
 window.renderSellerMatrix = () => {
