@@ -4679,7 +4679,7 @@ async function scanSalesPhoto(f) {
   }
   toast("Reading the photo with Gemini — a few seconds…");
   const catalog = [...state.products].sort(prodSort).map(p => prodShort(p)).join("\n");
-  const prompt = `You are reading a handwritten or printed SALES invoice from a cosmetics shop (French product names).
+  const gmAsk = `You are reading a handwritten or printed SALES invoice from a cosmetics shop (French product names).
 Extract the invoice date (YYYY-MM-DD) and EVERY product line: qty (units), unit_price (per unit, plain number), and
 match the written description to EXACTLY ONE name from this catalog (return it verbatim in "catalog"; empty if truly none fits):
 ${catalog}
@@ -4692,7 +4692,7 @@ Ignore subtotal/total/signature rows. Crossed-out lines are excluded.`;
   }, required: ["lines"] };
   const b64 = await gmFileToB64(f);
   const body = {
-    contents: [{ parts: [{ inline_data: { mime_type: f.type || "image/jpeg", data: b64 } }, { text: prompt }] }],
+    contents: [{ parts: [{ inline_data: { mime_type: f.type || "image/jpeg", data: b64 } }, { text: gmAsk }] }],
     generationConfig: { response_mime_type: "application/json", response_schema: schema, temperature: 0 },
   };
   let parsed = null, lastErr = "";
