@@ -2694,7 +2694,7 @@ function render() {
        <button class="btn small gold" style="margin-left:8px" onclick="showTab('inv');openInvDraft('${invDrafts[0].id}')">Open &amp; submit</button></span>`
     : "";
   refreshSelects();
-  renderDash(); renderBreakEven(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInvGrid(); renderImportState(); renderMaintenance(); renderTabToggles(); renderStocks(); renderSellerMatrix(); renderPosStock(); renderTrfDraft(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderCatManager(); renderRecurring();
+  renderDash(); renderBreakEven(); renderCFO(); renderDay(); renderProducts(); renderInitInv(); renderInvGrid(); renderImportState(); renderMaintenance(); renderTabToggles(); renderStocks(); renderSellerMatrix(); renderPosStock(); renderTrfDraft(); renderTransferLog(); renderLocChart(); renderResellers(); renderLosses(); renderCatalog(); renderPurchases(); renderPos(); renderSales(); renderPriceList(); renderHistory(); renderGifts(); renderExpenses(); renderCatManager(); renderRecurring();
 }
 
 /* ================= daily log & calendar ================= */
@@ -3308,6 +3308,10 @@ function renderMaintenance() {
     { key: "placeoct", fn: "importNewPlacements()", label: "Place stock with Rosy & Dr Pascale (91 units — invoices 31–37, 24–26 Oct)",
       done: (() => { const r = state.pos.find(x => normPosName(x.name).indexOf("rosy") >= 0);
         return !!r && state.transfers.some(t => t.pos_id === r.id && t.date === "2026-10-24"); })() },
+    { key: "fix37", fn: "fixInv37()", label: "Fix invoice 37 — the crossed line was 2× Crème de Nuit, not the recharge",
+      done: (() => { const pp = state.pos.find(x => normPosName(x.name).indexOf("pascale") >= 0);
+        const ee = state.products.find(p => p.ref === "ECOLCN500");
+        return !pp || !ee || !state.transfers.some(t => t.pos_id === pp.id && t.product_id === ee.id && t.date === "2026-10-26"); })() },
     { key: "dedup", fn: "cleanRecurringDupes()", label: "Delete the old Adlibitum / Shopify rows the recurring rules now cover",
       done: !state.expenses.some(e => /^(Shopify .+\(\$[0-9.]+\)|Adlibitum .*\(\$(700|1000)\))$/.test(e.description || ""))
             && !state.recurring_expenses.some(r => r.description === "Monthly payment ($27.7)") },
@@ -3492,6 +3496,21 @@ window.tidyResellers = async () => {
     `${empty.map(x => x.name).join(", ")} — nothing was ever transferred, sold, gifted or counted there. Their price lists go too. Ctrl+Z undoes everything.`, "Delete them"))) { render(); return; }
   for (const x of empty) if (!(await deleteRow("pos", x.id))) return;
   toast(`Tidied ✓ — ${empty.length} empty reseller${empty.length === 1 ? "" : "s"} deleted`);
+  render();
+};
+/* invoice 37 correction: the crossed line was 2× Crème de Nuit (user), not
+   Recharge Lait Corporel — swaps the transfer rows at Pascale if present */
+window.fixInv37 = async () => {
+  const pasc = state.pos.find(x => normPosName(x.name).indexOf("pascale") >= 0);
+  const eco = state.products.find(p => p.ref === "ECOLCN500");
+  const nuit = state.products.find(p => p.ref === "CRENUI100");
+  if (!pasc || !eco || !nuit) { alert("Nothing to fix — invoice 37 is already correct."); return; }
+  const bad = state.transfers.filter(t => t.pos_id === pasc.id && t.product_id === eco.id && t.date === "2026-10-26");
+  if (!bad.length) { alert("Nothing to fix — invoice 37 is already correct."); return; }
+  const qty = bad.reduce((a, t) => a + Number(t.qty), 0);
+  for (const t of bad) if (!(await deleteRow("transfers", t.id))) return;
+  if (!(await addRow("transfers", { date: "2026-10-26", product_id: nuit.id, pos_id: pasc.id, qty }))) return;
+  toast(`Invoice 37 fixed ✓ — ${fmtN(qty)}× Recharge Lait Corporel → Crème de Nuit at Pascale`);
   render();
 };
 window.importNewPlacements = async () => {
@@ -4759,9 +4778,16 @@ window.renderPosStock = () => {
     el.innerHTML = any ? h : `<p class="empty">Nothing sent to or sold at ${esc(pos.name)} yet — use the form above to send stock.</p>`;
   }
   // transfer history
+};
+/* transfer history lives in the Move stock card — rendered on its own so it
+   never depends on removed cards (v62 made it blank by accident) */
+window.renderTransferLog = () => {
+  const el = document.getElementById("transfersLog");
+  if (!el) return;
   const log = [...state.transfers].sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 40);
-  document.getElementById("transferCount").textContent = `${state.transfers.length} transfer${state.transfers.length === 1 ? "" : "s"}`;
-  document.getElementById("transfersLog").innerHTML = log.length
+  const cnt = document.getElementById("transferCount");
+  if (cnt) cnt.textContent = `${state.transfers.length} transfer${state.transfers.length === 1 ? "" : "s"}`;
+  el.innerHTML = log.length
     ? "<table>" + log.map(t => `<tr><td>${fmtD(t.date)}</td><td>${prodLabelById(t.product_id)}</td>
         <td>${esc(posById(t.pos_id)?.name || "(deleted)")}</td>
         <td class="num calc ${Number(t.qty) < 0 ? "neg" : ""}">${Number(t.qty) > 0 ? "→ POS " : "→ Home "}${fmtN(Math.abs(Number(t.qty)))}</td>
