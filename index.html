@@ -489,7 +489,7 @@
     <p class="hint">Drop a <b>PDF or photo</b> of a supplier invoice — Gemini reads the date, invoice ref and every line (product · qty · unit price · line total).
     You review and match the products, then import. The API key is saved <b>only in this browser</b> — never in the code or the cloud.</p>
     <div class="rowform">
-      <label>Gemini API key<input id="gm_key" type="password" placeholder="AIza…" style="min-width:260px" autocomplete="off"></label>
+      <label>Gemini API key<input id="gm_key" type="password" placeholder="AIza…" style="min-width:260px" autocomplete="off" onchange="try{localStorage.setItem(LS_GMKEY,this.value.trim())}catch(e){}"></label>
       <label>Invoice file<input id="gm_file" type="file" accept=".pdf,image/*"></label>
       <button class="btn gold" type="button" id="gm_scan" onclick="scanInvoice()">Scan invoice</button>
     </div>
@@ -4670,8 +4670,13 @@ window.importSalesPaste = () => {
 /* photo/PDF of a handwritten sales invoice → Gemini reads the lines AND picks
    the matching catalog product name, so the handwriting phrasing doesn't matter */
 async function scanSalesPhoto(f) {
-  const key = localStorage.getItem(LS_GMKEY) || "";
-  if (!key) { alert("Set your Gemini API key first (Purchases → Scan an invoice (AI)) — it stays in this browser only."); return; }
+  let key = localStorage.getItem(LS_GMKEY) || "";
+  if (!key) {
+    key = (prompt("Paste your Gemini API key — it stays in this browser only.\nFree key: aistudio.google.com/apikey") || "").trim();
+    if (!key) return;
+    localStorage.setItem(LS_GMKEY, key);
+    try { setVal("gm_key", key); } catch {}
+  }
   toast("Reading the photo with Gemini — a few seconds…");
   const catalog = [...state.products].sort(prodSort).map(p => prodShort(p)).join("\n");
   const prompt = `You are reading a handwritten or printed SALES invoice from a cosmetics shop (French product names).
