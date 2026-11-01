@@ -358,6 +358,19 @@
     </div>
     <div id="reportBody"></div>
   </section>
+  <section class="card no-print">
+    <h2>⇪ Import a sales sheet (Excel / CSV / pasted list)</h2>
+    <p class="hint">Sales made at Home or by a reseller, straight from a file — each line becomes a <b>sale dated today</b> at that location's list price unless the line carries its own price.
+    You confirm the totals before anything saves; stock deducts automatically; Ctrl+Z undoes the whole import.</p>
+    <div class="rowform">
+      <label>File<input type="file" id="si_file" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
+      <label>Sold at<select id="si_to"></select></label>
+      <button class="btn gold" type="button" onclick="importSalesFile()">Read file → import sales</button>
+    </div>
+    <label style="display:block;margin-top:8px;max-width:640px;text-transform:none;letter-spacing:0">…or paste lines (Product, Qty — optional: Location, Price $)
+      <textarea id="si_paste" rows="4" style="width:100%;margin-top:4px" placeholder="Savon Rond Monoï, 3&#10;Sérum 30ml, 2, Pharma, 59.5"></textarea></label>
+    <div class="rowform"><button class="btn ghost" type="button" onclick="importSalesPaste()">Read pasted lines → import sales</button></div>
+  </section>
 </div>
 
 <!-- ============ STOCKS & INVENTORY (merged: inventory + transfers + stocks) ============ -->
@@ -397,19 +410,6 @@
     <b>They earn</b> = the 15% they keep selling at your price.</p>
     <div id="resellerSummary"></div>
     <div class="rowform no-print" style="margin-top:8px"><button class="btn ghost" onclick="exportResellersCSV()">Export CSV (by product)</button></div>
-    <details class="no-print" style="margin-top:10px">
-      <summary class="hint" style="cursor:pointer;display:inline-block">⇪ Import a sales sheet — what a reseller sold (Excel / CSV / pasted list)</summary>
-      <div class="rowform" style="margin-top:8px">
-        <label>File<input type="file" id="si_file" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
-        <label>Sold at<select id="si_to"></select></label>
-        <button class="btn gold" type="button" onclick="importSalesFile()">Read file → import sales</button>
-      </div>
-      <label style="display:block;margin-top:8px;max-width:640px;text-transform:none;letter-spacing:0">…or paste lines (Product, Qty — optional: Reseller, Price $)
-        <textarea id="si_paste" rows="4" style="width:100%;margin-top:4px" placeholder="Savon Rond Monoï, 3&#10;Sérum 30ml, 2, Pharma, 55.25"></textarea></label>
-      <div class="rowform"><button class="btn ghost" type="button" onclick="importSalesPaste()">Read pasted lines → import sales</button></div>
-      <p class="hint">Each line becomes a <b>sale at that reseller, dated today</b>, priced from their price list (−15%) unless the line carries its own price.
-      You confirm the total before anything is saved; stock deducts at that reseller; Ctrl+Z undoes the whole import. Unmatched rows are reported back.</p>
-    </details>
   </section>
   <section class="card">
     <h2>Reseller matrix — everything by product, one table</h2>
@@ -1712,6 +1712,7 @@ window.renderPriceList = () => {
   bar.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <button class="btn gold" id="plSaveBtn" onclick="savePrices()">${n ? `Save prices (${n} changed)` : "Save prices"}</button>
       <button class="btn ghost" onclick="prefillPrices()">Prefill LANEA prices ($)</button>
+      <button class="btn gold" onclick="realignPrices()">Set ALL from the website (resellers −15%)</button>
       <button class="btn ghost" id="plDiscardBtn" onclick="discardPrices()" style="${n ? "" : "display:none"}">Discard changes</button>
       <span style="display:inline-flex;gap:6px;align-items:center;border-left:1px solid var(--line,#e5e7eb);padding-left:10px">
         <span class="hint" style="margin:0">Reseller:</span>
@@ -2585,14 +2586,23 @@ function refreshSelects() {
     const sel = document.getElementById("t_to");
     if (sel && !sel.value) { const t = state.pos.find(x => normPosName(x.name) === "teta"); if (t) sel.value = t.id; }
   }
-  { // sheet imports: default destination when a sheet has no reseller column
-    for (const id of ["ti_to", "si_to"]) {
-      const sel = document.getElementById(id);
-      if (!sel) continue;
+  { // transfer-sheet import: destination defaults to Teta (resellers only)
+    const sel = document.getElementById("ti_to");
+    if (sel) {
       const cur = sel.value;
       sel.innerHTML = posOptsNoHome;
       if (cur) sel.value = cur;
       if (!sel.value) { const t = state.pos.find(x => normPosName(x.name) === "teta"); if (t) sel.value = t.id; }
+    }
+  }
+  { // sales-sheet import: Home AND resellers, defaults to Home
+    const sel = document.getElementById("si_to");
+    if (sel) {
+      const cur = sel.value;
+      sel.innerHTML = sortedPos().map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+      if (cur) sel.value = cur;
+      const hpSel = homePos();
+      if (!sel.value && hpSel) sel.value = hpSel.id;
     }
   }
   const posOpts = sortedPos().map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
@@ -3422,7 +3432,8 @@ window.realignPrices = async () => {
   const pharma = state.pos.find(x => normPosName(x.name).indexOf("pharma") >= 0);
   const missing = [], plan = [];
   for (const p of [...state.products].sort(prodSort)) {
-    const w = p.ref ? RETAIL_USD[p.ref] : undefined;
+    // live lanea-lb.com price first (WEB_USD, fetched from the site), master list as fallback
+    const w = p.ref ? ((typeof WEB_USD !== "undefined" && WEB_USD[p.ref] !== undefined) ? WEB_USD[p.ref] : RETAIL_USD[p.ref]) : undefined;
     if (w === undefined) { missing.push(prodShort(p)); continue; }
     if (!(w > 0)) continue; // $0 = freebie, no price to set
     plan.push({ p, home: Math.round(w * 100) / 100, resale: Math.round(w * 0.85 * 100) / 100 });
@@ -4078,6 +4089,8 @@ window.renderStocks = () => {
    my realized profit, the reseller's earned margin, global stock diff. */
 let SM_POS = null; // null = all sellers side by side
 let SM_GAPS = false; // true = only products a seller never received
+let SM_HIDEFREE = true; // ON by default: hide $0 products (échantillons, testers…) except présentoirs
+window.toggleSmFree = () => { SM_HIDEFREE = !SM_HIDEFREE; renderSellerMatrix(); toast(SM_HIDEFREE ? "Hiding $0 products (échantillons…) — présentoirs stay" : "Showing every product, $0 included"); };
 let SM_SORT = null; // {key, dir} — the matrix sorts its own data (colspan-proof)
 window.setSmPos = id => { SM_POS = id || null; renderSellerMatrix(); };
 window.toggleSmGaps = () => {
@@ -4101,7 +4114,8 @@ window.renderSellerMatrix = () => {
   const bEl = document.getElementById("smBtns");
   if (bEl) bEl.innerHTML = `<button type="button" class="btn small ${!SM_POS ? "gold" : "ghost"}" onclick="setSmPos('')">All sellers side by side</button>` +
     allRes.map(r => `<button type="button" class="btn small ${r.id === SM_POS ? "gold" : "ghost"}" onclick="setSmPos('${r.id}')">${esc(r.name)}</button>`).join("") +
-    `<button type="button" class="btn small ${SM_GAPS ? "danger" : "ghost"}" onclick="toggleSmGaps()" title="Only products with Home stock that a seller never received">✖ Never given only</button>`;
+    `<button type="button" class="btn small ${SM_GAPS ? "danger" : "ghost"}" onclick="toggleSmGaps()" title="Only products with Home stock that a seller never received">✖ Never given only</button>` +
+    `<button type="button" class="btn small ${SM_HIDEFREE ? "gold" : "ghost"}" onclick="toggleSmFree()" title="Échantillons, testers and other $0 products are hidden while this is on — présentoirs always stay">Hide $0 products</button>`;
   const q = (gv("sm_search") || "").toLowerCase();
   const homePrice = p => ((hp ? priceFor(hp.id, p.id) : null) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0));
   const cellOf = (p, r) => {
@@ -4116,6 +4130,8 @@ window.renderSellerMatrix = () => {
   const rows = [];
   for (const p of [...state.products].sort(prodSort)) {
     if (!prodMatch(p, q)) continue;
+    if (SM_HIDEFREE && !(homePrice(p) > 0)
+        && tiNorm(prodShort(p) + " " + (p.name || "")).indexOf("presentoir") < 0) continue;
     const c = productCalc(p);
     const homePur = c.iq + c.purQty;
     const cells = res.map(r => cellOf(p, r));
@@ -4140,6 +4156,8 @@ window.renderSellerMatrix = () => {
     const per = allRes.map(() => 0);
     let allN = 0;
     for (const p of state.products) {
+      if (SM_HIDEFREE && !(homePrice(p) > 0)
+          && tiNorm(prodShort(p) + " " + (p.name || "")).indexOf("presentoir") < 0) continue;
       const hl = hp ? posStockOf(p.id, hp.id) : 0;
       if (hl <= 0) continue;
       let m = 0;
