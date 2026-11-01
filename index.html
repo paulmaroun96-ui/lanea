@@ -304,6 +304,12 @@
       <label>Commission per sale (%)<input id="be_comm" type="number" step="0.5" min="0" max="95" value="0" style="width:90px" oninput="renderBreakEven()"></label>
     </div>
     <div id="beOut"></div>
+    <details style="margin-top:10px">
+      <summary class="hint" style="cursor:pointer;display:inline-block"><b>TRUE cost &amp; profit per product</b> — goods + shipping + your monthly costs spread per unit</summary>
+      <p class="hint" style="margin-top:6px">TRUE cost = goods + shipping per unit + <b>overhead per unit</b> (the monthly fixed costs above ÷ the units you sell per month).
+      The last column removes the reseller's 15% too — that's your worst-case real profit. Click headers to sort.</p>
+      <div class="scrollbox" style="max-height:440px" id="beProd"></div>
+    </details>
   </section>
   <section class="card"><h2>Monthly performance</h2><div id="dashMonthly"></div></section>
   <div class="grid2">
@@ -1493,6 +1499,27 @@ window.renderBreakEven = () => {
         : profit >= 0 ? `✓ PROFITABLE — ${fmtN(Math.max(0, Math.round(runUnits - needU)))} units/month above break-even`
         : `✗ below break-even — sell ${fmtN(Math.ceil(needU - runUnits))} more units/month or cut ${showU(-profit)} of monthly costs`}</td></tr>
   </table>`;
+  // fully loaded TRUE cost per product: goods + shipping + overhead/unit (+ reseller 15% on the last column)
+  const tEl = document.getElementById("beProd");
+  if (tEl) {
+    const ovU = runUnits > 0 ? fix / runUnits : 0;
+    const hpT = homePos();
+    let th = `<table><tr><th>Product</th><th class="num">Sale $</th><th class="num">Goods $/u</th><th class="num">Shipping $/u</th>
+      <th class="num">Overhead $/u</th><th class="num">TRUE cost $/u</th><th class="num">Real profit (direct)</th><th class="num">Real profit (via reseller −15%)</th></tr>`;
+    for (const p of [...state.products].sort(prodSort)) {
+      const price = (hpT ? priceFor(hpT.id, p.id) : null) ?? ((typeof RETAIL_USD !== "undefined" && p.ref && RETAIL_USD[p.ref]) || 0);
+      if (!(price > 0)) continue;
+      const goods = productCalc(p).avgCost * USD_RATE;
+      const trueC = goods + ship + ovU;
+      const pd = price - trueC, pr = price * 0.85 - trueC;
+      th += `<tr><td>${prodLabel(p)}</td><td class="num calc">${showU(price)}</td><td class="num calc">${showU(goods)}</td>
+        <td class="num calc">${showU(ship)}</td><td class="num calc">${showU(ovU)}</td>
+        <td class="num calc"><b>${showU(trueC)}</b></td>
+        <td class="num calc ${pd < 0 ? "neg" : "hi-sold"}">${showU(pd)} · ${fmtP(pd / price)}</td>
+        <td class="num calc ${pr < 0 ? "neg" : ""}">${showU(pr)} · ${fmtP(pr / price)}</td></tr>`;
+    }
+    tEl.innerHTML = th + "</table>";
+  }
 };
 window.clearFilters = () => {
   filters = { from: "", to: "", pos: "", prod: "" };
@@ -1711,8 +1738,10 @@ window.renderPriceList = () => {
   const curDiscPos = gv("pl_disc_pos"), curDiscPct = gv("pl_disc") || "15";
   bar.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <button class="btn gold" id="plSaveBtn" onclick="savePrices()">${n ? `Save prices (${n} changed)` : "Save prices"}</button>
-      <button class="btn ghost" onclick="prefillPrices()">Prefill LANEA prices ($)</button>
-      <button class="btn gold" onclick="realignPrices()">Set ALL from the website (resellers −15%)</button>
+      ${["prefill", "alignbar"].map(k => HIDDEN.mnt.includes(k) ? "" :
+        `<span style="display:inline-flex;gap:2px">${k === "prefill"
+          ? '<button class="btn ghost" onclick="prefillPrices()">Prefill LANEA prices ($)</button>'
+          : '<button class="btn gold" onclick="realignPrices()">Set ALL from the website (resellers −15%)</button>'}<button class="btn small ghost" title="Remove this button (restore in Settings)" onclick="hideMnt('${k}')">✕</button></span>`).join("")}
       <button class="btn ghost" id="plDiscardBtn" onclick="discardPrices()" style="${n ? "" : "display:none"}">Discard changes</button>
       <span style="display:inline-flex;gap:6px;align-items:center;border-left:1px solid var(--line,#e5e7eb);padding-left:10px">
         <span class="hint" style="margin:0">Reseller:</span>
@@ -3192,7 +3221,7 @@ window.importJulySales = async () => {
 let HIDDEN = { mnt: [], tabs: [] };
 try { HIDDEN = Object.assign({ mnt: [], tabs: [] }, JSON.parse(localStorage.getItem("lanea-hidden") || "{}")); } catch {}
 const saveHidden = () => localStorage.setItem("lanea-hidden", JSON.stringify(HIDDEN));
-window.hideMnt = key => { if (!HIDDEN.mnt.includes(key)) HIDDEN.mnt.push(key); saveHidden(); renderMaintenance(); toast("Button removed — restore it anytime in Settings"); };
+window.hideMnt = key => { if (!HIDDEN.mnt.includes(key)) HIDDEN.mnt.push(key); saveHidden(); render(); toast("Button removed — restore it anytime in Settings"); };
 window.toggleTabVis = (key, show) => {
   HIDDEN.tabs = HIDDEN.tabs.filter(t => t !== key);
   if (!show) HIDDEN.tabs.push(key);
@@ -3429,7 +3458,6 @@ window.realignPrices = async () => {
   const hp = homePos();
   if (!hp) { alert("Create your Home location first (Sales & prices)."); return; }
   const res = sortedPos().filter(x => x.id !== hp.id);
-  const pharma = state.pos.find(x => normPosName(x.name).indexOf("pharma") >= 0);
   const missing = [], plan = [];
   for (const p of [...state.products].sort(prodSort)) {
     // live lanea-lb.com price first (WEB_USD, fetched from the site), master list as fallback
@@ -3446,8 +3474,9 @@ window.realignPrices = async () => {
     for (const r of res) if (priceFor(r.id, p.id) !== resale) { await upsertPosPrice(r.id, p.id, resale); changed++; }
   }
   let fixed = 0, delta = 0;
-  if (pharma) for (const s of state.sales.filter(x => x.pos_id === pharma.id)) {
-    const want = priceFor(pharma.id, s.product_id);
+  const pharmas = state.pos.filter(x => normPosName(x.name).indexOf("pharma") >= 0); // St.Rita + Pharmacie 1/2/3…
+  for (const ph of pharmas) for (const s of state.sales.filter(x => x.pos_id === ph.id)) {
+    const want = priceFor(ph.id, s.product_id);
     if (want != null && Number(s.price_per_unit) !== want) {
       delta += Number(s.qty) * (want - Number(s.price_per_unit));
       if (!(await updateRow("sales", s.id, { price_per_unit: want }))) return;
@@ -3456,7 +3485,7 @@ window.realignPrices = async () => {
   }
   render();
   alert(`Prices aligned with the website ✓ — ${fmtN(changed)} price cells updated.`
-    + (pharma ? `\nPharmacie St.Rita: ${fmtN(fixed)} sales re-priced (${usdF.format(delta)} revenue change).` : "")
+    + (pharmas.length ? `\nPharmacies: ${fmtN(fixed)} sales re-priced (${usdF.format(delta)} revenue change).` : "")
     + (missing.length ? `\n\nNOT FOUND on the website list (prices left as they are):\n• ${missing.slice(0, 40).join("\n• ")}` : "\n\nEvery product has a website price ✓"));
 };
 window.fixTetaPrices = async () => {
