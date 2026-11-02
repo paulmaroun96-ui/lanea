@@ -2483,6 +2483,33 @@ async function gmModelsFor(key) {
   } catch {}
   return GM_MODELS;
 }
+/* one generateContent call for both scanners: tries each available model, and on
+   a transient error (503 high demand / 429 / 5xx) retries that model twice with a
+   pause before moving on. Returns the parsed JSON or throws the last error. */
+async function gmGenerate(key, body) {
+  let lastErr = "";
+  for (const model of await gmModelsFor(key)) {
+    for (let a = 0; a < 3; a++) {
+      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body),
+      });
+      if (resp.ok) {
+        const j = await resp.json();
+        const txt = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
+        try { return JSON.parse(txt); } catch { lastErr = model + ": unreadable response"; break; }
+      }
+      let em = ""; try { em = ((await resp.json()).error || {}).message || ""; } catch {}
+      lastErr = `${model}: HTTP ${resp.status}${em ? " — " + em.slice(0, 140) : ""}`;
+      if ((resp.status === 503 || resp.status === 429 || resp.status >= 500) && a < 2) {
+        toast(`${model} is busy — retrying (${a + 2}/3)…`);
+        await new Promise(r => setTimeout(r, 4000 * (a + 1)));
+        continue;
+      }
+      break; // non-retryable → next model
+    }
+  }
+  throw new Error(lastErr || "no response from Gemini");
+}
 let SCAN = null;
 const GM_PROMPT = `You are reading a supplier invoice for a cosmetics shop. Extract EVERY product line exactly as printed.
 Return: supplier, invoice_ref, date (YYYY-MM-DD), currency, and lines[] where each line has:
@@ -2550,19 +2577,7 @@ window.scanInvoice = async () => {
       ] }],
       generationConfig: { response_mime_type: "application/json", response_schema: GM_SCHEMA, temperature: 0 },
     };
-    let parsed = null, lastErr = "";
-    for (const model of await gmModelsFor(key)) {
-      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) { lastErr = `${model}: HTTP ${resp.status} — ${(await resp.text()).slice(0, 200)}`; continue; }
-      const j = await resp.json();
-      const txt = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("");
-      try { parsed = JSON.parse(txt); break; } catch { lastErr = model + ": could not parse the response"; }
-    }
-    if (!parsed) throw new Error(lastErr || "no response from Gemini");
+    const parsed = await gmGenerate(key, body);
     SCAN = {
       supplier: parsed.supplier || "", invoice_ref: parsed.invoice_ref || "",
       date: /^\d{4}-\d{2}-\d{2}$/.test(parsed.date || "") ? parsed.date : todayISO(),
@@ -4719,20 +4734,9 @@ Ignore subtotal/total/signature rows. Crossed-out lines are excluded.`;
     contents: [{ parts: [{ inline_data: { mime_type: f.type || "image/jpeg", data: b64 } }, { text: gmAsk }] }],
     generationConfig: { response_mime_type: "application/json", response_schema: schema, temperature: 0 },
   };
-  let parsed = null, lastErr = "";
-  for (const model of await gmModelsFor(key)) {
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body),
-    });
-    if (!resp.ok) {
-      let em = ""; try { em = ((await resp.json()).error || {}).message || ""; } catch {}
-      lastErr = `${model}: HTTP ${resp.status}${em ? " — " + em.slice(0, 140) : ""}`; continue;
-    }
-    const j = await resp.json();
-    try { parsed = JSON.parse((j.candidates?.[0]?.content?.parts || []).map(p => p.text || "").join("")); break; }
-    catch { lastErr = model + ": unreadable response"; }
-  }
-  if (!parsed) { alert("Scan failed — " + (lastErr || "no response") + ". You can paste the lines as text instead."); return; }
+  let parsed = null;
+  try { parsed = await gmGenerate(key, body); }
+  catch (e) { alert("Scan failed — " + (e.message || e) + ". You can paste the lines as text instead."); return; }
   const date = /^\d{4}-\d{2}-\d{2}$/.test(parsed.date || "") ? parsed.date : undefined;
   const rows = (parsed.lines || []).filter(l => Number(l.qty) > 0)
     .map(l => [String(l.catalog || l.name || ""), String(l.qty), "", String(l.unit_price || "")]);
