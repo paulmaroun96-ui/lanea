@@ -772,9 +772,11 @@
     Signed in = every save syncs to the cloud and appears on all your devices. Settings keeps a JSON backup as a safety net.</p>
   </section>
 </div>
+<div id="histPanel" class="no-print" style="display:none;position:fixed;left:16px;bottom:64px;z-index:71;width:min(520px,92vw);max-height:55vh;overflow:auto;background:var(--card,#fff);border:1px solid var(--line,#ddd);border-radius:14px;padding:12px 14px;box-shadow:0 8px 30px rgba(0,0,0,.18)"></div>
 <div id="undoWrap" class="no-print" style="position:fixed;left:16px;bottom:16px;z-index:70;display:flex;gap:8px">
   <button class="btn ghost" id="undoBtn" style="display:none;box-shadow:0 2px 10px rgba(0,0,0,.12)" onclick="appUndo()"></button>
   <button class="btn ghost" id="redoBtn" style="display:none;box-shadow:0 2px 10px rgba(0,0,0,.12)" onclick="appRedo()"></button>
+  <button class="btn ghost" id="histBtn" style="display:none;box-shadow:0 2px 10px rgba(0,0,0,.12)" onclick="toggleHist()">⟲ History</button>
 </div>
 <div id="toast"></div>
 </main>
@@ -1085,7 +1087,7 @@ let UNDO_STACK = [], REDO_STACK = [], UNDO_LAST = 0, UNDO_SUSPEND = false;
 function recordUndo(kind, op) {
   if (UNDO_SUSPEND) return;
   const now = Date.now();
-  if (!UNDO_STACK.length || now - UNDO_LAST > 3000) UNDO_STACK.push({ kinds: {}, ops: [] });
+  if (!UNDO_STACK.length || now - UNDO_LAST > 3000) UNDO_STACK.push({ kinds: {}, ops: [], t: now });
   const g = UNDO_STACK[UNDO_STACK.length - 1];
   g.ops.push(op); g.kinds[UNDO_KINDNAME[kind] || kind] = 1;
   UNDO_LAST = now;
@@ -1095,6 +1097,71 @@ function recordUndo(kind, op) {
 }
 function clearUndo() { UNDO_STACK = []; REDO_STACK = []; UNDO_LAST = 0; renderUndo(); }
 const undoLabel = g => Object.keys(g.kinds).join(" + ") + (g.ops.length > 1 ? ` (${g.ops.length})` : "");
+/* ---- history panel: every recorded action in plain words ---- */
+const histProd = id => { const p = prodById(id); return p ? esc(prodShort(p)) : "?"; };
+const histPos = id => id ? esc((posById(id) || {}).name || "?") : "Home";
+function opDesc(op) {
+  const k = op.kind, nice = UNDO_KINDNAME[k] || k;
+  if (op.type === "update") {
+    const f = v => v == null || v === "" ? "\u2014" : esc(String(v));
+    const ch = Object.keys(op.next || {}).map(fd =>
+      fd === "product_id" ? `product ${histProd((op.prev || {})[fd])} \u2192 ${histProd(op.next[fd])}`
+      : fd === "pos_id" ? `location ${histPos((op.prev || {})[fd])} \u2192 ${histPos(op.next[fd])}`
+      : `${esc(fd)} ${f((op.prev || {})[fd])} \u2192 ${f(op.next[fd])}`).join(", ");
+    return `\u270e ${nice} edited \u2014 ${ch || "no change"}`;
+  }
+  const s = op.type === "insert" ? "+" : "\u2212";
+  const r = op.row || {};
+  if (k === "sales") return `${s} sale: ${fmtN(r.qty)}\u00d7 ${histProd(r.product_id)} @ ${usdF.format(Number(r.price_per_unit) || 0)} \u2014 ${histPos(r.pos_id)} (${fmtD(r.date)})`;
+  if (k === "gifts") return `${s} gift: ${fmtN(r.qty)}\u00d7 ${histProd(r.product_id)} \u2014 from ${histPos(r.pos_id)}${r.note ? " \u00b7 " + esc(r.note) : ""}`;
+  if (k === "transfers") return Number(r.qty) >= 0
+    ? `${s} transfer: ${fmtN(r.qty)}\u00d7 ${histProd(r.product_id)} \u2192 ${histPos(r.pos_id)}`
+    : `${s} transfer back: ${fmtN(-r.qty)}\u00d7 ${histProd(r.product_id)} \u2190 ${histPos(r.pos_id)}`;
+  if (k === "expenses") return `${s} expense: ${esc(r.description || "")} (${esc(r.category || "")}) ${showE(Number(r.amount) || 0)}`;
+  if (k === "losses") return `${s} loss: ${fmtN(r.qty)}\u00d7 ${histProd(r.product_id)} at ${histPos(r.pos_id)}${r.reason ? " \u00b7 " + esc(r.reason) : ""}`;
+  if (k === "purchases") return `${s} purchase: ${fmtN(r.qty)}\u00d7 ${histProd(r.product_id)}`;
+  if (k === "pos_prices") return `${s} price: ${histProd(r.product_id)} at ${histPos(r.pos_id)} = ${usdF.format(Number(r.price) || 0)}`;
+  if (k === "pos") return `${s} location: ${esc(r.name || "")}`;
+  if (k === "products") return `${s} product: ${esc(r.ref || r.name || "")}`;
+  if (k === "recurring_expenses") return `${s} recurring: ${esc(r.description || "")}`;
+  if (k === "inventories") return `${s} inventory count (${fmtD(r.date)})`;
+  if (k === "inventory_lines") return `${s} counted: ${histProd(r.product_id)} = ${fmtN(r.counted ?? r.qty ?? 0)} at ${histPos(r.pos_id)}`;
+  return `${s} ${nice}`;
+}
+function histHtml() {
+  const block = (g, btn, dim) => `<div style="border-bottom:1px solid var(--line,#eee);padding:7px 0;display:flex;gap:10px;align-items:flex-start${dim ? ";opacity:.5" : ""}">
+      <div style="flex:1;min-width:0;font-size:12px;line-height:1.5">${g.ops.map(opDesc).join("<br>")}</div>
+      <div style="text-align:right;white-space:nowrap"><div style="font-size:10.5px;color:var(--muted,#888)">${g.t ? new Date(g.t).toTimeString().slice(0, 5) : ""}</div>${btn}</div></div>`;
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <b>History \u2014 what actually happened</b><button class="btn small ghost" onclick="toggleHist()">\u2715</button></div>`;
+  if (!UNDO_STACK.length && !REDO_STACK.length) return h + '<p class="empty">Nothing recorded yet this session.</p>';
+  for (let i = 0; i < REDO_STACK.length; i++) { // undone, newest-undone first; greyed
+    const steps = i + 1;
+    h += block(REDO_STACK[i], `<button class="btn small ghost" onclick="redoTo(${i})">\u21b7 Redo${steps > 1 ? ` (${steps})` : ""}</button>`, true);
+  }
+  for (let i = UNDO_STACK.length - 1; i >= 0; i--) {
+    const steps = UNDO_STACK.length - i;
+    h += block(UNDO_STACK[i], `<button class="btn small ghost" onclick="undoTo(${i})">\u21b6 Undo${steps > 1 ? ` to here (${steps})` : ""}</button>`, false);
+  }
+  return h + '<p class="hint" style="margin:6px 0 0">Newest on top. Greyed = already undone (redo brings them back). Only this session \u2014 up to the last 30 actions.</p>';
+}
+window.toggleHist = () => {
+  const hp = document.getElementById("histPanel");
+  if (!hp) return;
+  const show = hp.style.display === "none";
+  hp.style.display = show ? "" : "none";
+  if (show) hp.innerHTML = histHtml();
+};
+window.undoTo = async i => {
+  const n = UNDO_STACK.length - i;
+  if (n > 1 && !confirm(`Undo the last ${n} actions, down to and including this one?`)) return;
+  for (let k = 0; k < n; k++) await appUndo();
+};
+window.redoTo = async i => {
+  const n = REDO_STACK.length - i;
+  if (n > 1 && !confirm(`Redo ${n} undone actions, up to and including this one?`)) return;
+  for (let k = 0; k < n; k++) await appRedo();
+};
 function renderUndo() {
   const u = document.getElementById("undoBtn"), r = document.getElementById("redoBtn");
   if (!u) return;
@@ -1103,6 +1170,10 @@ function renderUndo() {
   if (g) u.textContent = `\u21b6 Undo ${undoLabel(g)}`;
   const rg = REDO_STACK[REDO_STACK.length - 1];
   if (r) { r.style.display = rg ? "" : "none"; if (rg) r.textContent = `\u21b7 Redo ${undoLabel(rg)}`; }
+  const hb = document.getElementById("histBtn"), hp = document.getElementById("histPanel");
+  const any = UNDO_STACK.length || REDO_STACK.length;
+  if (hb) hb.style.display = any ? "" : "none";
+  if (hp && hp.style.display !== "none") hp.innerHTML = histHtml();
 }
 async function reinsertRow(kind, row) {
   if (remote) {
@@ -2840,6 +2911,12 @@ function renderDay() {
 const gv = id => { const el = document.getElementById(id); return el ? el.value : ""; };
 const NR_IDS = ["nr_g_prod", "nr_g_qty", "nr_g_pos", "nr_g_note", "nr_e_desc", "nr_e_cat", "nr_e_amt", "nr_e_cur"];
 function renderReport() {
+  // the grid is rebuilt on every change — keep the user's scroll position and
+  // focused cell so typing a qty doesn't throw them back to the top of the list
+  const sb0 = document.getElementById("rep_scroll");
+  const repKeepScroll = sb0 ? [sb0.scrollTop, sb0.scrollLeft] : null;
+  const repAct = (document.activeElement && document.activeElement.id && document.activeElement.id.indexOf("rq_") === 0)
+    ? document.activeElement.id : "";
   document.getElementById("repDate").textContent = fmtD(selectedDay);
   const n = draftCount();
   const savedCount = state.sales.filter(s => s.date === selectedDay).length
@@ -2873,14 +2950,19 @@ function renderReport() {
       savedQ[k] = (savedQ[k] || 0) + Number(s.qty);
     }
     const lineOf = (pid, posId) => draft.sales.find(l => l.product_id === pid && l.pos_id === posId && l.date === selectedDay);
+    if (DR_POS && !state.pos.some(x => x.id === DR_POS)) DR_POS = null;
+    const spos = DR_POS ? sortedPos().filter(x => x.id === DR_POS) : sortedPos();
+    h += '<div class="rowform no-print" style="margin-bottom:2px">'
+      + `<button type="button" class="btn small ${!DR_POS ? "gold" : "ghost"}" onclick="setDrPos('')">All locations</button>`
+      + sortedPos().map(x => `<button type="button" class="btn small ${x.id === DR_POS ? "gold" : "ghost"}" onclick="setDrPos('${x.id}')">${esc(x.name)}</button>`).join("")
+      + '</div>';
     const rowsP = state.products.filter(p => {
       if (!prodMatch(p, rq)) return false;
       if (showAll) return true;
-      return state.pos.some(pos => (priceFor(pos.id, p.id) ?? 0) > 0)
-        || state.pos.some(pos => lineOf(p.id, pos.id) || savedQ[p.id + "|" + pos.id]);
+      return spos.some(pos => (priceFor(pos.id, p.id) ?? 0) > 0)
+        || spos.some(pos => lineOf(p.id, pos.id) || savedQ[p.id + "|" + pos.id]);
     }).sort(prodSort);
-    const spos = sortedPos();
-    h += '<div class="scrollbox" style="max-height:420px;overflow-x:auto"><table><tr><th>Product</th>'
+    h += '<div class="scrollbox" id="rep_scroll" style="max-height:420px;overflow-x:auto"><table><tr><th>Product</th>'
       + spos.map(p => `<th class="num">${esc(p.name)}</th>`).join("")
       + '<th class="num">Total ($)</th></tr>';
     for (const p of rowsP) {
@@ -2892,7 +2974,7 @@ function renderReport() {
         if (line) rowTot += Number(line.qty) * Number(line.price_per_unit);
         const saved = savedQ[p.id + "|" + pos.id];
         const noPrice = price == null;
-        return `<td class="num"><input class="rin ${line ? "chg" : ""}" type="number" min="0" step="1" value="${qty}" placeholder="—" style="width:62px"
+        return `<td class="num"><input class="rin ${line ? "chg" : ""}" id="rq_${p.id}_${pos.id}" type="number" min="0" step="1" value="${qty}" placeholder="—" style="width:62px"
             ${noPrice && !line ? 'disabled title="Set a price first (Sales & prices tab)"' : ""}
             onchange="repQty('${p.id}','${pos.id}',this.value)"
             onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
@@ -2901,6 +2983,18 @@ function renderReport() {
       }).join("");
       h += `<tr><td>${prodLabel(p)}</td>${cells}<td class="num calc">${rowTot > 0 ? showU(rowTot) : "—"}</td></tr>`;
     }
+    // live totals per seller column — recomputed on every quantity change
+    let gq = 0, gv2 = 0;
+    const totCells = spos.map(pos => {
+      let cq = 0, cv = 0;
+      for (const l of draft.sales) if (l.date === selectedDay && l.pos_id === pos.id) {
+        cq += Number(l.qty); cv += Number(l.qty) * Number(l.price_per_unit);
+      }
+      gq += cq; gv2 += cv;
+      return `<td class="num calc" style="border-top:2px solid var(--line)">${cq > 0 ? `<b>${fmtN(cq)}u</b> · ${showU(cv)}` : "—"}</td>`;
+    }).join("");
+    h += `<tr><td style="border-top:2px solid var(--line)"><b>TOTAL this report</b></td>${totCells}
+      <td class="num calc" style="border-top:2px solid var(--line)">${gq > 0 ? `<b>${fmtN(gq)}u</b> · <b>${showU(gv2)}</b>` : "—"}</td></tr>`;
     h += "</table></div><p class='hint' style='margin-top:4px'>Type quantities — the price under each cell comes from your price list (click it for a special price). \"saved N\" = already submitted today.</p>";
   }
 
@@ -2969,8 +3063,18 @@ function renderReport() {
     const el = document.getElementById(id);
     if (el && v) el.value = v;
   }
+  if (repKeepScroll) {
+    const sb = document.getElementById("rep_scroll");
+    if (sb) { sb.scrollTop = repKeepScroll[0]; sb.scrollLeft = repKeepScroll[1]; }
+  }
+  if (repAct) {
+    const el = document.getElementById(repAct);
+    if (el) { try { el.focus(); if (el.select) el.select(); } catch {} }
+  }
   nrGiftSync();
 }
+let DR_POS = null; // daily-report sales grid: null = all locations, else one seller's column
+window.setDrPos = key => { DR_POS = key || null; renderDay(); };
 /* sales grid: one qty cell per product x POS, priced from the price list */
 window.repQty = (pid, posId, val) => {
   const q = Number(val);
